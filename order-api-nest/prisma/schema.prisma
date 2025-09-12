@@ -1,0 +1,18 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Order {
+  id        Int     @id @default(autoincrement())
+  user      String
+  price     Int
+  paid      Boolean
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("orders")
+}
