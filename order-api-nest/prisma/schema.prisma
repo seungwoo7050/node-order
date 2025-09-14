@@ -7,9 +7,19 @@ datasource db {
   provider = "postgresql"
 }
 
+model User {
+  id        String  @id
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  orders    Order[]
+
+  @@map("users")
+}
+
 model Order {
   id        Int     @id @default(autoincrement())
-  user      String
+  userId    String  @map("user_id")
+  user      User    @relation(fields: [userId], references: [id])
   price     Int
   paid      Boolean
   createdAt DateTime @default(now()) @map("created_at")
