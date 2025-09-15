@@ -24,5 +24,6 @@ model Order {
   paid      Boolean
   createdAt DateTime @default(now()) @map("created_at")
 
+  @@index([userId])
   @@map("orders")
 }
