@@ -3,8 +3,7 @@ import { PrismaClient } from "../src/generated/prisma/client.js";
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
 
-await prisma.order.deleteMany();
-await prisma.user.deleteMany();
+await prisma.$executeRaw`TRUNCATE outbox_events, idempotency_keys, order_items, orders, products, users RESTART IDENTITY CASCADE`;
 
 await prisma.user.createMany({
   data: [
@@ -23,4 +22,11 @@ await prisma.order.createMany({
     { userId: "park", price: 7000, paid: true },
   ],
 });
+await prisma.product.createMany({
+  data: [
+    { name: "한정판 키보드", price: 150000, stock: 10 },
+    { name: "마우스", price: 30000, stock: 100 },
+  ],
+});
+
 console.log("seed 완료: 사용자", await prisma.user.count(), "명, 주문", await prisma.order.count(), "건");

@@ -23,7 +23,31 @@ model Order {
   price     Int
   paid      Boolean
   createdAt DateTime @default(now()) @map("created_at")
+  items     OrderItem[]
 
   @@index([userId])
   @@map("orders")
+}
+
+model Product {
+  id      Int       @id @default(autoincrement())
+  name    String
+  price   Int
+  stock   Int
+  items   OrderItem[]
+
+  @@map("products")
+}
+
+model OrderItem {
+  orderId     Int       @map("order_id")
+  order       Order     @relation(fields: [orderId], references: [id])
+  productId   Int       @map("product_id")
+  product     Product   @relation(fields: [productId], references: [id])
+  quantity    Int
+  unitPrice   Int       @map("uint_price")
+
+  @@id([orderId, productId])
+  @@index([productId])
+  @@map("order_items")
 }
