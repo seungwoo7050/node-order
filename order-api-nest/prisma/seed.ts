@@ -29,4 +29,4 @@ await prisma.product.createMany({
   ],
 });
 
-console.log("seed 완료: 사용자", await prisma.user.count(), "명, 주문", await prisma.order.count(), "건");
+console.log("seed 완료: 사용자", await prisma.user.count(), "명, 주문", await prisma.order.count(), "건, 상품", await prisma.product.count(), "개");
