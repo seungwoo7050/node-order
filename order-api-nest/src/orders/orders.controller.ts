@@ -3,6 +3,7 @@ import { AuthGuard } from "@nestjs/passport";
 import type { Request } from "express";
 import { CreateOrderDto } from "./dto/create-order.dto.js";
 import { OrdersService } from "./orders.service.js";
+import { CheckoutDto } from "./dto/checkout.dto.js";
 
 @Controller("orders")
 export class OrdersController {
@@ -16,6 +17,13 @@ export class OrdersController {
   @Get("totals")
   totals() {
     return this.ordersService.totals();
+  }
+
+  @Post("checkout")
+  @UseGuards(AuthGuard("jwt"))
+  checkout(@Body() dto: CheckoutDto, @Req() req: Request) {
+    const userId = (req.user as { userId: string }).userId;
+    return this.ordersService.checkout(userId, dto.items);
   }
 
   @Get(":id")
