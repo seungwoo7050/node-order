@@ -3,7 +3,7 @@ import { PrismaClient } from "../src/generated/prisma/client.js";
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
 
-await prisma.$executeRaw`TRUNCATE outbox_events, idempotency_keys, order_items, orders, products, users RESTART IDENTITY CASCADE`;
+await prisma.$executeRaw`TRUNCATE order_items, orders, products, users RESTART IDENTITY CASCADE`;
 
 await prisma.user.createMany({
   data: [
