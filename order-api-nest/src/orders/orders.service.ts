@@ -42,26 +42,27 @@ export class OrdersService {
     return Object.fromEntries(rows.map((r) => [r.userId, r._sum.price ?? 0]));
   }
   async checkout(userId: string, items: CheckoutItemDto[]) {
-    const products = await this.prisma.product.findMany({ where: { id: { in: items.map((i) => i.productId) } } });
-    let total = 0;
-    for (const item of items) {
-      const product = products.find((p) => p.id === item.productId);
-      if (!product) throw new NotFoundException(`product ${item.productId} not found`);
-      if (product.stock < item.quantity) throw new ConflictException(`재고 부족: ${product.name}`);
-      await this.prisma.product.update({ where: { id: product.id }, data: { stock: product.stock - item.quantity } });
-      total += product.price * item.quantity;
-    }
-
-    const order = await this.prisma.order.create({
-      data: {
-        userId, price: total, paid: true,
-        items: { create: items.map((i) => ({
-          productId: i.productId, quantity: i.quantity, unitPrice: products.find((p) => p.id === i.productId)!.price,
-        })) },
-      },
-      select: { ...orderSelect, items: { select: { productId: true, quantity: true, unitPrice: true } } },
-    });
-    const result = { ...toOrder(order), items: order.items };
+    const result = await this.prisma.$transaction(async (tx) => {
+      const products = await tx.product.findMany({ where: { id: { in: items.map((i) => i.productId) } } });
+      let total = 0;
+      for (const item of items) {
+        const product = products.find((p) => p.id === item.productId);
+        if (!product) throw new NotFoundException(`product ${item.productId} not found`);
+        if (product.stock < item.quantity) throw new ConflictException(`재고 부족: ${product.name}`);
+        await tx.product.update({ where: { id: product.id }, data: { stock: product.stock - item.quantity } });
+        total += product.price * item.quantity;
+      }
+      const order = await tx.order.create({
+        data: {
+          userId, price: total, paid: true,
+          items: { create: items.map((i) => ({
+            productId: i.productId, quantity: i.quantity, unitPrice: products.find((p) => p.id === i.productId)!.price,
+          })) },
+        },
+        select: { ...orderSelect, items: { select: { productId: true, quantity: true, unitPrice: true } } },
+      });
+      return { ...toOrder(order), items: order.items };
+    })
     this.logger.log(`결제 완료: #${result.id} (${result.user}) ${result.price}원`);
     this.notifications.notifyUser(userId, "order.created", result);
     return result;
