@@ -43,17 +43,15 @@ export class OrdersService {
   }
   async checkout(userId: string, items: CheckoutItemDto[]) {
     const result = await this.prisma.$transaction(async (tx) => {
-      const products = await tx.product.findMany({ where: { id: { in: items.map((i) => i.productId) } } });
+      const ids = [...new Set(items.map((i) => i.productId))];
+      const products = await tx.$queryRaw<{ id: number; name: string; price: number; stock: number }[]>`
+        SELECT id, name, price, stock FROM products WHERE id = ANY(${ids}) ORDER BY id FOR UPDATE`;
       let total = 0;
-      const sorted = [...items].sort((a, b) => a.productId - b.productId);
-      for (const item of sorted) {
+      for (const item of items) {
         const product = products.find((p) => p.id === item.productId);
         if (!product) throw new NotFoundException(`product ${item.productId} not found`);
-        const { count } = await tx.product.updateMany({
-          where: { id: product.id, stock: { gte: item.quantity } },
-          data: { stock: { decrement: item.quantity } },
-        });
-        if (count === 0) throw new ConflictException(`재고 부족: ${product.name}`);
+        if (product.stock < item.quantity) throw new ConflictException(`재고 부족: ${product.name}`);
+        await tx.product.update({ where: { id: product.id }, data: { stock: { decrement: item.quantity } } });
         total += product.price * item.quantity;
       }
       const order = await tx.order.create({
