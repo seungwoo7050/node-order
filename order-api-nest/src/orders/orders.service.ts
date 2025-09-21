@@ -45,7 +45,8 @@ export class OrdersService {
     const result = await this.prisma.$transaction(async (tx) => {
       const products = await tx.product.findMany({ where: { id: { in: items.map((i) => i.productId) } } });
       let total = 0;
-      for (const item of items) {
+      const sorted = [...items].sort((a, b) => a.productId - b.productId);
+      for (const item of sorted) {
         const product = products.find((p) => p.id === item.productId);
         if (!product) throw new NotFoundException(`product ${item.productId} not found`);
         const { count } = await tx.product.updateMany({
