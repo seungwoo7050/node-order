@@ -48,8 +48,11 @@ export class OrdersService {
       for (const item of items) {
         const product = products.find((p) => p.id === item.productId);
         if (!product) throw new NotFoundException(`product ${item.productId} not found`);
-        if (product.stock < item.quantity) throw new ConflictException(`재고 부족: ${product.name}`);
-        await tx.product.update({ where: { id: product.id }, data: { stock: product.stock - item.quantity } });
+        const { count } = await tx.product.updateMany({
+          where: { id: product.id, stock: { gte: item.quantity } },
+          data: { stock: { decrement: item.quantity } },
+        });
+        if (count === 0) throw new ConflictException(`재고 부족: ${product.name}`);
         total += product.price * item.quantity;
       }
       const order = await tx.order.create({
