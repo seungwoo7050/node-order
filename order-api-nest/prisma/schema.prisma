@@ -40,14 +40,25 @@ model Product {
 }
 
 model OrderItem {
-  orderId     Int       @map("order_id")
-  order       Order     @relation(fields: [orderId], references: [id])
-  productId   Int       @map("product_id")
-  product     Product   @relation(fields: [productId], references: [id])
-  quantity    Int
-  unitPrice   Int       @map("unit_price")
+  orderId       Int       @map("order_id")
+  order         Order     @relation(fields: [orderId], references: [id])
+  productId     Int       @map("product_id")
+  product       Product   @relation(fields: [productId], references: [id])
+  quantity      Int
+  unitPrice     Int       @map("unit_price")
 
   @@id([orderId, productId])
   @@index([productId])
   @@map("order_items")
+}
+
+model IdempotencyKey {
+  userId        String      @map("user_id")
+  key           String
+  requestHash   String      @map("request_hash")
+  response      Json?
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@id([userId, key])
+  @@map("idempotency_keys")
 }
