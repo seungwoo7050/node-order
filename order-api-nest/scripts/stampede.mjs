@@ -4,6 +4,7 @@ process.loadEnvFile();
 const API = "http://localhost:4000";
 const N = Number(process.argv[2] ?? 50);
 const items = JSON.parse(process.argv[3] ?? '[{"productId":1,"quantity":1}]');
+const idempotencyKey = process.argv
 
 const login = await fetch(`${API}/auth/login`, {
   method: "POST",
@@ -16,7 +17,11 @@ const statuses = await Promise.all(
   Array.from({ length: N }, () =>
     fetch(`${API}/orders/checkout`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        ...(idempotencyKey && { "Idempotency-Key": idempotencyKey }),
+      },
       body: JSON.stringify({ items }),
     }).then((r) => r.status),
   ),
