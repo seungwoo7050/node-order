@@ -62,3 +62,14 @@ model IdempotencyKey {
   @@id([userId, key])
   @@map("idempotency_keys")
 }
+
+model OutboxEvent {
+  id            Int         @id @default(autoincrement())
+  type          String
+  userId        String      @map("user_id") // 알림을 받을 사용자
+  payload       Json
+  createdAt     DateTime    @default(now()) @map("created_at")
+  publishedAt   DateTime?   @map("published_at")
+
+  @@map("outbox_events")
+}
