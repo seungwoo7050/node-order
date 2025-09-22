@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, Req, UseGuards, Headers } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import type { Request } from "express";
 import { CreateOrderDto } from "./dto/create-order.dto.js";
@@ -21,9 +21,9 @@ export class OrdersController {
 
   @Post("checkout")
   @UseGuards(AuthGuard("jwt"))
-  checkout(@Body() dto: CheckoutDto, @Req() req: Request) {
+  checkout(@Body() dto: CheckoutDto, @Req() req: Request, @Headers("idempotency-key") idempotencyKey?: string) {
     const userId = (req.user as { userId: string }).userId;
-    return this.ordersService.checkout(userId, dto.items);
+    return this.ordersService.checkout(userId, dto.items, idempotencyKey);
   }
 
   @Get(":id")
