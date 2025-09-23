@@ -33,9 +33,12 @@ export class OrdersService {
   }
   async create(input: Omit<Order, "id">, creatorId: string): Promise<Order> {
     const { user, ...rest } = input;
-    const order = toOrder(await this.prisma.order.create({ data: { ...rest, userId: user }, select: orderSelect }));
+    const order = await this.prisma.$transaction(async (tx) => {
+      const created = toOrder(await tx.order.create({ data: { ...rest, userId: user }, select: orderSelect }));
+      await tx.outboxEvent.create({ data: { type: "order.created", userId: creatorId, payload: created } });
+      return created;
+    });
     this.logger.log(`주문 생성: #${order.id} (${order.user})`);
-    this.notifications.notifyUser(creatorId, "order.created", order);
     return order;
   }
   async totals(): Promise<Record<string, number>> {
@@ -52,6 +55,7 @@ export class OrdersService {
           await tx.idempotencyKey.create({ data: { userId, key: idempotencyKey, requestHash } });
         }
         const placed = await this.placeOrder(tx, userId, items);
+        await tx.outboxEvent.create({ data: { type: "order.created", userId, payload: placed } });
         if (idempotencyKey) {
           await tx.idempotencyKey.update({
             where: { userId_key: { userId, key: idempotencyKey } }, data: { response: placed },
@@ -60,7 +64,6 @@ export class OrdersService {
         return placed;
       });
       this.logger.log(`결제 완료: #${result.id} (${result.user}) ${result.price}원`);
-      this.notifications.notifyUser(userId, "order.created", result);
       return result;
     } catch (err) {
       if (idempotencyKey && err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
