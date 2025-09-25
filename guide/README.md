@@ -354,6 +354,8 @@ Nest 코드는 세 종류의 클래스로 이뤄지고, 서로를 직접 `new` �
 
 C로 치면 함수 포인터를 등록 테이블에 직접 넣는 대신, 함수 옆에 표식만 달아 두면 프레임워크가 테이블을 만들어 주는 셈이다.
 
+#### 의존성 주입(DI)
+
 **의존성 주입(DI)**: 컨트롤러가 `PrismaService`를 쓰려고 직접 `new PrismaService()`를 하지 않는다. 생성자 매개변수에 타입만 적어 두면 Nest가 서버 시작 때 하나만 만들어 둔 인스턴스를 넣어 준다. 내가 꺼내 오는 게 아니라 Nest가 넣어 주는 것이다. 그래서 커넥션 풀도 앱 전체에서 하나다.
 
 - `ProductsController`는 `PrismaService`의 자식 클래스가 아니다. 상속(`extends`)이면 "컨트롤러는 일종의 PrismaService다"가 되지만, 여기서는 "컨트롤러가 PrismaService를 하나 갖고 있다"(합성)다. C++로 쓰면 이렇다.
@@ -397,6 +399,8 @@ C로 치면 함수 포인터를 등록 테이블에 직접 넣는 대신, 함수
 
   반대로 DTO(`CheckoutItemDto` 같은 것)에는 붙이지 않는다. DTO는 요청마다 새로 생기는 데이터 껍데기라서 Nest가 하나만 만들어 나눠 줄 대상이 아니다.
 
+#### 서버가 켜질 때 일어나는 일
+
 - 내부에서는 어떻게 쓰이나? `main.ts`의 `NestFactory.create(AppModule)` 한 줄 안에서 다음이 일어난다.
   
   1. `AppModule`부터 `imports`를 따라가며 모듈을 모두 찾고, 각 모듈의 `providers`·`controllers`를 모은다.
@@ -408,6 +412,8 @@ C로 치면 함수 포인터를 등록 테이블에 직접 넣는 대신, 함수
   4. 다 만들고 나면 인스턴스들의 생명주기 훅(`onModuleInit` 등)을 부르고, 끌 때는 `onModuleDestroy` 등을 부른다. `PrismaService`가 `onModuleDestroy`에서 DB 연결을 닫는 것이 그 예다.
 
   2단계에서 넣어 줄 것을 못 찾으면, 서버가 뜨기 전에 `Nest can't resolve dependencies of the OrdersService (PrismaService, ?)` 같은 에러로 멈춘다. `?` 자리에 있는 것이 `providers`에 없거나, 그걸 가진 모듈을 `imports`하지 않은 것이다. 컨테이너에 보관된 인스턴스는 `app.get(타입)`으로 직접 꺼낼 수도 있다. 10단계 테스트에서 `app.get(HttpAdapterHost)`가 그렇게 쓴다.
+
+#### 스코프와 싱글턴의 함정
 
 - 싱글턴이 아닌 스코프도 있다. `@Injectable({ scope: Scope.REQUEST })`처럼 지정한다.
 
@@ -421,11 +427,15 @@ C로 치면 함수 포인터를 등록 테이블에 직접 넣는 대신, 함수
 
   싱글턴이라는 사실에서 꼭 챙길 것이 하나 있다. **동시에 들어온 요청들이 같은 `OrdersService` 인스턴스 하나를 같이 쓴다.** `this.currentUserId = userId`처럼 요청마다 다른 값을 필드에 넣으면, `await` 사이에 다른 요청이 그 필드를 덮어쓴다. 0장 개념 1의 경쟁 조건이 DB가 아니라 서버 메모리에서 일어나는 것이다. 요청마다 다른 값은 지역 변수와 매개변수로만 다룬다.
 
+#### 순환 의존
+
 - 프로바이더끼리 서로를 주입받으면(순환 의존) 서버가 뜨지 않는다. `A`의 생성자에는 `B`가, `B`의 생성자에는 `A`가 필요하니 위 3번 "의존이 없는 것부터 만든다"에서 어느 쪽도 먼저 만들 수 없다. 서버가 켜지는 단계에서 `Nest can't resolve dependencies of the AService (?)` 같은 에러로 멈추고, 모듈끼리 서로 `imports`할 때는 메시지에 `A circular dependency between modules`가 나온다. C에서 `struct A { struct B b; }`와 `struct B { struct A a; }`를 동시에 선언할 수 없는 것과 같다.
   
   - 탈출구로 `forwardRef()`가 있다. 양쪽 생성자에 `@Inject(forwardRef(() => BService))`를, 모듈이라면 `imports: [forwardRef(() => BModule)]`을 쓴다. C에서 전방 선언 `struct B;`과 포인터로 순환을 끊는 것과 비슷하고, 대가도 비슷하다. 상대가 생성자 안에서는 아직 준비돼 있지 않을 수 있다.
   
   - 하지만 순환은 보통 책임을 잘못 나눴다는 신호다. 두 클래스가 서로에게서 필요로 하는 부분을 세 번째 프로바이더로 빼면 화살표가 한 방향이 된다. 예를 들어 지금은 `OrdersService → NotificationsGateway`인데, 게이트웨이가 WebSocket 메시지를 받아 주문을 조회하려고 `OrdersService`를 주입받으면 순환이 생긴다. 그럴 때는 `forwardRef`보다 조회 부분을 따로 빼는 쪽을 먼저 생각한다.
+
+#### 주입받을 수 있는 범위
 
 - "주입 가능하다"가 "어디서든 가져다 쓸 수 있다"는 뜻은 아니다. 두 가지 제한이 있다.
   
@@ -438,6 +448,8 @@ C로 치면 함수 포인터를 등록 테이블에 직접 넣는 대신, 함수
   > `providers`에 등록된 클래스는 서버가 시작할 때 Nest가 (기본적으로) 하나만 만들어 둔다.  
   > "주입 가능하다"는 것은, 그 모듈에서 보이는 범위 안의 다른 Nest 관리 클래스가 생성자에 타입만 적으면 그 하나를 넘겨받는다는 뜻이다.  
   > `@Injectable()`은 그 클래스가 Nest의 관리 대상이라는 표식이고, 덕분에 자기 생성자로도 다른 것을 주입받을 수 있다.
+
+#### 경로와 폴더 구성
 
 **`@Get()`과 `list()`**: `@Controller("products")`의 경로와 `@Get()`의 경로(비어 있음)가 합쳐져 `GET /products`가 되고, 그 요청이 오면 바로 아래 메서드가 불린다.  
 `@Get(":id")`였다면 `GET /products/1` 같은 요청을 받는다. 메서드 이름은 Nest가 보지 않으므로 `list`든 `findAll`이든 상관없다.  
@@ -457,13 +469,16 @@ C로 치면 함수 포인터를 등록 테이블에 직접 넣는 대신, 함수
 
 ### 남길 것
 
-- **찾아보면 되는 것**: `@relation(fields: [...], references: [...])`, `@@id([...])`, `TRUNCATE ... RESTART IDENTITY CASCADE`의 문법. 외울 필요 없다.
+- **찾아보면 되는 것**: `@relation(fields: [...], references: [...])`, `@@id([...])`, `TRUNCATE ... RESTART IDENTITY CASCADE`의 문법, `@Module`의 `imports`·`providers`·`exports` 칸, 스코프 표. 외울 필요 없다.
 
 - **감각으로 남겨야 할 것**:
   - 다대다는 중간 테이블 하나로 1:N 두 개로 쪼개고, 그 테이블에는 "산 시점의 가격"처럼 자기 데이터가 들어갈 수 있다.
   - 복합키 `(order_id, product_id)`의 인덱스는 `order_id`로 시작하는 검색에만 쓰인다. 반대 방향으로 찾을 일이 있으면 인덱스를 따로 건다.
+  - Nest의 프로바이더는 기본이 싱글턴이라, 동시에 들어온 요청들이 같은 `OrdersService` 하나를 같이 쓴다. 요청마다 다른 값을 필드에 넣으면 `await` 사이에 덮어써진다. 요청마다 다른 값은 매개변수로 넘긴다.
 
-- **에러 신호**: 이 단계에서는 에러를 만나지 않았다. 생성된 마이그레이션 SQL에 `PRIMARY KEY ("order_id","product_id")`와 외래키 두 개가 있는지만 본다.
+- **에러 신호**:
+  - 서버는 멀쩡히 뜨는데 `GET /products`만 404 → `app.module.ts`의 `imports`에 `ProductsModule`이 있는지
+  - `Nest can't resolve dependencies of the OrdersService (PrismaService, ?)` → `?` 자리의 클래스가 `providers`에 있는지, 그걸 가진 모듈을 `imports`했는지
 
 ## 3. 2단계: 트랜잭션 없이 결제 만들기
 
@@ -629,6 +644,8 @@ curl localhost:4000/products
   - `409 재고 부족: 마우스`인데 키보드 재고가 줄어 있다 → 쿼리들이 한 트랜잭션에 묶여 있는지
 
   - 같은 상품 두 줄짜리 요청이 400이 아니라 409 "이미 존재하는 값이다" → DTO의 `@ArrayUnique`
+
+  - `GET /orders/totals`가 400 `Validation failed (numeric string is expected)` → 고정 경로가 `:id`보다 위에 있는지
 
 ## 4. 3단계: 트랜잭션으로 묶기
 
@@ -984,6 +1001,8 @@ node scripts/stampede.mjs 30 '[{"productId":2,"quantity":1},{"productId":1,"quan
 └─────────┴────┴─────────────────┴───────────┴───────────┘
 ```
 
+#### 출력 읽기
+
 출력은 두 스크립트의 것과 셸의 것이 섞여 있다. 하나씩 읽으면 이렇다.
 
 - `[1] 94279`: 스크립트가 아니라 셸이 찍은 줄이다. 첫 줄 끝의 `&`로 스크립트를 뒤에서(백그라운드) 돌리기 시작하면서 "1번 작업, 프로세스 ID(PID) 94279"라고 알려 준다. PID는 돌릴 때마다 다르다.
@@ -999,6 +1018,8 @@ node scripts/stampede.mjs 30 '[{"productId":2,"quantity":1},{"productId":1,"quan
 1. **60건 중 3건만 성공하고 57건이 `500`이다.** 재고는 1000개로 넉넉하니 재고 부족 때문이 아니다. 몇 건이 살아남는지는 요청이 도착한 타이밍과 PC 속도에 따라 돌릴 때마다 다르다. 대부분이 `500`이고, 아래처럼 DB 로그에 `deadlock detected`가 찍혀 있으면 실험은 제대로 된 것이다.
 
 2. **장부는 맞다.** 성공한 3건이 키보드와 마우스를 하나씩 샀으니 둘 다 남은 재고 997 + 팔린 수량 3 = 1000이다. 실패한 57건은 전부 롤백됐다. 교착은 장부를 깨뜨리지는 않지만, 멀쩡한 요청을 대부분 실패시킨다.
+
+#### DB 로그에서 교착 기록 찾기
 
 DB 로그를 본다. `docker compose logs db`만 치면 DB가 켜진 뒤의 로그가 전부 쏟아져서, 교착 기록이 체크포인트 같은 다른 로그 사이에 묻힌다.
 
@@ -1028,6 +1049,8 @@ db-1  | 2025-10-11 16:11:05.965 UTC [584] STATEMENT:  UPDATE "public"."products"
 - `HINT`·`CONTEXT`·`STATEMENT`: 덧붙인 정보다. `STATEMENT`는 희생된 쪽이 실행하던 문장이다.
 
 교착이 몇 번 났는지만 알고 싶으면 `docker compose logs db | grep -c "deadlock detected"`로 센다. 이전 실험의 기록도 함께 세어지니, 이번 실험만 세려면 실험 직후에 "최근 1분" 같은 시간 제한을 붙인다(`docker compose logs db --since 1m | grep -c "deadlock detected"`).
+
+#### 서버 콘솔의 에러 코드 세기
 
 서버 콘솔에는 `500`마다 에러가 스택과 함께 찍힌다. 에러 코드는 두 종류다.
 
@@ -1086,6 +1109,8 @@ PostgreSQL은 기다림이 일정 시간(`deadlock_timeout`, 기본 1초) 이어
 SQL의 `ORDER BY id`는 기본이 오름차순이고, `SELECT ... ORDER BY id FOR UPDATE`도 이 순서로 잠근다.
 
 한 곳만 내림차순이면 그 코드와 이 코드 사이에서 다시 고리가 생긴다.
+
+#### 다시 돌려 확인
 
 실험을 다시 돌린다. 재고를 1000으로 되돌리는 것부터 같다.
 
@@ -1245,6 +1270,7 @@ npx prisma db seed
 curl -X POST localhost:4000/orders/checkout -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN" -d '{"items":[{"productId":1,"quantity":1},{"productId":2,"quantity":1000}]}'
 {"message":"재고 부족: 마우스","error":"Conflict","statusCode":409}
+```
 
 ```sh
 curl localhost:4000/products
@@ -1529,6 +1555,8 @@ export type CheckoutResult = Order & { items: { productId: number; quantity: num
   }
 ```
 
+#### `placeOrder`로 빼낸 이유
+
 `placeOrder`로 빼낸 이유는 `checkout`이 길어져서만이 아니다.
 
 키 기록 → 주문 → 응답 저장이 **한 트랜잭션** 안에 있어야 하므로, 주문 부분은 새 트랜잭션을 열지 않고 바깥의 `tx`를 받아서 쓴다.
@@ -1538,6 +1566,8 @@ export type CheckoutResult = Order & { items: { productId: number; quantity: num
 `Prisma.TransactionClient`는 `$transaction` 콜백이 받는 `tx`의 타입이다.
 
 `PrismaClient`에서 `$transaction`·`$connect` 같은 메서드를 뺀 모양이라, 그 안에서 트랜잭션을 또 열 수는 없다.
+
+#### `interface`를 `type`으로 바꾼 이유
 
 `interface`를 `type`으로 바꾼 이유가 있다.
 
@@ -1682,6 +1712,8 @@ node scripts/stampede.mjs 20 '[{"productId":1,"quantity":1}]' same-key-1
   - 키를 트랜잭션 맨 앞에서 `INSERT`하면, 같은 키의 두 번째 요청은 기본키에 걸려 첫 번째가 끝날 때까지 기다린다. "처리 중" 상태를 따로 만들지 않아도 DB가 줄을 세운다.
   
   - 주문과 그 응답을 같은 트랜잭션에 저장한다. 실패해서 롤백되면 키도 함께 사라지므로 성공만 기억된다.
+  
+  - 외래키로 엮이지 않은 테이블은 `CASCADE`가 따라 비우지 않는다. 시드의 `TRUNCATE` 목록에 직접 적지 않으면 지난 실험의 흔적이 다음 실험에 섞인다.
 
 - **에러 신호**:
   
@@ -1692,6 +1724,12 @@ node scripts/stampede.mjs 20 '[{"productId":1,"quantity":1}]' same-key-1
   - 422 `같은 Idempotency-Key로 다른 내용의 요청을 보냈다` → 클라이언트가 키를 만드는 시점
   
   - `Type 'CheckoutResult' is not assignable to type ... InputJsonObject` → `interface`를 `type`으로
+  
+  - `{"message":"Unauthorized","statusCode":401}` → `$TOKEN`이 만료(1시간)됐거나 새 터미널이다. 로그인 줄로 다시 받는다
+  
+  - 시드를 다시 돌렸는데 같은 키의 요청에 지워진 주문의 옛 응답(`"id":6` 같은 것)이 돌아온다 → 시드 `TRUNCATE` 목록에 `idempotency_keys`가 있는지
+  
+  - 시드가 `relation "outbox_events" does not exist`로 실패한다 → `TRUNCATE` 목록에 아직 만들지 않은 테이블을 넣었는지
 
 ## 10. 9단계: outbox로 DB와 알림이 어긋나지 않게
 
@@ -1711,6 +1749,8 @@ node scripts/stampede.mjs 20 '[{"productId":1,"quantity":1}]' same-key-1
 ```
 
 저장하면 `start:dev`가 다시 빌드해 서버를 다시 띄운다. 서버 터미널에 `Found 0 errors`가 찍혔는지 확인한다. 에러가 있으면 서버는 옛 코드 그대로라 실험이 되지 않는다.
+
+#### 터미널 세 개로 보내 보기
 
 이제 터미널 세 개로 진행한다.
 
@@ -1774,6 +1814,8 @@ curl -X POST localhost:4000/orders/checkout -H 'Content-Type: application/json' 
 }
 ```
 
+#### 알림받은 주문이 있는지 확인
+
 알림을 받은 주문 #6이 정말 있는지 터미널 3에서 확인한다.
 
 ```sh
@@ -1807,6 +1849,8 @@ WebSocket 전송은 DB 트랜잭션의 일부가 아니라서 롤백되지 않�
 
 저장한 뒤 터미널 1에 `Found 0 errors`가 찍혔는지 확인한다.
 
+#### 보내 보기
+
 터미널은 실험 ⑤와 같이 세 개를 쓴다. 터미널 2의 `scratch-client.mjs`는 켜 둔 그대로 `연결됨` 상태여야 한다.
 
 ```sh
@@ -1834,6 +1878,8 @@ curl: (52) Empty reply from server
 `start:dev`는 파일이 바뀔 때만 다시 띄우므로, 앱이 스스로 죽으면 다시 켜지지 않는다.
 
 지금 `curl localhost:4000/...`을 보내면 `Failed to connect`가 난다.
+
+#### DB에 직접 확인하고 원복
 
 서버가 꺼져 있어도 DB는 따로 떠 있다. 주문이 정말 커밋됐는지 DB에 직접 묻는다.
 
@@ -1867,6 +1913,8 @@ docker compose exec db psql -U order -d order_api -c "SELECT id, user_id, price 
 curl localhost:4000/orders/6
 {"id":6,"user":"kim","price":30000,"paid":true}
 ```
+
+#### 두 실험이 보여 준 것
 
 배포, 메모리 부족, 서버 장애처럼 프로세스는 언제든 죽을 수 있다.
 
@@ -1965,6 +2013,8 @@ await prisma.$executeRaw`TRUNCATE outbox_events, idempotency_keys, order_items, 
 
 ### 작업 3. relay(전달하는 일꾼)
 
+#### OutboxRelay 클래스
+
 ```ts
 // src/outbox/outbox.relay.ts
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from "@nestjs/common";
@@ -2030,6 +2080,8 @@ export class OutboxRelay implements OnApplicationBootstrap, OnModuleDestroy {
 }
 ```
 
+#### OutboxModule 만들고 등록하기
+
 ```ts
 // src/outbox/outbox.module.ts
 import { Module } from "@nestjs/common";
@@ -2056,6 +2108,8 @@ import { OutboxModule } from "./outbox/outbox.module.js";
 })
 export class AppModule {}
 ```
+
+#### 정상 흐름 확인
 
 저장한 뒤 터미널 1에 `Found 0 errors`가 찍혔는지 확인한다.
 
@@ -2200,6 +2254,8 @@ curl: (52) Empty reply from server
 
 **여기까지는 실험 ⑥과 같다.** 터미널 3은 응답 없이 끝나고, 터미널 2에는 `연결 끊김`이 찍히고, 터미널 1의 서버는 꺼진 채로 있다.
 
+#### 서버가 꺼진 동안 outbox 보기
+
 다른 점은 DB에 있다. 서버가 꺼진 상태에서 outbox를 본다.
 
 ```sh
@@ -2218,6 +2274,8 @@ docker compose exec db psql -U order -d order_api -c "SELECT id, type, user_id, 
 주문과 같은 트랜잭션에서 쓰였으니, 주문 #6이 있으면 이 행도 반드시 있다.
 
 실험 ⑥에서는 "보내야 했다"는 기록이 어디에도 없었다.
+
+#### 되살린 뒤 발행 확인
 
 `process.exit(1)` 줄을 지우고 저장한다. 서버가 다시 뜨고, relay가 부팅 직후 첫 회차(0.5초 안)에 이 이벤트를 보낸다.
 
@@ -2301,6 +2359,12 @@ outbox가 보장하는 것은 "정확히 한 번"이 아니라 "적어도 한 �
   - `curl: Empty reply from server` 뒤, 주문은 있는데 알림이 끝내 안 온다 → 알림이 outbox를 거치는지
   
   - `published_at`은 채워졌는데 `scratch-client.mjs`에 알림이 없다 → 클라이언트가 다시 연결된 시점
+  
+  - 코드를 고쳐 저장했는데 실험 결과가 그대로다 → 터미널 1에 `Found 0 errors`가 찍혔는지(에러가 있으면 서버는 옛 코드로 돈다)
+  
+  - `curl`이 `Failed to connect` → 서버가 죽은 채다. `start:dev`는 파일이 바뀔 때만 다시 띄운다
+  
+  - 시드를 다시 돌렸는데 지워진 주문의 알림이 뒤늦게 온다 → 시드 `TRUNCATE` 목록에 `outbox_events`가 있는지
 
 ## 11. 10단계: 동시성 회귀 테스트
 
@@ -2350,6 +2414,8 @@ process.env.DATABASE_URL = process.env.TEST_DATABASE_URL; // PrismaService가 �
 ```
 
 ### 작업 3. 동시성 회귀 테스트 작성·실행
+
+#### 테스트 파일
 
 ```ts
 // test/checkout.e2e-spec.ts
@@ -2426,6 +2492,8 @@ describe("POST /orders/checkout — 동시성 회귀 테스트", () => {
 });
 ```
 
+#### 실행
+
 ```sh
 npm run test:e2e
 
@@ -2456,6 +2524,8 @@ The plugin "vite-tsconfig-paths" is detected. Vite now supports tsconfig paths r
 통과하는 테스트만 봐서는 그 테스트가 버그를 잡을 수 있는지 알 수 없다.
 
 7단계에서 고친 것(`FOR UPDATE`)을 일부러 지워서, 테스트가 실패하는지 본다.
+
+#### `FOR UPDATE`를 지우고 돌리기
 
 `placeOrder`의 SQL 끝에서 `FOR UPDATE`만 지운다.
 
@@ -2535,6 +2605,8 @@ Error: Transform failed with 1 error:
    Duration  1000ms (transform 72ms, setup 15ms, import 0ms, tests 0ms, environment 0ms)
 ```
 
+#### 결과 읽기
+
 **첫 번째 테스트가 실패했다.**
 
 재고 5개짜리에 결제가 14건 성공했다.
@@ -2554,6 +2626,8 @@ Error: Transform failed with 1 error:
 멱등성은 `FOR UPDATE`가 아니라 `idempotency_keys`의 기본키가 지키기 때문이다.
 
 어떤 테스트가 어떤 코드를 지키는지 이렇게 드러난다.
+
+#### 원복
 
 `FOR UPDATE`를 다시 붙여 원복하고, 한 번 더 돌려 통과로 돌아오는지 확인한다.
 
@@ -2757,14 +2831,17 @@ prisma:query ROLLBACK
 
 > 쿼리 로그는 요청 하나를 혼자 보내서 재현할 때 쓰고, 동시성 문제는 그 순간의 상태를 커넥션별로 보여 주는 `pg_stat_activity`(진단 1, 2)로 본다.
 
-### 진단 4. 에러 코드로 원인 가르기
+### 진단 4. 에러 코드·증상으로 원인 가르기
 
 각 단계 끝 `남길 것`의 에러 신호를 모두 모았다. 메시지를 외우는 게 아니라, 보이는 것에서 어느 칸(먼저 볼 곳)으로 가는지만 익히면 된다.
 
 | 콘솔·응답에 보이는 것 | 뜻 | 먼저 볼 곳 | 나온 곳 |
 |---|---|---|---|
+| 서버는 멀쩡히 뜨는데 `GET /products`만 404 | 모듈이 `AppModule`에서 `imports` 사슬에 없어 Nest가 모른다 | `app.module.ts`의 `imports` | 1단계 |
+| `Nest can't resolve dependencies of the OrdersService (PrismaService, ?)` | `?` 자리에 넣어 줄 프로바이더를 못 찾았다 | 그 클래스가 `providers`에 있는지, 그걸 가진 모듈을 `imports`했는지 | 1단계 |
 | `409 재고 부족: 마우스`인데 키보드 재고가 줄어 있다 | 앞에서 실행한 `UPDATE`가 이미 따로 반영됐다(반쪽 상태) | 쿼리들이 한 트랜잭션에 묶여 있는지 | 2단계 |
 | 같은 상품 두 줄짜리 요청이 400이 아니라 409 "이미 존재하는 값이다" | `order_items` 복합 기본키 충돌 | DTO의 `@ArrayUnique` | 2단계 |
+| `GET /orders/totals`가 400 `Validation failed (numeric string is expected)` | 변수 경로 `:id`가 먼저 잡아 `"totals"`를 숫자로 바꾸려 했다 | 고정 경로가 `:id`보다 위에 있는지 | 2단계 |
 | 409로 롤백됐는데 일부 변경이 남아 있다 | 그 쿼리가 트랜잭션 밖에서 따로 커밋됐다 | 콜백 안에서 `tx` 대신 `this.prisma`를 쓴 쿼리 | 3단계 |
 | 응답은 `{ '201': 50 }`으로 전부 성공인데, 남은 재고 + 팔린 수량 ≠ 처음 재고 | 갱신 손실 | 앱이 읽은 값으로 계산해서 덮어쓰는 곳 | 4단계 |
 | 상품은 있는데 재고 부족이 404 "대상을 찾을 수 없다"(`P2025`) | `update`가 `WHERE`에 맞는 행을 못 찾아 예외를 던졌다 | `updateMany` + `count` 검사로 바꿨는지 | 5단계 |
@@ -2776,10 +2853,16 @@ prisma:query ROLLBACK
 | `P2002` | UNIQUE 위반 | 멱등성 키라면 의도한 것(저장된 응답을 돌려주는 `catch` 경로). 아니라면 중복 데이터 | 8단계 |
 | 422 `같은 Idempotency-Key로 다른 내용의 요청을 보냈다` | 클라이언트가 키를 다른 요청에 재사용했다 | 클라이언트가 키를 만드는 시점 | 8단계 |
 | `Type 'CheckoutResult' is not assignable to type ... InputJsonObject` | Json 컬럼에 넣는 값의 타입이 `interface`로 선언됐다 | `interface`를 `type`으로 | 8단계 |
+| `{"message":"Unauthorized","statusCode":401}` | 토큰이 만료(1시간)됐거나 새 터미널이라 `$TOKEN`이 없다 | 로그인 줄로 `TOKEN`을 다시 받는다 | 8단계 |
+| 시드를 다시 돌렸는데 같은 키의 요청에 지워진 주문의 옛 응답(`"id":6` 같은 것)이 돌아온다 | `idempotency_keys`가 비워지지 않았다(외래키가 없어 `CASCADE`가 안 따라온다) | 시드 `TRUNCATE` 목록 | 8단계 |
+| 시드가 `relation "outbox_events" does not exist`로 실패한다 | 아직 없는 테이블을 `TRUNCATE` 목록에 넣었다 | 시드 `TRUNCATE` 목록 | 8단계 |
 | 알림은 왔는데 그 주문이 `order 6 not found`(404) | 커밋 전에 보낸 알림(유령 알림) | 알림 호출이 트랜잭션 안에 있는지 | 9단계 ⑤ |
 | `P2028` `A commit cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms` | 트랜잭션이 시간 상한(5초)을 넘겨 롤백됐다 | 트랜잭션 안의 느린 작업 | 9단계 ⑤ |
 | `curl: Empty reply from server` 뒤, 주문은 있는데 알림이 끝내 안 온다 | 커밋 후, 알림 전에 프로세스가 죽었다 | 알림이 outbox를 거치는지 | 9단계 ⑥ |
 | `published_at`은 채워졌는데 `scratch-client.mjs`에 알림이 없다 | 보낸 순간 그 사용자의 소켓이 없었다 | 클라이언트가 다시 연결된 시점 | 9단계 |
+| 코드를 고쳐 저장했는데 실험 결과가 그대로다 | 빌드 에러로 서버가 옛 코드로 돌고 있다 | 터미널 1의 `Found 0 errors` | 9단계 |
+| `curl`이 `Failed to connect` | 서버 프로세스가 죽은 채다(`start:dev`는 파일이 바뀔 때만 다시 띄운다) | 서버 터미널, 파일을 저장해 다시 띄운다 | 9단계 ⑥ |
+| 시드를 다시 돌렸는데 지워진 주문의 알림이 뒤늦게 온다 | 안 보낸 outbox 행이 남아 relay가 보냈다 | 시드 `TRUNCATE` 목록의 `outbox_events` | 9단계 |
 | `TEST_DATABASE_URL이 없다 — 개발 DB를 지우지 않도록 테스트를 멈춘다` | 테스트가 개발 DB를 쓰려 했다 | `.env`의 `TEST_DATABASE_URL` | 10단계 |
 | `expected [ 201, 201, … ] to have a length of 5 but got 14` | 동시 요청에 재고보다 많이 팔렸다 | 잠금(`FOR UPDATE`)이 빠졌는지 | 10단계 |
 | `curl`이 응답 없이 멈춘다 | 잠금을 기다리는 중이다 | `pg_stat_activity`의 `blocked_by`(진단 1) | 11단계 |
@@ -2808,14 +2891,6 @@ SELECT count(*) FILTER (WHERE published_at IS NULL) AS pending, count(*) AS tota
 ```
 
 `pending`이 계속 늘기만 하면 relay가 멈췄거나(서버 콘솔의 `outbox 발행 실패`) 처리 속도가 쌓이는 속도를 못 따라가는 것이다.
-
-### 시험해보기
-
-```sh
-npx prisma db seed && node scripts/stampede.mjs 50
-```
-
-`201`이 10건, 남은 재고 0, 팔린 수량 10인지 확인한다. 이어서 6단계의 "반대 순서 동시 실행"을 돌려 서버 콘솔에 에러가 한 줄도 없는지 확인한다.
 
 ### 도전 과제
 
@@ -2884,6 +2959,105 @@ npx prisma db seed && node scripts/stampede.mjs 50
   - `outbox 발행 실패`, 또는 `pending`이 계속 는다 → 서버 콘솔, 진단 6의 쿼리
 
 ## 13. 완성 확인
+
+### 시험해보기
+
+서버(`npm run start:dev`)를 켜 둔 채, 이 문서에서 고친 것을 처음부터 끝까지 한 번에 확인한다. 실험마다 시드로 재고와 주문을 되돌리고 시작한다.
+
+**① 동시 결제 50건 → 정확히 10건만 팔린다 (4·5·7단계)**
+
+```sh
+npx prisma db seed && node scripts/stampede.mjs 50
+```
+
+```text
+응답 코드별 개수: { '201': 10, '409': 40 }
+┌─────────┬────┬─────────────────┬───────────┬───────────┐
+│ (index) │ id │ name            │ 남은 재고 │ 팔린 수량 │
+├─────────┼────┼─────────────────┼───────────┼───────────┤
+│ 0       │ 1  │ '한정판 키보드' │ 0         │ 10        │
+│ 1       │ 2  │ '마우스'        │ 100       │ 0         │
+└─────────┴────┴─────────────────┴───────────┴───────────┘
+```
+
+`201`이 10건이고, 키보드의 남은 재고 0 + 팔린 수량 10 = 처음 재고 10이면 된다.
+
+**② 반대 순서 동시 결제 → 교착 0건 (6단계)**
+
+```sh
+npx prisma db seed
+docker compose exec db psql -U order -d order_api -c "UPDATE products SET stock = 1000"
+node scripts/stampede.mjs 30 '[{"productId":1,"quantity":1},{"productId":2,"quantity":1}]' &
+node scripts/stampede.mjs 30 '[{"productId":2,"quantity":1},{"productId":1,"quantity":1}]'; wait
+docker compose logs db --since 1m | grep -c "deadlock detected"
+```
+
+```text
+응답 코드별 개수: { '201': 30 }
+응답 코드별 개수: { '201': 30 }
+┌─────────┬────┬─────────────────┬───────────┬───────────┐
+│ (index) │ id │ name            │ 남은 재고 │ 팔린 수량 │
+├─────────┼────┼─────────────────┼───────────┼───────────┤
+│ 0       │ 1  │ '한정판 키보드' │ 940       │ 60        │
+│ 1       │ 2  │ '마우스'        │ 940       │ 60        │
+└─────────┴────┴─────────────────┴───────────┴───────────┘
+┌─────────┬────┬─────────────────┬───────────┬───────────┐
+│ (index) │ id │ name            │ 남은 재고 │ 팔린 수량 │
+├─────────┼────┼─────────────────┼───────────┼───────────┤
+│ 0       │ 1  │ '한정판 키보드' │ 940       │ 60        │
+│ 1       │ 2  │ '마우스'        │ 940       │ 60        │
+└─────────┴────┴─────────────────┴───────────┴───────────┘
+0
+```
+
+60건이 모두 `201`이고, 두 상품 모두 남은 재고 940 + 팔린 수량 60 = 1000이면 된다. 마지막 줄 `0`은 최근 1분 동안 DB 로그에 찍힌 교착 기록 수다. 서버 콘솔에도 `P2034`·`P2028`이 한 줄도 없어야 한다.
+
+**③ 같은 `Idempotency-Key`로 동시 20건 → 주문은 1건 (8단계)**
+
+```sh
+npx prisma db seed && node scripts/stampede.mjs 20 '[{"productId":1,"quantity":1}]' same-key-1
+```
+
+```text
+응답 코드별 개수: { '201': 20 }
+┌─────────┬────┬─────────────────┬───────────┬───────────┐
+│ (index) │ id │ name            │ 남은 재고 │ 팔린 수량 │
+├─────────┼────┼─────────────────┼───────────┼───────────┤
+│ 0       │ 1  │ '한정판 키보드' │ 9         │ 1         │
+│ 1       │ 2  │ '마우스'        │ 100       │ 0         │
+└─────────┴────┴─────────────────┴───────────┴───────────┘
+```
+
+20건이 모두 `201`인데 팔린 수량은 1이다. 20개 응답이 모두 같은 주문 하나를 가리킨다.
+
+**④ 그 주문의 알림이 outbox를 거쳐 나갔다 (9단계)**
+
+③ 바로 다음에 돌린다.
+
+```sh
+docker compose exec db psql -U order -d order_api -c "SELECT count(*) FILTER (WHERE published_at IS NULL) AS pending, count(*) AS total FROM outbox_events"
+```
+
+```text
+ pending | total 
+---------+-------
+       0 |     1
+(1 row)
+```
+
+주문 1건에 이벤트 1건(`total` 1)이고, relay가 이미 보냈으면(`pending` 0) 된다. `pending`이 1로 남아 있으면 `OutboxModule`이 `app.module.ts`에 들어 있는지 본다.
+
+**⑤ 동시성 회귀 테스트 (10단계)**
+
+```sh
+npm run test:e2e
+```
+
+테스트는 테스트 전용 DB(`order_api_test`)를 쓰므로 ①~④의 데이터와 상관없다. 출력 끝이 `Test Files  2 passed (2)`, `Tests  3 passed (3)`이면 된다.
+
+다섯 가지가 모두 맞으면 아래 체크리스트를 채운다.
+
+### 체크리스트
 
 - [ ] 1단계: `GET /products`로 재고가 보이고, `order_items`가 복합 기본키로 주문과 상품을 잇는다
 
