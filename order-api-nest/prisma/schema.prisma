@@ -8,10 +8,11 @@ datasource db {
 }
 
 model User {
-  id        String  @id
-  name      String
-  createdAt DateTime @default(now()) @map("created_at")
-  orders    Order[]
+  id            String      @id
+  name          String
+  passwordHash  String?     @map("password_hash")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  orders        Order[]
 
   @@map("users")
 }
