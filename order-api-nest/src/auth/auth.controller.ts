@@ -1,17 +1,14 @@
-import { Body, Controller, HttpCode, Post, UnauthorizedException } from '@nestjs/common';
-import { JwtService } from "@nestjs/jwt"
-import { LoginDto } from './login.dto.js';
+import { Body, Controller, HttpCode, Post } from "@nestjs/common";
+import { AuthService } from "./auth.service.js";
+import { LoginDto } from "./login.dto.js";
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(private readonly authService: AuthService) {}
 
   @Post("login")
   @HttpCode(200)
   login(@Body() dto: LoginDto) {
-    if (dto.id !== "kim" || dto.password !== process.env.DEMO_PASSWORD) {
-      throw new UnauthorizedException("id 또는 password가 틀렸습니다.");
-    }
-    return { accessToken: this.jwtService.sign({ sub: dto.id })};
+    return this.authService.login(dto.id, dto.password);
   }
 }
