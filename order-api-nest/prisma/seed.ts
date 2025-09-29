@@ -4,7 +4,7 @@ import { hashPassword } from "../src/auth/password.js";
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
 
-await prisma.$executeRaw`TRUNCATE outbox_events, idempotency_keys, order_items, orders, products, users RESTART IDENTITY CASCADE`;
+await prisma.$executeRaw`TRUNCATE refresh_tokens, outbox_events, idempotency_keys, order_items, orders, products, users RESTART IDENTITY CASCADE`;
 
 const users = [
   { id: "kim", name: "김" },
