@@ -32,14 +32,18 @@ export class AuthService {
     const result = await this.prisma.$transaction(async (tx) => {
       const token = await tx.refreshToken.findUnique({ where: { tokenHash: sha256(rawToken) } });
       if (!token || token.expiresAt < new Date()) return { kind: "invalid" as const };
-      if (token.revokedAt) {
+
+      const { count } = await tx.refreshToken.updateMany({
+        where: { id: token.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      if (count === 0) {
         await tx.refreshToken.updateMany({
           where: { familyId: token.familyId, revokedAt: null },
           data: { revokedAt: new Date() },
         });
         return { kind: "reused" as const };
       }
-      await tx.refreshToken.update({ where: { id: token.id }, data: { revokedAt: new Date() } });
       return { kind: "ok" as const, tokens: await this.issueTokens(tx, token.userId, token.familyId) };
     });
     if (result.kind === "invalid") throw new UnauthorizedException("유효하지 않은 refresh token입니다");
