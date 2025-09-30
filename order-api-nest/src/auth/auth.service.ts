@@ -29,9 +29,22 @@ export class AuthService {
 
   async refresh(rawToken: string | undefined): Promise<IssuedTokens> {
     if (!rawToken) throw new UnauthorizedException("refresh token이 없습니다");
-    const token = await this.prisma.refreshToken.findUnique({ where: { tokenHash: sha256(rawToken) } });
-    if (!token || token.revokedAt || token.expiresAt < new Date()) throw new UnauthorizedException("유효하지 않은 refresh token입니다");
-    return { accessToken: this.jwtService.sign({ sub: token.userId }), refreshToken: rawToken };
+    const result = await this.prisma.$transaction(async (tx) => {
+      const token = await tx.refreshToken.findUnique({ where: { tokenHash: sha256(rawToken) } });
+      if (!token || token.expiresAt < new Date()) return { kind: "invalid" as const };
+      if (token.revokedAt) {
+        await tx.refreshToken.updateMany({
+          where: { familyId: token.familyId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        return { kind: "reused" as const };
+      }
+      await tx.refreshToken.update({ where: { id: token.id }, data: { revokedAt: new Date() } });
+      return { kind: "ok" as const, tokens: await this.issueTokens(tx, token.userId, token.familyId) };
+    });
+    if (result.kind === "invalid") throw new UnauthorizedException("유효하지 않은 refresh token입니다");
+    if (result.kind === "reused") throw new UnauthorizedException("이미 사용된 refresh token입니다 - 이 로그인 세션 전체를 회수합니다");
+    return result.tokens;
   }
 
   private async issueTokens(db: Prisma.TransactionClient, userId: string, familyId: string): Promise<IssuedTokens> {
