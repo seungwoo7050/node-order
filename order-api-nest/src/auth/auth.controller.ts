@@ -1,4 +1,5 @@
-import { Body, Controller, HttpCode, Post, Req, Res } from "@nestjs/common";
+import { Body, Controller, HttpCode, Post, Req, Res, UseGuards } from "@nestjs/common";
+import { AuthGuard } from "@nestjs/passport";
 import type { CookieOptions, Request, Response } from "express";
 import { AuthService, REFRESH_TOKEN_TTL_SECONDS } from "./auth.service.js";
 import { LoginDto } from "./login.dto.js";
@@ -29,5 +30,21 @@ export class AuthController {
     const { accessToken, refreshToken } = await this.authService.refresh(req.cookies?.[REFRESH_COOKIE]);
     res.cookie(REFRESH_COOKIE, refreshToken, { ...refreshCookieOptions, maxAge: REFRESH_TOKEN_TTL_SECONDS * 1000 });
     return { accessToken };
+  }
+
+  @Post("logout")
+  @HttpCode(204)
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    await this.authService.logout(req.cookies?.[REFRESH_COOKIE]);
+    res.clearCookie(REFRESH_COOKIE, refreshCookieOptions);
+  }
+
+  @Post("logout-all")
+  @HttpCode(200)
+  @UseGuards(AuthGuard("jwt"))
+  async logoutAll(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const revoked = await this.authService.logoutAll((req.user as { userId: string }).userId);
+    res.clearCookie(REFRESH_COOKIE, refreshCookieOptions);
+    return { revoked };
   }
 }

@@ -51,6 +51,24 @@ export class AuthService {
     return result.tokens;
   }
 
+  async logout(rawToken: string | undefined): Promise<void> {
+    if (!rawToken) return;
+    const token = await this.prisma.refreshToken.findUnique({ where: { tokenHash: sha256(rawToken) } });
+    if (!token) return;
+    await this.prisma.refreshToken.updateMany({
+      where: { familyId: token.familyId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  async logoutAll(userId: string): Promise<number> {
+    const { count } = await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    return count;
+  }
+
   private async issueTokens(db: Prisma.TransactionClient, userId: string, familyId: string): Promise<IssuedTokens> {
     const accessToken = this.jwtService.sign({ sub: userId });
     const refreshToken = randomBytes(32).toString("base64url");
