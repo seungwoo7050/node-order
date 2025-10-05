@@ -1,0 +1,18 @@
+import { Module } from '@nestjs/common';
+import { AppController } from './app.controller.js';
+import { AppService } from './app.service.js';
+import { AuthModule } from './auth/auth.module.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
+import { OrdersModule } from './orders/orders.module.js';
+import { PrismaModule } from './prisma/prisma.module.js';
+import { UsersModule } from './users/users.module.js';
+import { ProductsModule } from "./products/products.module.js";
+import { OutboxModule } from './outbox/outbox.module.js';
+import { MeModule } from './me/me.module.js';
+
+@Module({
+  imports: [PrismaModule, OrdersModule, UsersModule, AuthModule, NotificationsModule, ProductsModule, OutboxModule, MeModule],
+  controllers: [AppController],
+  providers: [AppService],
+})
+export class AppModule {}
