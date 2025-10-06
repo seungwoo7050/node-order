@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from "@nestjs/common";
 import { NotificationsGateway } from "../notifications/notifications.gateway.js";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { MailQueue } from "../queue/mail.queue.js";
 
 type PendingEvent = { id: number; type: string; user_id: string; payload: Record<string, unknown> };
 
@@ -13,6 +14,7 @@ export class OutboxRelay implements OnApplicationBootstrap, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsGateway,
+    private readonly mailQueue: MailQueue,
   ) {}
 
   onApplicationBootstrap() {
@@ -43,6 +45,7 @@ export class OutboxRelay implements OnApplicationBootstrap, OnModuleDestroy {
         WHERE published_at IS NULL ORDER BY id LIMIT 20 FOR UPDATE SKIP LOCKED`;
       for (const e of events) {
         this.notifications.notifyUser(e.user_id, e.type, { eventId: e.id, ...e.payload });
+        await this.mailQueue.enqueueOrderEmail(e.id, { to: `${e.user_id}@example.com`, orderId: Number(e.payload.id) });
       }
       if (events.length > 0) {
         await tx.outboxEvent.updateMany({
