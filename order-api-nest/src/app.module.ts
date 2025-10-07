@@ -9,9 +9,10 @@ import { UsersModule } from './users/users.module.js';
 import { ProductsModule } from "./products/products.module.js";
 import { OutboxModule } from './outbox/outbox.module.js';
 import { MeModule } from './me/me.module.js';
+import { LeaderModule } from './leader/leader.module.js';
 
 @Module({
-  imports: [PrismaModule, OrdersModule, UsersModule, AuthModule, NotificationsModule, ProductsModule, OutboxModule, MeModule],
+  imports: [PrismaModule, OrdersModule, UsersModule, AuthModule, NotificationsModule, ProductsModule, OutboxModule, MeModule, LeaderModule],
   controllers: [AppController],
   providers: [AppService],
 })
