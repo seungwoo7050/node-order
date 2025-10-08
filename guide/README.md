@@ -716,7 +716,7 @@ ioredis 6의 기본인 RESP3에서는 한 연결로도 되지만, 프로토콜�
 
 ### 남길 것
 
-- **찾아보면 되는 것**: `IoAdapter`를 상속하는 코드 모양, `createAdapter`의 인자, `MONITOR`의 출력 형식. 외울 필요 없다.
+- **찾아보면 되는 것**: `IoAdapter`를 상속하는 코드 모양, `createAdapter`의 인자, `MONITOR`의 출력 형식, `curl`로 로그인해 `jq -r`로 토큰만 꺼내는 모양. 외울 필요 없다.
 
 - **감각으로 남겨야 할 것**:
 
@@ -954,13 +954,15 @@ relay는 한 회차에 최대 20건을 집어 트랜잭션 하나 안에서 처�
 
 ### 남길 것
 
-- **찾아보면 되는 것**: `Math.random()`으로 실패를 흉내 내는 방법, `Promise.all`로 요청을 동시에 보내는 모양. 외울 필요 없다.
+- **찾아보면 되는 것**: `Math.random()`으로 실패를 흉내 내는 방법, `Promise.all`로 요청을 동시에 보내는 모양, 로그를 파일에도 남기는 `tee`, 줄 수를 세는 `grep -c`, 쿼리 하나만 실행하는 `psql -c`. 외울 필요 없다.
 
 - **감각으로 남겨야 할 것**:
 
+  - 깨뜨리기 전에 기준값부터 잰다. 정상일 때 20번/20개를 봐 둬야 38번이 "중복"으로 읽히고, 숫자가 이상할 때 스크립트 탓인지 코드 탓인지 가를 수 있다.
+
   - 트랜잭션 안에서 바깥 세상(메일, WebSocket)에 한 일은 롤백되지 않는다. 롤백된 회차를 다시 돌면 그 일이 또 일어난다.
 
-  - 한 회차에 처리하는 건수 × 한 건의 시간이 트랜잭션 시간 상한(5초)을 넘으면, 그 회차는 영원히 끝나지 않는다.
+  - 한 회차에 처리하는 건수 × 한 건의 시간이 트랜잭션 시간 상한(5초)을 넘으면, 그 회차는 매번 롤백되어 영원히 커밋되지 못한다.
 
 - **에러 신호**:
 
@@ -1454,7 +1456,7 @@ b.log:20
 
 ### 남길 것
 
-- **찾아보면 되는 것**: `queue.add`의 옵션(`jobId`, `attempts`, `backoff`), `getJobCounts`의 상태 이름, `retryJobs`. 외울 필요 없다.
+- **찾아보면 되는 것**: `queue.add`의 옵션(`jobId`, `attempts`, `backoff`), `getJobCounts`의 상태 이름, `retryJobs`, 포트를 쥔 프로세스를 찾는 `lsof -iTCP:<포트> -sTCP:LISTEN`. 외울 필요 없다.
 
 - **감각으로 남겨야 할 것**:
 
@@ -1463,6 +1465,10 @@ b.log:20
   - `jobId`를 outbox 이벤트 id로 고정하면, outbox의 "적어도 한 번"이 큐에서 "한 번"으로 줄어든다. 중복을 막는 기간은 끝난 job이 Redis에 남아 있는 동안이다.
 
   - `attempts`는 처음 시도를 포함한 전체 횟수이고, `concurrency`는 동시에 기다리는 Promise 수이지 스레드 수가 아니다.
+
+  - 큐는 job을 차례로 나눠 주지 않고, 손이 빈 워커가 먼저 꺼내 간다. 워커를 늘리려면 서버를 늘리면 되고, 나뉘는 비율은 워커의 처리 속도(`concurrency`, 한 건의 시간)를 따른다.
+
+  - `maxRetriesPerRequest: null`은 실패를 기다림으로 바꾼다. 그 기다림이 트랜잭션 안에서 일어나면 트랜잭션 시간 초과로 드러난다(진단 3에서 `발행 실패`가 Redis를 다시 켠 뒤에야 찍히는 이유).
 
 - **에러 신호**:
 
@@ -1473,6 +1479,10 @@ b.log:20
   - `메일 job ... 실패(4회째) — 재시도 소진, failed로 이동` → 외부 서비스가 계속 실패한다. 복구 뒤 `retry-failed.mjs`
 
   - `queue-stats.mjs`의 `delayed`가 계속 는다 → 재시도가 밀리고 있다(외부 서비스 상태)
+
+  - `retry-failed.mjs`가 `job 5개`라고 했는데 `메일 발송` 로그가 없다 → 끄지 않은 다른 서버(`MAIL_FAIL_RATE=1`)의 워커가 가져갔는지(`lsof -iTCP:4000 -sTCP:LISTEN`)
+
+  - 에러 없이 주문은 되는데 `메일 발송` 로그도 없고 `completed`도 늘지 않는다 → seed로 outbox 번호를 1부터 다시 매긴 뒤 큐를 비우지 않아, 같은 `jobId`의 옛 job이 남아 있는지(`FLUSHALL`)
 
   - `Nest can't resolve dependencies of the OutboxRelay (PrismaService, NotificationsGateway, ?)` → `OutboxModule`의 `imports`에 `QueueModule`이 있는지, `QueueModule`이 `MailQueue`를 `exports`하는지
 
@@ -2285,6 +2295,8 @@ WHERE l.locktype = 'advisory';
 
 | 콘솔·응답에 보이는 것 | 뜻 | 먼저 볼 곳 | 나온 곳 |
 |---|---|---|---|
+| `npm run build`가 `Cannot find module '../generated/prisma/client.js'` | Prisma 클라이언트가 생성되지 않았다(`src/generated/`는 git에 없다) | `npx prisma generate` | 준비 |
+| `npx prisma db seed`가 `The table ... does not exist` | 마이그레이션이 DB에 적용되지 않았다 | `npx prisma migrate status`, `migrate deploy` | 준비 |
 | `listen EADDRINUSE: address already in use :::4000` | 두 서버가 같은 포트를 잡으려 했다 | 두 번째 서버 명령 앞의 `PORT=4001` | 준비 |
 | 받은 알림 수가 실행마다 10, 1, 0처럼 다른데 미발행 outbox는 0건 | 이벤트를 집은 서버에 받는 소켓이 없었다 | Redis 어댑터가 붙어 있는지(진단 1) | 1단계 |
 | 어댑터를 붙였는데도 알림이 일부만 온다 | socket.io 서버가 기본 어댑터로 만들어졌다 | `main.ts`에서 `useWebSocketAdapter`가 `app.listen` 앞에 있는지, 다시 빌드했는지 | 2단계 |
@@ -2297,6 +2309,8 @@ WHERE l.locktype = 'advisory';
 | `MaxRetriesPerRequestError: Reached the max retries per request limit (which is 20)` | Redis가 없는 동안 명령을 포기했다 | 그 연결의 `maxRetriesPerRequest`, Redis 상태 | 4단계 |
 | `메일 job ... 실패(4회째) — 재시도 소진, failed로 이동` | 재시도를 다 썼다 | 외부 서비스 상태. 복구 뒤 `retry-failed.mjs` | 4단계 |
 | `queue-stats.mjs`의 `delayed`가 계속 는다 | 재시도가 밀리고 있다 | 외부 서비스 상태(진단 2) | 4단계 |
+| `retry-failed.mjs`는 `job 5개`인데 `메일 발송` 로그가 없다 | 다른 서버의 워커가 job을 가져가 또 실패시켰다 | 떠 있는 서버(`lsof -iTCP:4000 -sTCP:LISTEN`) | 4단계 |
+| 주문은 되는데 `메일 발송`도 없고 `completed`도 그대로다 | 같은 `jobId`의 옛 job이 있어 새 job이 무시됐다 | seed 뒤 `FLUSHALL`을 했는지, `--scan`으로 job 이름(진단 2) | 4단계 |
 | `WARNING:  you don't own a lock of type ExclusiveLock` | 잠금을 건 연결과 다른 연결로 풀려 했다 | 세션 잠금을 커넥션 풀로 걸었는지 | 5단계 |
 | 어느 서버에도 `리더가 됐다`가 없고 `pg_locks`에 advisory 행이 없다 | `LeaderElection`이 만들어지지 않았다 | `app.module.ts`의 `imports`에 `LeaderModule` | 5단계, 진단 5 |
 | `lock-race.mjs`의 `동시에 작업한 구간`이 `없음`이 아니다 | Redis 락의 TTL이 지났거나 남의 잠금을 지웠다 | TTL과 멈춘 시간, 내 잠금일 때만 푸는지 | 5단계 |
