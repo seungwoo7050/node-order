@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from './providers';
-import Link from "next/link";
+import { Nav } from './nav';
 import "./globals.css";
 
 
@@ -28,7 +28,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <Providers>
-          <nav><Link href="/orders">주문 목록</Link></nav>
+          <Nav />
           {children}
         </Providers>
       </body>
