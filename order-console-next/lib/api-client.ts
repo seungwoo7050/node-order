@@ -36,15 +36,24 @@ export async function logout(): Promise<void> {
   useAuthStore.getState().clear();
 }
 
-export async function refreshAccessToken(): Promise<string | null> {
-  const res = await fetch(`${API_URL}/auth/refresh`, { method: "POST", credentials: "include" });
-  if (!res.ok) {
-    useAuthStore.getState().clear();
-    return null;
-  }
-  const { accessToken } = (await res.json()) as { accessToken: string };
-  useAuthStore.getState().setAccessToken(accessToken);
-  return accessToken;
+let refreshing: Promise<string | null> | null = null;
+
+export function refreshAccessToken(): Promise<string | null> {
+  refreshing ??= (async () => {
+    try {
+      const res = await fetch(`${API_URL}/auth/refresh`, { method: "POST", credentials: "include" });
+      if (!res.ok) {
+        useAuthStore.getState().clear();
+        return null;
+      }
+      const { accessToken } = (await res.json()) as { accessToken: string };
+      useAuthStore.getState().setAccessToken(accessToken);
+      return accessToken;
+    } finally {
+      refreshing = null;
+    }
+  })();
+  return refreshing;
 }
 
 export async function authFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
