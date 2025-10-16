@@ -15,6 +15,17 @@ services:
     image: redis:7
     ports:
       - "6380:6379"
+  storage:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_ACCESS_KEY: localaccess
+      RUSTFS_SECRET_KEY: localsecret123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - storagedata:/data
 
 volumes:
   pgdata:
+  storagedata:

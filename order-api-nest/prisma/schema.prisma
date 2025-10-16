@@ -32,11 +32,12 @@ model Order {
 }
 
 model Product {
-  id      Int       @id @default(autoincrement())
-  name    String
-  price   Int
-  stock   Int
-  items   OrderItem[]
+  id        Int         @id @default(autoincrement())
+  name      String
+  price     Int
+  stock     Int
+  imageKey  String?     @map("image_key")
+  items     OrderItem[]
 
   @@map("products")
 }
