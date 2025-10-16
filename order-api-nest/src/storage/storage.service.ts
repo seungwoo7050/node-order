@@ -36,4 +36,12 @@ export class StorageService implements OnModuleInit {
       },
     }));
   }
+
+  createUploadUrl(key: string, contentType: string, size: number, expiresIn: number): Promise<string> {
+    return getSignedUrl(
+      this.s3,
+      new PutObjectCommand({ Bucket: this.bucket, Key: key, ContentType: contentType, ContentLength: size }),
+      { expiresIn, signableHeaders: new Set(["content-type"]) },
+    );
+  }
 }
