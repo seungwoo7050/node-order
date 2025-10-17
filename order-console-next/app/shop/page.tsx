@@ -4,8 +4,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { ApiError, authFetch, publicFetch } from "@/lib/api-client";
 import { useCartStore } from "@/lib/cart-store";
+import { useAuthStore } from "@/lib/auth-store";
+import { ProductImageUploader } from "./product-image-uploader";
 
-type Product = { id: number; name: string; price: number; stock: number };
+type Product = { id: number; name: string; price: number; stock: number; imageUrl: string | null };
 type CheckoutResult = { id: number; price: number };
 
 function ProductList() {
@@ -14,6 +16,7 @@ function ProductList() {
     queryFn: () => publicFetch<Product[]>("/products"),
   });
   const add = useCartStore((s) => s.add);
+  const loggedIn = useAuthStore((s) => s.accessToken !== null);
 
   if (isPending) return <p>상품을 불러오는 중…</p>;
   if (error) return <p role="alert">상품을 불러오지 못했습니다: {error.message}</p>;
@@ -21,10 +24,15 @@ function ProductList() {
     <ul>
       {data.map((p) => (
         <li key={p.id}>
-          {p.name} — {p.price.toLocaleString()}원 (재고 <span data-testid={`stock-${p.id}`}>{p.stock}</span>)
+          {p.imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={p.imageUrl} alt={p.name} width={48} height={48} data-testid={`image-${p.id}`} />
+          )}
+          {p.name} - {p.price.toLocaleString()}원 (재고 <span data-testid={`stock-${p.id}`}>{p.stock}</span>)
           <button disabled={p.stock === 0} onClick={() => add({ productId: p.id, name: p.name, price: p.price })}>
             담기
           </button>
+          {loggedIn && <ProductImageUploader productId={p.id} />}
         </li>
       ))}
     </ul>
