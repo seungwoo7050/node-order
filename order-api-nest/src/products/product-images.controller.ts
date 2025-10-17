@@ -26,4 +26,20 @@ export class ProductImagesController {
     const uploadUrl = await this.storage.createUploadUrl(key, dto.contentType, dto.size, UPLOAD_URL_TTL_SECONDS);
     return { key, uploadUrl, expiresIn: UPLOAD_URL_TTL_SECONDS };
   }
+
+  @Post("confirm")
+  async confirm(@Param("id", ParseIntPipe) id: number, @Body() dto: ConfirmImageDto) {
+    if (!dto.key.startsWith(`products/${id}/`)) throw new BadRequestException("이 상품의 키가 아니다");
+    const meta = await this.storage.head(dto.key);
+    if (!meta) throw new BadRequestException("업로드된 파일이 없다");
+    if (meta.size > MAX_IMAGE_BYTES) throw new BadRequestException("파일이 너무 크다");
+    if (!looksLike(meta.contentType, await this.storage.readFirstBytes(dto.key, 12))) {
+      await this.storage.delete(dto.key);
+      throw new BadRequestException("이미지 파일이 아니다");
+    }
+    const before = await this.prisma.product.findUnique({ where: { id }, select: { imageKey: true } });
+    await this.prisma.product.update({ where: { id }, data: { imageKey: dto.key } });
+    if (before?.imageKey && before.imageKey !== dto.key) await this.storage.delete(before.imageKey);
+    return { key: dto.key, imageUrl: await this.storage.createDownloadUrl(dto.key, 600) };
+  }
 }

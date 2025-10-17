@@ -44,4 +44,27 @@ export class StorageService implements OnModuleInit {
       { expiresIn, signableHeaders: new Set(["content-type"]) },
     );
   }
+
+  createDownloadUrl(key: string, expiresIn: number): Promise<string> {
+    return getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key }), { expiresIn });
+  }
+
+  async head(key: string): Promise<{ size: number; contentType: string } | null> {
+    try {
+      const res = await this.s3.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
+      return { size: res.ContentLength ?? 0, contentType: res.ContentType ?? "" };
+    } catch (err) {
+      if ((err as { name?: string }).name === "NotFound") return null;
+      throw err;
+    }
+  }
+
+  async readFirstBytes(key: string, length: number): Promise<Buffer> {
+    const res = await this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: key, Range: `bytes=0-${length - 1}` }));
+    return Buffer.from(await res.Body!.transformToByteArray());
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+  }
 }
