@@ -64,6 +64,17 @@ export class StorageService implements OnModuleInit {
     return Buffer.from(await res.Body!.transformToByteArray());
   }
 
+  async list(prefix: string): Promise<{ key: string; lastModified: Date }[]> {
+    const result: { key: string; lastModified: Date }[] = [];
+    let token: string | undefined;
+    do {
+      const res = await this.s3.send(new ListObjectsV2Command({ Bucket: this.bucket, Prefix: prefix, ContinuationToken: token }));
+      for (const o of res.Contents ?? []) result.push({ key: o.Key!, lastModified: o.LastModified! });
+      token = res.IsTruncated ? res.NextContinuationToken : undefined;
+    } while (token);
+    return result;
+  }
+
   async delete(key: string): Promise<void> {
     await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
