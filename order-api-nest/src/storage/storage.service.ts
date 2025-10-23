@@ -5,17 +5,22 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 
-@Injectable()
-export class StorageService implements OnModuleInit {
-  private readonly logger = new Logger(StorageService.name);
-  readonly bucket = process.env.S3_BUCKET!;
-  private readonly s3 = new S3Client({
-    endpoint: process.env.S3_ENDPOINT,
+function makeClient(endpoint: string | undefined) {
+  return new S3Client({
+    endpoint: endpoint || undefined,
     region: process.env.S3_REGION,
     forcePathStyle: true,
     credentials: { accessKeyId: process.env.S3_ACCESS_KEY!, secretAccessKey: process.env.S3_SECRET_KEY! },
     requestChecksumCalculation: "WHEN_REQUIRED",
   });
+}
+
+@Injectable()
+export class StorageService implements OnModuleInit {
+  private readonly logger = new Logger(StorageService.name);
+  readonly bucket = process.env.S3_BUCKET!;
+  private readonly s3 = makeClient(process.env.S3_ENDPOINT);
+  private readonly presigner = makeClient(process.env.S3_PUBLIC_ENDPOINT || process.env.S3_ENDPOINT);
 
   async onModuleInit() {
     try {
@@ -39,14 +44,14 @@ export class StorageService implements OnModuleInit {
 
   createUploadUrl(key: string, contentType: string, size: number, expiresIn: number): Promise<string> {
     return getSignedUrl(
-      this.s3,
+      this.presigner,
       new PutObjectCommand({ Bucket: this.bucket, Key: key, ContentType: contentType, ContentLength: size }),
       { expiresIn, signableHeaders: new Set(["content-type"]) },
     );
   }
 
   createDownloadUrl(key: string, expiresIn: number): Promise<string> {
-    return getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key }), { expiresIn });
+    return getSignedUrl(this.presigner, new GetObjectCommand({ Bucket: this.bucket, Key: key }), { expiresIn });
   }
 
   async head(key: string): Promise<{ size: number; contentType: string } | null> {
