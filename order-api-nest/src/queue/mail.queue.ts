@@ -11,16 +11,18 @@ const QUEUE_NAME = "mail";
 export class MailQueue implements OnModuleDestroy {
   private readonly logger = new Logger(MailQueue.name);
   private readonly connection = new Redis(process.env.REDIS_URL!, { maxRetriesPerRequest: null });
+  private readonly workerConnection = this.connection.duplicate();
   private readonly queue = new Queue<OrderEmailJob>(QUEUE_NAME, { connection: this.connection });
   private readonly worker: Worker<OrderEmailJob>;
   constructor(private readonly mailer: FakeMailer) {
     this.worker = new Worker<OrderEmailJob>(
       QUEUE_NAME,
       (job: Job<OrderEmailJob>) => this.mailer.send(job.data.to, `주문 #${job.data.orderId} 확인`, job.attemptsMade + 1),
-      { connection: this.connection.duplicate(), concurrency: Number(process.env.MAIL_CONCURRENCY ?? 5) },
+      { connection: this.workerConnection, concurrency: Number(process.env.MAIL_CONCURRENCY ?? 5) },
     );
     const warn = (err: Error) => this.logger.warn(`Redis 연결 오류: ${err.message}`);
     this.connection.on("error", warn);
+    this.workerConnection.on("error", warn);
     this.queue.on("error", warn);
     this.worker.on("error", warn);
     this.worker.on("failed", (job, err) => {
@@ -41,6 +43,6 @@ export class MailQueue implements OnModuleDestroy {
     await this.worker.close();
     this.logger.log("메일 워커 종료");
     await this.queue.close();
-    await this.connection.quit();
+    await Promise.all([this.connection.quit(), this.workerConnection.quit()]);
   }
 }
