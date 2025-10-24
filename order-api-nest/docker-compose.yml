@@ -40,6 +40,7 @@ services:
   api:
     build: { context: ., target: runtime }
     profiles: ["app"]
+    init: true
     ports:
       - "4000:4000"
     environment:
