@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { LoggerModule } from 'nestjs-pino';
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
@@ -15,7 +17,20 @@ import { HealthModule } from './health/health.module.js';
 import { ShutdownLogger } from './shutdown-logger.js';
 
 @Module({
-  imports: [PrismaModule, OrdersModule, UsersModule, AuthModule, NotificationsModule, ProductsModule, OutboxModule, MeModule, LeaderModule, StorageModule, HealthModule],
+  imports: [
+    LoggerModule.forRoot({
+      pinoHttp: {
+        level: process.env.LOG_LEVEL ?? "info",
+        genReqId: (req, res) => {
+          const id = (req.headers["x-request-id"] as string | undefined) ?? randomUUID();
+          res.setHeader("X-Request-Id", id);
+          return id;
+        },
+        redact: ["req.headers.authorization", "req.headers.cookie", 'res.headers["set-cookie"]'],
+        transport: process.env.NODE_ENV === "production" ? undefined : { target: "pino-pretty", options: { singleLine: true } },
+      },
+    }),
+    PrismaModule, StorageModule, HealthModule, OrdersModule, UsersModule, ProductsModule, OutboxModule, MeModule, LeaderModule, AuthModule, NotificationsModule],
   controllers: [AppController],
   providers: [AppService, ShutdownLogger],
 })
