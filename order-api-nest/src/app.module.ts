@@ -12,10 +12,11 @@ import { MeModule } from './me/me.module.js';
 import { LeaderModule } from './leader/leader.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { HealthModule } from './health/health.module.js';
+import { ShutdownLogger } from './shutdown-logger.js';
 
 @Module({
   imports: [PrismaModule, OrdersModule, UsersModule, AuthModule, NotificationsModule, ProductsModule, OutboxModule, MeModule, LeaderModule, StorageModule, HealthModule],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, ShutdownLogger],
 })
 export class AppModule {}

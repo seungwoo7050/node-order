@@ -50,5 +50,6 @@ export class LeaderElection implements OnApplicationBootstrap, OnModuleDestroy {
     this.client = undefined;
     this.leader = false;
     await client?.end();
+    if (client) this.logger.log("리더 연결 종료(잠금 해제)");
   }
 }
