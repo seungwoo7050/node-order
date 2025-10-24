@@ -38,7 +38,8 @@ export class MailQueue implements OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    await this.worker.close(); 
+    await this.worker.close();
+    this.logger.log("메일 워커 종료");
     await this.queue.close();
     await this.connection.quit();
   }
