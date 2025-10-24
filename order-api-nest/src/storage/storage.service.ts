@@ -80,6 +80,10 @@ export class StorageService implements OnModuleInit {
     return result;
   }
 
+  async ping(): Promise<void> {
+    await this.s3.send(new HeadBucketCommand({ Bucket: this.bucket }));
+  }
+  
   async delete(key: string): Promise<void> {
     await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
