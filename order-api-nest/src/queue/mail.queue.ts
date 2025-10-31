@@ -27,7 +27,7 @@ export class MailQueue implements OnModuleDestroy {
     this.worker.on("error", warn);
     this.worker.on("failed", (job, err) => {
       const final = job && job.attemptsMade >= (job.opts.attempts ?? 1);
-      this.logger.warn(`메일 job ${job?.id} 실패(${job?.attemptsMade}회째)${final ? " — 재시도 소진, failed로 이동" : ""}: ${err.message}`);
+      this.logger.warn(`메일 job ${job?.id} 실패(${job?.attemptsMade}회째)${final ? " - 재시도 소진, failed로 이동" : ""}: ${err.message}`);
     });
   }
 
