@@ -18,7 +18,7 @@ function ProductList() {
   const add = useCartStore((s) => s.add);
   const loggedIn = useAuthStore((s) => s.accessToken !== null);
 
-  if (isPending) return <p>상품을 불러오는 중…</p>;
+  if (isPending) return <p>상품을 불러오는 중...</p>;
   if (error) return <p role="alert">상품을 불러오지 못했습니다: {error.message}</p>;
   return (
     <ul>
@@ -74,13 +74,13 @@ function CartPanel() {
       </ul>
       <p>합계 {total.toLocaleString()}원</p>
       <button disabled={items.length === 0 || checkout.isPending} onClick={() => checkout.mutate()}>
-        {checkout.isPending ? "결제 중…" : "결제"}
+        {checkout.isPending ? "결제 중..." : "결제"}
       </button>
       {checkout.isSuccess && <p role="status">결제 완료: 주문 #{checkout.data.id}</p>}
       {checkout.error && (
         <p role="alert">
           결제 실패: {checkout.error.message}
-          {checkout.error instanceof ApiError && checkout.error.status === 401 && <> — <Link href="/login">로그인</Link></>}
+          {checkout.error instanceof ApiError && checkout.error.status === 401 && <> - <Link href="/login">로그인</Link></>}
         </p>
       )}
     </section>

@@ -39,7 +39,7 @@ export function ProductImageUploader({ productId }: { productId: number }) {
           e.target.value = "";
         }}
       />
-      {upload.isPending && " 올리는 중…"}
+      {upload.isPending && " 올리는 중..."}
       {upload.error && <span data-testid={`image-error-${productId}`}> {upload.error.message}</span>}
     </label>
   );
