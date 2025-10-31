@@ -12,7 +12,7 @@ export function Nav() {
   const loggedIn = useAuthStore((s) => s.accessToken !== null);
 
   return (
-    <nav style={{ display: "flex", gap: 12 }}>
+    <nav className="flex gap-3">
       <Link href="/orders">주문 목록</Link>
       <Link href="/shop">상품</Link>
       <Link href="/me/orders">내 주문</Link>
