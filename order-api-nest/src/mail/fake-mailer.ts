@@ -9,6 +9,6 @@ export class FakeMailer {
   async send(to: string, subject: string, attempt = 1): Promise<void> {
     await new Promise((r) => setTimeout(r, this.delayMs));
     if (Math.random() < this.failRate) throw new Error(`메일 서버 일시 오류(${to})`);
-    this.logger.log(`메일 발송: ${to} — ${subject} (시도 ${attempt})`);
+    this.logger.log(`메일 발송: ${to} - ${subject} (시도 ${attempt})`);
   }
 }

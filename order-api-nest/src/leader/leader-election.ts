@@ -39,7 +39,7 @@ export class LeaderElection implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   private stepDown(reason: string) {
-    if (this.leader) this.logger.warn(`리더 자격 상실 — ${reason}`);
+    if (this.leader) this.logger.warn(`리더 자격 상실 - ${reason}`);
     this.leader = false;
     this.client = undefined;
   }
