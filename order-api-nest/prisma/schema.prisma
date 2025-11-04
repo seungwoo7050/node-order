@@ -32,14 +32,29 @@ model Order {
 }
 
 model Product {
-  id        Int         @id @default(autoincrement())
-  name      String
-  price     Int
-  stock     Int
-  imageKey  String?     @map("image_key")
-  items     OrderItem[]
+  id            Int         @id @default(autoincrement())
+  name          String
+  price         Int
+  stock         Int
+  imageKey      String?     @map("image_key")
+  items         OrderItem[]
+  categoryId    Int?        @map("category_id")
+  category      Category?   @relation(fields: [categoryId], references: [id])
 
+  @@index([categoryId])
   @@map("products")
+}
+
+model Category {
+  id       Int        @id @default(autoincrement())
+  name     String
+  parentId Int?       @map("parent_id")
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@index([parentId])
+  @@map("categories")
 }
 
 model OrderItem {
