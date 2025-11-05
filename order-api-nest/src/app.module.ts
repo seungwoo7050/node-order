@@ -15,6 +15,7 @@ import { LeaderModule } from './leader/leader.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { HealthModule } from './health/health.module.js';
 import { ShutdownLogger } from './shutdown-logger.js';
+import { CategoriesModule } from './categories/categories.module.js';
 
 @Module({
   imports: [
@@ -30,7 +31,7 @@ import { ShutdownLogger } from './shutdown-logger.js';
         transport: process.env.NODE_ENV === "production" ? undefined : { target: "pino-pretty", options: { singleLine: true } },
       },
     }),
-    PrismaModule, StorageModule, HealthModule, OrdersModule, UsersModule, ProductsModule, OutboxModule, MeModule, LeaderModule, AuthModule, NotificationsModule],
+    PrismaModule, StorageModule, HealthModule, OrdersModule, UsersModule, ProductsModule, OutboxModule, MeModule, LeaderModule, AuthModule, NotificationsModule, CategoriesModule],
   controllers: [AppController],
   providers: [AppService, ShutdownLogger],
 })
