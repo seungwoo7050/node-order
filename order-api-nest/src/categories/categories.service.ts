@@ -26,4 +26,23 @@ export class CategoriesService {
     }
     return roots;
   }
+
+  async productsInSubtree(id: number) {
+    await this.ensureExists(id);
+    return this.prisma.$queryRaw<{ id: number; name: string; price: number; category: string }[]>`
+      WITH RECURSIVE subtree AS (
+        SELECT id FROM categories WHERE id = ${id}          -- 시작점
+        UNION ALL
+        SELECT c.id FROM categories c JOIN subtree s ON c.parent_id = s.id   -- 바로 아래 자식들을 계속 붙인다
+      )
+      SELECT p.id, p.name, p.price, c.name AS category
+      FROM products p JOIN categories c ON c.id = p.category_id
+      WHERE p.category_id IN (SELECT id FROM subtree)
+      ORDER BY p.id`;
+  }
+
+  private async ensureExists(id: number) {
+    const found = await this.prisma.category.findUnique({ where: { id }, select: { id: true } });
+    if (!found) throw new NotFoundException(`category ${id} not found`);
+  }
 }
