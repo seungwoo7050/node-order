@@ -14,4 +14,16 @@ export class CategoriesService {
     };
     return load(null);
   }
+
+  async tree(): Promise<CategoryNode[]> {
+    const rows = await this.prisma.category.findMany({ orderBy: { id: "asc" } });
+    const byId = new Map<number, CategoryNode>(rows.map((r) => [r.id, { id: r.id, name: r.name, children: [] }]));
+    const roots: CategoryNode[] = [];
+    for (const r of rows) {
+      const node = byId.get(r.id)!;
+      if (r.parentId === null) roots.push(node);
+      else byId.get(r.parentId)?.children.push(node);
+    }
+    return roots;
+  }
 }
