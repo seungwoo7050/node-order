@@ -9,4 +9,9 @@ export class CategoriesController {
   treeNaive() {
     return this.categories.treeNaive();
   }
+  
+  @Get("tree")
+  tree() {
+    return this.categories.tree();
+  }
 }
