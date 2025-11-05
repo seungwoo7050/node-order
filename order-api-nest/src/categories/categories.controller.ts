@@ -1,4 +1,4 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, Param, ParseIntPipe } from "@nestjs/common";
 import { CategoriesService } from "./categories.service.js";
 
 @Controller("categories")
@@ -9,9 +9,14 @@ export class CategoriesController {
   treeNaive() {
     return this.categories.treeNaive();
   }
-  
+
   @Get("tree")
   tree() {
     return this.categories.tree();
+  }
+
+  @Get(":id/products")
+  products(@Param("id", ParseIntPipe) id: number) {
+    return this.categories.productsInSubtree(id);
   }
 }
