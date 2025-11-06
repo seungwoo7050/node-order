@@ -34,10 +34,10 @@ export class CategoriesService {
         SELECT id FROM categories WHERE id = ${id}          -- 시작점
         UNION ALL
         SELECT c.id FROM categories c JOIN subtree s ON c.parent_id = s.id   -- 바로 아래 자식들을 계속 붙인다
-      )
+      ) CYCLE id SET is_cycle USING visited   -- 이미 지나온 id를 다시 만나면 거기서 멈춘다(7단계)
       SELECT p.id, p.name, p.price, c.name AS category
       FROM products p JOIN categories c ON c.id = p.category_id
-      WHERE p.category_id IN (SELECT id FROM subtree)
+      WHERE p.category_id IN (SELECT id FROM subtree WHERE NOT is_cycle)
       ORDER BY p.id`;
   }
 
@@ -48,8 +48,8 @@ export class CategoriesService {
         SELECT id, name, parent_id, 0 AS depth FROM categories WHERE id = ${id}
         UNION ALL
         SELECT c.id, c.name, c.parent_id, a.depth + 1 FROM categories c JOIN ancestors a ON c.id = a.parent_id
-      )
-      SELECT id, name, depth FROM ancestors ORDER BY depth DESC`;
+      ) CYCLE id SET is_cycle USING visited
+      SELECT id, name, depth FROM ancestors WHERE NOT is_cycle ORDER BY depth DESC`;
   }
 
   async move(id: number, newParentId: number | null) {
@@ -64,7 +64,7 @@ export class CategoriesService {
             SELECT id, parent_id FROM categories WHERE id = ${newParentId}
             UNION ALL
             SELECT c.id, c.parent_id FROM categories c JOIN ancestors a ON c.id = a.parent_id
-          )
+          ) CYCLE id SET is_cycle USING visited
           SELECT EXISTS (SELECT 1 FROM ancestors WHERE id = ${id}) AS cycle`;
         if (cycle) throw new BadRequestException("자기 후손 아래로 옮길 수 없습니다(순환 발생)");
       }
