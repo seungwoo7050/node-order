@@ -19,4 +19,9 @@ export class CategoriesController {
   products(@Param("id", ParseIntPipe) id: number) {
     return this.categories.productsInSubtree(id);
   }
+
+  @Get(":id/path")
+  path(@Param("id", ParseIntPipe) id: number) {
+    return this.categories.path(id);
+  }
 }
