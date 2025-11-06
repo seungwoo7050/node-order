@@ -52,6 +52,26 @@ export class CategoriesService {
       SELECT id, name, depth FROM ancestors ORDER BY depth DESC`;
   }
 
+  async move(id: number, newParentId: number | null) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(726002)`;
+      const node = await tx.category.findUnique({ where: { id } });
+      if (!node) throw new NotFoundException(`category ${id} not found`);
+      if (newParentId !== null) {
+        if (newParentId === id) throw new BadRequestException("자기 자신 아래로 옮길 수 없습니다");
+        const [{ cycle }] = await tx.$queryRaw<{ cycle: boolean }[]>`
+          WITH RECURSIVE ancestors AS (
+            SELECT id, parent_id FROM categories WHERE id = ${newParentId}
+            UNION ALL
+            SELECT c.id, c.parent_id FROM categories c JOIN ancestors a ON c.id = a.parent_id
+          )
+          SELECT EXISTS (SELECT 1 FROM ancestors WHERE id = ${id}) AS cycle`;
+        if (cycle) throw new BadRequestException("자기 후손 아래로 옮길 수 없습니다(순환 발생)");
+      }
+      return tx.category.update({ where: { id }, data: { parentId: newParentId }, select: { id: true, name: true, parentId: true } });
+    });
+  }
+
   private async ensureExists(id: number) {
     const found = await this.prisma.category.findUnique({ where: { id }, select: { id: true } });
     if (!found) throw new NotFoundException(`category ${id} not found`);
