@@ -41,6 +41,17 @@ export class CategoriesService {
       ORDER BY p.id`;
   }
 
+  async path(id: number) {
+    await this.ensureExists(id);
+    return this.prisma.$queryRaw<{ id: number; name: string; depth: number }[]>`
+      WITH RECURSIVE ancestors AS (
+        SELECT id, name, parent_id, 0 AS depth FROM categories WHERE id = ${id}
+        UNION ALL
+        SELECT c.id, c.name, c.parent_id, a.depth + 1 FROM categories c JOIN ancestors a ON c.id = a.parent_id
+      )
+      SELECT id, name, depth FROM ancestors ORDER BY depth DESC`;
+  }
+
   private async ensureExists(id: number) {
     const found = await this.prisma.category.findUnique({ where: { id }, select: { id: true } });
     if (!found) throw new NotFoundException(`category ${id} not found`);
