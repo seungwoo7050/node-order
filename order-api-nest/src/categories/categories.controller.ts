@@ -1,11 +1,15 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Patch, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import { PrismaService } from "../prisma/prisma.service.js";
 import { MoveCategoryDto } from "./move-category.dto.js";
 import { CategoriesService } from "./categories.service.js";
 
 @Controller("categories")
 export class CategoriesController {
-  constructor(private readonly categories: CategoriesService) {}
+  constructor(
+    private readonly categories: CategoriesService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Get("tree-naive")
   treeNaive() {
@@ -31,5 +35,12 @@ export class CategoriesController {
   @UseGuards(AuthGuard("jwt"))
   move(@Param("id", ParseIntPipe) id: number, @Body() dto: MoveCategoryDto) {
     return this.categories.move(id, dto.parentId);
+  }
+
+  @Delete(":id")
+  @HttpCode(204)
+  @UseGuards(AuthGuard("jwt"))
+  async remove(@Param("id", ParseIntPipe) id: number) {
+    await this.prisma.category.delete({ where: { id } });
   }
 }
