@@ -23,7 +23,7 @@ describe("POST /orders/checkout - 동시성 회귀 테스트", () => {
   });
 
   beforeEach(async () => {
-    await prisma.$executeRaw`TRUNCATE refresh_tokens, outbox_events, idempotency_keys, order_items, orders, products, users RESTART IDENTITY CASCADE`;
+    await prisma.$executeRaw`TRUNCATE categories, refresh_tokens, outbox_events, idempotency_keys, order_items, orders, products, users RESTART IDENTITY CASCADE`;
     await prisma.user.create({ data: { id: "kim", name: "김", passwordHash: await hashPassword(process.env.DEMO_PASSWORD!) } });
     await prisma.product.create({ data: { name: "테스트 상품", price: 1000, stock: 5 } }); // id 1
     const res = await fetch(`${baseUrl}/auth/login`, {
