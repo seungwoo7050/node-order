@@ -29,7 +29,7 @@ const statuses = await Promise.all(
 const tally = statuses.reduce((acc, s) => ({ ...acc, [s]: (acc[s] ?? 0) + 1 }), {});
 console.log("응답 코드별 개수:", tally);
 
-const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+const db = new pg.Client({ connectionString: process.env.ADMIN_DATABASE_URL ?? process.env.DATABASE_URL });
 await db.connect();
 const { rows } = await db.query(`
   SELECT p.id, p.name, p.stock AS "남은 재고", COALESCE(SUM(oi.quantity), 0)::int AS "팔린 수량"
