@@ -5,11 +5,10 @@ import cookieParser from "cookie-parser";
 import { AppModule } from "../src/app.module.js";
 import { hashPassword } from "../src/auth/password.js";
 import { PrismaExceptionFilter } from "../src/prisma/prisma-exception.filter.js";
-import { PrismaService } from "../src/prisma/prisma.service.js";
+import { adminDb } from "./admin-db.js";
 
 describe("refresh token 회전 - 회귀 테스트", () => {
   let app: INestApplication;
-  let prisma: PrismaService;
   let baseUrl: string;
 
   beforeAll(async () => {
@@ -21,16 +20,16 @@ describe("refresh token 회전 - 회귀 테스트", () => {
     app.useGlobalFilters(new PrismaExceptionFilter(app.get(HttpAdapterHost).httpAdapter));
     await app.listen(0);
     baseUrl = await app.getUrl();
-    prisma = app.get(PrismaService);
   });
 
   beforeEach(async () => {
-    await prisma.$executeRaw`TRUNCATE categories, refresh_tokens, outbox_events, idempotency_keys, order_items, orders, products, users RESTART IDENTITY CASCADE`;
-    await prisma.user.create({ data: { id: "kim", name: "김", passwordHash: await hashPassword("pw-for-test") } });
+    await adminDb.$executeRaw`TRUNCATE categories, refresh_tokens, outbox_events, idempotency_keys, order_items, orders, products, users RESTART IDENTITY CASCADE`;
+    await adminDb.user.create({ data: { id: "kim", name: "김", passwordHash: await hashPassword("pw-for-test") } });
   });
 
   afterAll(async () => {
     await app.close();
+    await adminDb.$disconnect();
   });
 
   const login = async () => {
@@ -59,6 +58,6 @@ describe("refresh token 회전 - 회귀 테스트", () => {
     const statuses = await Promise.all(Array.from({ length: 10 }, () => refresh(a).then((r) => r.status)));
 
     expect(statuses.filter((s) => s === 200)).toHaveLength(1);
-    expect(await prisma.refreshToken.count({ where: { revokedAt: null } })).toBe(0);
+    expect(await adminDb.refreshToken.count({ where: { revokedAt: null } })).toBe(0);
   });
 });
