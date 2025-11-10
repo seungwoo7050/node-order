@@ -13,13 +13,13 @@ export class MeController {
   @Get("orders")
   myOrders(@Req() req: Request) {
     const userId = (req.user as { userId: string }).userId;
-    return this.prisma.order.findMany({ where: { userId }, select: orderSelect, orderBy: { id: "asc" } });
+    return this.prisma.asUser(userId, (tx) => tx.order.findMany({ where: { userId }, select: orderSelect, orderBy: { id: "asc" } }));
   }
 
   @Get("orders/:id")
   async myOrder(@Param("id", ParseIntPipe) id: number, @Req() req: Request) {
     const userId = (req.user as { userId: string }).userId;
-    const order = await this.prisma.order.findFirst({ where: { id, userId }, select: orderSelect });
+    const order = await this.prisma.asUser(userId, (tx) => tx.order.findFirst({ where: { id, userId }, select: orderSelect }));
     if (!order) throw new NotFoundException(`order ${id} not found`);
     return order;
   }

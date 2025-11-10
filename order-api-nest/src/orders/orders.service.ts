@@ -23,17 +23,19 @@ export class OrdersService {
   ) {}
 
   async list(paid?: boolean): Promise<Order[]> {
-    const rows = await this.prisma.order.findMany({ where: { paid }, select: orderSelect, orderBy: { id: "asc" } });
+    const rows = await this.prisma.asAdmin((tx) => tx.order.findMany({ where: { paid }, select: orderSelect, orderBy: { id: "asc" } }));
     return rows.map(toOrder);
   }
+
   async findOne(id: number): Promise<Order> {
-    const row = await this.prisma.order.findUnique({ where: { id }, select: orderSelect });
+    const row = await this.prisma.asAdmin((tx) => tx.order.findUnique({ where: { id }, select: orderSelect }));
     if (!row) throw new NotFoundException(`order ${id} not found`);
     return toOrder(row);
   }
+
   async create(input: Omit<Order, "id">, creatorId: string): Promise<Order> {
     const { user, ...rest } = input;
-    const order = await this.prisma.$transaction(async (tx) => {
+    const order = await this.prisma.asAdmin(async (tx) => {
       const created = toOrder(await tx.order.create({ data: { ...rest, userId: user }, select: orderSelect }));
       await tx.outboxEvent.create({ data: { type: "order.created", userId: creatorId, payload: created } });
       return created;
@@ -41,16 +43,18 @@ export class OrdersService {
     this.logger.log(`주문 생성: #${order.id} (${order.user})`);
     return order;
   }
+
   async totals(): Promise<Record<string, number>> {
-    const rows = await this.prisma.order.groupBy({
+    const rows = await this.prisma.asAdmin((tx) => tx.order.groupBy({
       by: ["userId"], where: { paid: true }, _sum: { price: true }, orderBy: { userId: "asc" },
-    });
+    }));
     return Object.fromEntries(rows.map((r) => [r.userId, r._sum.price ?? 0]));
   }
+
   async checkout(userId: string, items: CheckoutItemDto[], idempotencyKey?: string): Promise<CheckoutResult> {
     const requestHash = createHash("sha256").update(JSON.stringify(items)).digest("hex");
     try {
-      const result = await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.asUser(userId, async (tx) => {
         if (idempotencyKey) {
           await tx.idempotencyKey.create({ data: { userId, key: idempotencyKey, requestHash } });
         }

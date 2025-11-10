@@ -14,10 +14,10 @@ export class UsersService {
     });
   }
 
-  async listWithOrders() {
-    return this.prisma.user.findMany({
+  listWithOrders() {
+    return this.prisma.asAdmin((tx) => tx.user.findMany({
       select: { id: true, name: true, orders: { select: { id: true, price: true, paid: true }, orderBy: { id: "asc" } } },
       orderBy: { id: "asc" },
-    });
+    }));
   }
 }
