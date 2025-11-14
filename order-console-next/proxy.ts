@@ -13,6 +13,7 @@ export function proxy(request: NextRequest) {
     `img-src 'self' blob: data: ${storage}`,
     "font-src 'self'",
     `connect-src 'self' ${api} ${storage}`,
+    "worker-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

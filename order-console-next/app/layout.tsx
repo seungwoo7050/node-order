@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from './providers';
 import { Nav } from './nav';
 import { connection } from "next/server";
+import { SwRegister } from './sw-resgister';
 import "./globals.css";
 
 const geistSans = Geist({
@@ -32,6 +33,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         <Providers>
           <Nav />
+          <SwRegister />
           {children}
         </Providers>
       </body>
