@@ -3,7 +3,7 @@ import { AppModule } from "../src/app.module.js";
 import { PrismaService } from "../src/prisma/prisma.service.js";
 import { adminDb } from "./admin-db.js";
 
-describe("RLS — 회귀 테스트", () => {
+describe("RLS - 회귀 테스트", () => {
   let prisma: PrismaService;
   let close: () => Promise<void>;
 
