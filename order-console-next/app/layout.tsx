@@ -4,6 +4,7 @@ import { Providers } from './providers';
 import { Nav } from './nav';
 import { connection } from "next/server";
 import { SwRegister } from './sw-resgister';
+import { OnlineBanner } from "./online-banner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -34,6 +35,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <Providers>
           <Nav />
           <SwRegister />
+          <OnlineBanner />
           {children}
         </Providers>
       </body>

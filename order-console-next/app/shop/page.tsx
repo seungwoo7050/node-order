@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ApiError, authFetch, publicFetch } from "@/lib/api-client";
 import { useCartStore } from "@/lib/cart-store";
 import { useAuthStore } from "@/lib/auth-store";
+import { useOnline } from "../online-banner";
 import { ProductImageUploader } from "./product-image-uploader";
 
 type Product = { id: number; name: string; price: number; stock: number; imageUrl: string | null };
@@ -42,6 +43,7 @@ function ProductList() {
 function CartPanel() {
   const items = useCartStore((s) => s.items);
   const remove = useCartStore((s) => s.remove);
+  const online = useOnline();
   const queryClient = useQueryClient();
 
   const checkout = useMutation({
@@ -73,7 +75,7 @@ function CartPanel() {
         ))}
       </ul>
       <p>합계 {total.toLocaleString()}원</p>
-      <button disabled={items.length === 0 || checkout.isPending} onClick={() => checkout.mutate()}>
+      <button disabled={items.length === 0 || checkout.isPending || !online} onClick={() => checkout.mutate()}>
         {checkout.isPending ? "결제 중..." : "결제"}
       </button>
       {checkout.isSuccess && <p role="status">결제 완료: 주문 #{checkout.data.id}</p>}
