@@ -25,7 +25,7 @@ test("오프라인에서도 한 번 본 상품 목록이 보이고, 결제는 �
   await expect(page.getByTestId("offline-banner")).toBeHidden();
 });
 
-test("로그인이 필요한 응답은 캐시하지 않는다 — 오프라인에서 다른 사용자 토큰으로 받아 볼 수 없다", async ({ page, context }) => {
+test("로그인이 필요한 응답은 캐시하지 않는다 - 오프라인에서 다른 사용자 토큰으로 받아 볼 수 없다", async ({ page, context }) => {
   await page.goto("/shop");
   await waitForController(page);
 
