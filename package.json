@@ -1,0 +1,5 @@
+{
+  "name": "node-order",
+  "private": true,
+  "workspaces": ["order-api-nest", "order-console-next"]
+}

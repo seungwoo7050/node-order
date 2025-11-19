@@ -39,6 +39,7 @@
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "@socket.io/redis-adapter": "^8.3.0",
+    "@trpc/server": "^11.19.0",
     "bullmq": "^6.3.13",
     "class": "^0.1.4",
     "class-transformer": "^0.5.1",
@@ -55,7 +56,8 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.4",
-    "validator": "^13.15.35"
+    "validator": "^13.15.35",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.0",
