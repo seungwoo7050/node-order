@@ -2,8 +2,7 @@ import { Controller, Get, NotFoundException, Param, ParseIntPipe, Req, UseGuards
 import { AuthGuard } from "@nestjs/passport";
 import type { Request } from "express";
 import { PrismaService } from "../prisma/prisma.service.js";
-
-const orderSelect = { id: true, price: true, paid: true, createdAt: true } as const;
+import { orderSelect } from "./order-select.js";
 
 @Controller("me")
 @UseGuards(AuthGuard("jwt"))
