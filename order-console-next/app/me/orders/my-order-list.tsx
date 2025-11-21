@@ -2,18 +2,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { ApiError, authFetch } from "@/lib/api-client";
-
-export type MyOrder = { id: number; price: number; paid: boolean; createdAt: string };
+import { useTRPC } from "@/lib/trpc";
 
 export function MyOrderList() {
-  const { data, isPending, error } = useQuery({
-    queryKey: ["my-orders"],
-    queryFn: () => authFetch<MyOrder[]>("/me/orders"),
-  });
+  const trpc = useTRPC();
+  const { data, isPending, error } = useQuery(trpc.me.orders.queryOptions());
 
   if (isPending) return <p>내 주문을 불러오는 중...</p>;
-  if (error instanceof ApiError && error.status === 401) return <p role="alert">로그인이 필요합니다. <Link href="/login">로그인</Link></p>;
+  if (error?.data?.code === "UNAUTHORIZED") return <p role="alert">로그인이 필요합니다. <Link href="/login">로그인</Link></p>;
   if (error) return <p role="alert">불러오지 못했습니다: {error.message}</p>;
   return (
     <ul data-testid="my-orders">

@@ -56,12 +56,12 @@ export function refreshAccessToken(): Promise<string | null> {
   return refreshing;
 }
 
-export async function authFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const send = (token: string | null) =>
-    fetch(`${API_URL}${path}`, {
-      ...init,
-      headers: { ...init.headers, ...(token && { Authorization: `Bearer ${token}` }) },
-    });
+export async function fetchWithAuth(url: string, init: RequestInit = {}): Promise<Response> {
+  const send = (token: string | null) => {
+    const headers = new Headers(init.headers);
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    return fetch(url, { ...init, headers });
+  };
 
   let token = useAuthStore.getState().accessToken ?? (await refreshAccessToken());
   let res = await send(token);
@@ -69,5 +69,9 @@ export async function authFetch<T>(path: string, init: RequestInit = {}): Promis
     token = await refreshAccessToken();
     if (token) res = await send(token);
   }
-  return parse<T>(res);
+  return res;
+}
+
+export async function authFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return parse<T>(await fetchWithAuth(`${API_URL}${path}`, init));
 }

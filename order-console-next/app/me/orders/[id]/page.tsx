@@ -2,16 +2,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
-import { ApiError, authFetch } from "@/lib/api-client";
-import { MyOrderList, type MyOrder } from "../my-order-list";
+import { useTRPC } from "@/lib/trpc";
+import { MyOrderList } from "../my-order-list";
 
 function MyOrderDetail({ id }: { id: number }) {
-  const { data, isPending, error } = useQuery({
-    queryKey: ["my-order", id],
-    queryFn: () => authFetch<MyOrder>(`/me/orders/${id}`),
-  });
+  const trpc = useTRPC();
+  const { data, isPending, error } = useQuery(trpc.me.order.queryOptions({ id }));
   if (isPending) return <p>주문을 불러오는 중...</p>;
-  if (error instanceof ApiError && error.status === 404) return <p>해당 주문은 없습니다</p>;
+  if (error?.data?.code === "NOT_FOUND") return <p>해당 주문은 없습니다</p>;
   if (error) return <p role="alert">불러오지 못했습니다: {error.message}</p>;
   return (
     <p data-testid="order-detail">
