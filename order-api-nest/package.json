@@ -6,6 +6,11 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
+  "exports": {
+    "./trpc": {
+      "types": "./src/trpc/router.ts"
+    }
+  },
   "scripts": {
     "build": "nest build",
     "deploy": "nest deploy",

@@ -2,20 +2,18 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { ApiError, authFetch, publicFetch } from "@/lib/api-client";
+import { ApiError, authFetch } from "@/lib/api-client";
 import { useCartStore } from "@/lib/cart-store";
 import { useAuthStore } from "@/lib/auth-store";
 import { useOnline } from "../online-banner";
+import { useTRPC } from "@/lib/trpc";
 import { ProductImageUploader } from "./product-image-uploader";
 
-type Product = { id: number; name: string; price: number; stock: number; imageUrl: string | null };
 type CheckoutResult = { id: number; price: number };
 
 function ProductList() {
-  const { data, isPending, error } = useQuery({
-    queryKey: ["products"],
-    queryFn: () => publicFetch<Product[]>("/products"),
-  });
+  const trpc = useTRPC();
+  const { data, isPending, error } = useQuery(trpc.products.list.queryOptions());
   const add = useCartStore((s) => s.add);
   const loggedIn = useAuthStore((s) => s.accessToken !== null);
 
@@ -41,6 +39,7 @@ function ProductList() {
 }
 
 function CartPanel() {
+  const trpc = useTRPC();
   const items = useCartStore((s) => s.items);
   const remove = useCartStore((s) => s.remove);
   const online = useOnline();
@@ -57,8 +56,8 @@ function CartPanel() {
     },
     onSuccess: () => {
       useCartStore.getState().finishCheckout();
-      void queryClient.invalidateQueries({ queryKey: ["products"] });
-      void queryClient.invalidateQueries({ queryKey: ["my-orders"] });
+      void queryClient.invalidateQueries({ queryKey: trpc.products.list.queryKey() });
+      void queryClient.invalidateQueries({ queryKey: trpc.me.orders.queryKey() });
     },
   });
 

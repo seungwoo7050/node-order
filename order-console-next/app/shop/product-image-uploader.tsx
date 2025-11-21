@@ -2,10 +2,12 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/lib/api-client";
+import { useTRPC } from "@/lib/trpc";
 
 type UploadUrl = { key: string; uploadUrl: string; expiresIn: number };
 
 export function ProductImageUploader({ productId }: { productId: number }) {
+  const trpc = useTRPC();
   const queryClient = useQueryClient();
   const upload = useMutation({
     mutationFn: async (file: File) => {
@@ -22,7 +24,7 @@ export function ProductImageUploader({ productId }: { productId: number }) {
         body: JSON.stringify({ key }),
       });
     },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["products"] }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: trpc.products.list.queryKey() }),
   });
 
   return (
