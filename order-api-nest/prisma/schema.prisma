@@ -11,6 +11,7 @@ model User {
   id            String      @id
   name          String
   passwordHash  String?     @map("password_hash")
+  githubId      String?     @unique @map("github_id")
   createdAt     DateTime    @default(now()) @map("created_at")
   orders        Order[]
   refreshTokens RefreshToken[]
