@@ -4,6 +4,8 @@ import { JwtService } from "@nestjs/jwt";
 import { Prisma } from "../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { hashPassword, verifyPassword } from "./password.js";
+import { AuthCodeStore } from "./auth-code.store.js";
+import { verifyGithubToken } from "./github.js";
 
 export const REFRESH_TOKEN_TTL_SECONDS = Number(process.env.REFRESH_TOKEN_TTL_SECONDS ?? 60 * 60 * 24 * 7);
 
@@ -16,6 +18,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly codes: AuthCodeStore,
   ) {}
 
   private readonly dummyHash = hashPassword("never-matches-any-real-password");
@@ -25,6 +28,23 @@ export class AuthService {
     const ok = await verifyPassword(password, user?.passwordHash ?? (await this.dummyHash));
     if (!user?.passwordHash || !ok) throw new UnauthorizedException("id 또는 password가 올바르지 않습니다");
     return this.issueTokens(this.prisma, user.id, randomUUID());
+  }
+
+  async loginWithGithub(githubAccessToken: string): Promise<string> {
+    const gh = await verifyGithubToken(githubAccessToken);
+    if (!gh) throw new UnauthorizedException("GitHub 토큰을 확인할 수 없습니다");
+    const user = await this.prisma.user.upsert({
+      where: { githubId: gh.id },
+      create: { id: `github-${gh.id}`, name: gh.login, githubId: gh.id },
+      update: { name: gh.login },
+    });
+    return this.codes.issue(user.id);
+  }
+
+  async exchangeCode(code: string): Promise<IssuedTokens> {
+    const userId = await this.codes.consume(code);
+    if (!userId) throw new UnauthorizedException("코드가 없거나, 이미 썼거나, 만료됐습니다");
+    return this.issueTokens(this.prisma, userId, randomUUID());
   }
 
   async refresh(rawToken: string | undefined): Promise<IssuedTokens> {
