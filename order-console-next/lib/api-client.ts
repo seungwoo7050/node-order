@@ -31,6 +31,17 @@ export async function login(id: string, password: string): Promise<void> {
   useAuthStore.getState().setAccessToken(accessToken);
 }
 
+export async function exchangeCode(code: string): Promise<void> {
+  const res = await fetch(`${API_URL}/auth/exchange`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+    credentials: "include",
+  });
+  const { accessToken } = await parse<{ accessToken: string }>(res);
+  useAuthStore.getState().setAccessToken(accessToken);
+}
+
 export async function logout(): Promise<void> {
   await fetch(`${API_URL}/auth/logout`, { method: "POST", credentials: "include" });
   useAuthStore.getState().clear();
