@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { login } from "@/lib/api-client";
+import { signInWithGithub } from "./actions";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,6 +27,9 @@ export default function LoginPage() {
         <button type="submit">로그인</button>
       </form>
       {error && <p role="alert">{error}</p>}
+      <form action={signInWithGithub}>
+        <button type="submit">GitHub로 로그인</button>
+      </form>
     </main>
   );
 }
