@@ -68,6 +68,8 @@ services:
       OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED-false}
       OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER-parentbased_always_on}
       OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG-1}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       LOG_LEVEL: ${LOG_LEVEL-info}
     depends_on:
       migrate: { condition: service_completed_successfully }
