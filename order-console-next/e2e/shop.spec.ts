@@ -1,9 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test.use({ serviceWorkers: "block" });
+
 async function loginAsKim(page: Page) {
   await page.goto("/login");
   await page.getByPlaceholder("password").fill("1234");
-  await page.getByRole("button", { name: "로그인" }).click();
+  await page.getByRole("button", { name: "로그인", exact: true }).click();
   await expect(page).toHaveURL(/\/shop$/);
 }
 
