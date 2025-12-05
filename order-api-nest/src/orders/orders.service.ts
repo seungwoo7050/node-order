@@ -4,9 +4,12 @@ import { Prisma } from "../generated/prisma/client.js";
 import { NotificationsGateway } from "../notifications/notifications.gateway.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type { CheckoutItemDto } from "./dto/checkout.dto.js";
+import { cancelUnpaidOrder } from "../payments/cancel-unpaid-order.js";
+import { StripeGateway } from "../payments/stripe.gateway.js";
 
 export type Order = { id: number; user: string; price: number; paid: boolean; }
 export type CheckoutResult = Order & { items: { productId: number; quantity: number; unitPrice: number }[] };
+export type CheckoutResponse = CheckoutResult & { checkoutUrl: string };
 
 const orderSelect = { id: true, userId: true, price: true, paid: true } as const;
 const toOrder = (row: { id: number; userId: string; price: number; paid: boolean }): Order =>(
@@ -20,6 +23,7 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsGateway,
+    private readonly stripe: StripeGateway,
   ) {}
 
   async list(paid?: boolean): Promise<Order[]> {
@@ -51,7 +55,27 @@ export class OrdersService {
     return Object.fromEntries(rows.map((r) => [r.userId, r._sum.price ?? 0]));
   }
 
-  async checkout(userId: string, items: CheckoutItemDto[], idempotencyKey?: string): Promise<CheckoutResult> {
+  async checkout(userId: string, items: CheckoutItemDto[], idempotencyKey?: string): Promise<CheckoutResponse> {
+    const placed = await this.placeOrReplay(userId, items, idempotencyKey);
+    const attemptKey = idempotencyKey && createHash("sha256").update(`${userId}:${idempotencyKey}:${placed.id}`).digest("hex");
+    try {
+      const session = await this.stripe.createCheckoutSession(placed, attemptKey);
+      const { count } = await this.prisma.asUser(userId, (tx) =>
+        tx.order.updateMany({ where: { id: placed.id, canceledAt: null }, data: { stripeSessionId: session.id } }),
+      );
+      if (count === 0) throw new ConflictException("결제 시도가 취소됐습니다 - 다시 결제합니다");
+      return { ...placed, checkoutUrl: session.url };
+    } catch (err) {
+      await this.prisma.asUser(userId, async (tx) => {
+        await cancelUnpaidOrder(tx, placed.id);
+        if (idempotencyKey) await tx.idempotencyKey.deleteMany({ where: { userId, key: idempotencyKey } });
+      });
+      this.logger.warn(`결제 세션 생성 실패 → 주문 #${placed.id} 취소, 재고 복구: ${(err as Error).message}`);
+      throw err;
+    }
+  }
+
+  private async placeOrReplay(userId: string, items: CheckoutItemDto[], idempotencyKey?: string): Promise<CheckoutResult> {
     const requestHash = createHash("sha256").update(JSON.stringify(items)).digest("hex");
     try {
       const result = await this.prisma.asUser(userId, async (tx) => {
@@ -67,7 +91,7 @@ export class OrdersService {
         }
         return placed;
       });
-      this.logger.log(`결제 완료: #${result.id} (${result.user}) ${result.price}원`);
+      this.logger.log(`주문 접수(결제 대기): #${result.id} (${result.user}) ${result.price}원`);
       return result;
     } catch (err) {
       if (idempotencyKey && err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
@@ -98,7 +122,7 @@ export class OrdersService {
     }
     const order = await tx.order.create({
       data: {
-        userId, price: total, paid: true,
+        userId, price: total, paid: false,
         items: { create: items.map((i) => ({
           productId: i.productId, quantity: i.quantity, unitPrice: products.find((p) => p.id === i.productId)!.price,
         })) },
