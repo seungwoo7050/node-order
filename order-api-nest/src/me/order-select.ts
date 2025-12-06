@@ -1,1 +1,1 @@
-export const orderSelect = { id: true, price: true, paid: true, createdAt: true } as const;
+export const orderSelect = { id: true, price: true, paid: true, canceledAt: true, createdAt: true } as const;

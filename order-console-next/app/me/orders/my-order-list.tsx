@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useTRPC } from "@/lib/trpc";
+import { orderStatus } from "./order-status";
 
 export function MyOrderList() {
   const trpc = useTRPC();
@@ -15,7 +16,7 @@ export function MyOrderList() {
     <ul data-testid="my-orders">
       {data.map((o) => (
         <li key={o.id}>
-          <Link href={`/me/orders/${o.id}`}>#{o.id} - {o.price.toLocaleString()}원</Link>
+          <Link href={`/me/orders/${o.id}`}>#{o.id} - {o.price.toLocaleString()}원 · {orderStatus(o)}</Link>
         </li>
       ))}
     </ul>

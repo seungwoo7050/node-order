@@ -9,7 +9,7 @@ import { useOnline } from "../online-banner";
 import { useTRPC } from "@/lib/trpc";
 import { ProductImageUploader } from "./product-image-uploader";
 
-type CheckoutResult = { id: number; price: number };
+type CheckoutResult = { id: number; price: number; checkoutUrl: string };
 
 function ProductList() {
   const trpc = useTRPC();
@@ -54,10 +54,11 @@ function CartPanel() {
         body: JSON.stringify({ items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })) }),
       });
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       useCartStore.getState().finishCheckout();
       void queryClient.invalidateQueries({ queryKey: trpc.products.list.queryKey() });
       void queryClient.invalidateQueries({ queryKey: trpc.me.orders.queryKey() });
+      window.location.assign(data.checkoutUrl);
     },
   });
 
@@ -77,7 +78,7 @@ function CartPanel() {
       <button disabled={items.length === 0 || checkout.isPending || !online} onClick={() => checkout.mutate()}>
         {checkout.isPending ? "결제 중..." : "결제"}
       </button>
-      {checkout.isSuccess && <p role="status">결제 완료: 주문 #{checkout.data.id}</p>}
+      {checkout.isSuccess && <p role="status">주문 #{checkout.data.id} - 결제 화면으로 이동하는 중...</p>}
       {checkout.error && (
         <p role="alert">
           결제 실패: {checkout.error.message}
