@@ -12,7 +12,7 @@ async function bootstrap() {
   
   // 1. 앱 생성과 앱 자체의 동작
   // bufferLogs : pino 로거가 준비될 때까지 부팅 로그를 모아 뒀다가 pino로 내보낸다
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
   app.useLogger(app.get(Logger));
   app.enableShutdownHooks();
 
