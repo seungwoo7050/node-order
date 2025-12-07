@@ -5,6 +5,8 @@ import { AppModule } from "../src/app.module.js";
 import { PrismaExceptionFilter } from "../src/prisma/prisma-exception.filter.js";
 import { adminDb } from "./admin-db.js";
 import { hashPassword } from "../src/auth/password.js";
+import { StripeGateway } from "../src/payments/stripe.gateway.js";
+import { FakeStripeGateway } from "./fake-stripe.js";
 
 describe("POST /orders/checkout - 동시성 회귀 테스트", () => {
   let app: INestApplication;
@@ -12,7 +14,7 @@ describe("POST /orders/checkout - 동시성 회귀 테스트", () => {
   let token: string;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(StripeGateway).useClass(FakeStripeGateway).compile();
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
     app.useGlobalFilters(new PrismaExceptionFilter(app.get(HttpAdapterHost).httpAdapter));
