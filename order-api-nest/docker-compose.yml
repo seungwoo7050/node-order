@@ -1,0 +1,87 @@
+services:
+  db:
+    image: postgres:17
+    # 학습용 값이다
+    environment:
+      POSTGRES_USER: order
+      POSTGRES_PASSWORD: order
+      POSTGRES_DB: order_api
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "order", "-d", "order_api"]
+      interval: 2s
+      retries: 15
+
+  redis:
+    image: redis:7
+    ports:
+      - "6380:6379"
+  storage:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_ACCESS_KEY: localaccess
+      RUSTFS_SECRET_KEY: localsecret123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - storagedata:/data
+
+  jaeger:
+    image: jaegertracing/jaeger:latest
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+  
+  migrate:
+    build: { context: .., dockerfile: order-api-nest/Dockerfile, target: migrate }
+    profiles: ["app"]
+    environment:
+      DATABASE_URL: postgresql://order:order@db:5432/order_api
+    depends_on:
+      db: { condition: service_healthy }
+  api:
+    build: { context: .., dockerfile: order-api-nest/Dockerfile, target: runtime }
+    profiles: ["app"]
+    init: true
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: "4000"
+      JWT_SECRET: change-me
+      DEMO_PASSWORD: "1234"
+      FRONTEND_URL: http://localhost:3000
+      ACCESS_TOKEN_TTL: 15m
+      DATABASE_URL: postgresql://order_app:order_app@db:5432/order_api
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://storage:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT-http://localhost:9000}
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY: localaccess
+      S3_SECRET_KEY: localsecret123
+      S3_BUCKET: product-images
+      OTEL_SERVICE_NAME: order-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED-false}
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER-parentbased_always_on}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG-1}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      LOG_LEVEL: ${LOG_LEVEL-info}
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_started }
+      storage: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health/ready').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      retries: 6
+  
+volumes:
+  pgdata:
+  storagedata:
