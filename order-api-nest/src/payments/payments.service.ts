@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { Prisma } from "../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { cancelUnpaidOrder } from "./cancel-unpaid-order.js";
+import { webhookEvents } from "../metrics/metrics.js";
 
 export type WebhookResult = "processed" | "duplicate" | "ignored";
 
@@ -13,6 +14,12 @@ export class PaymentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async handle(event: Stripe.Event): Promise<WebhookResult> {
+    const result = await this.process(event);
+    webhookEvents.inc({ type: event.type, result });
+    return result;
+  }
+
+  private async process(event: Stripe.Event): Promise<WebhookResult> {
     if (event.type !== "checkout.session.completed" && event.type !== "checkout.session.expired") return "ignored";
     const session = event.data.object;
 
