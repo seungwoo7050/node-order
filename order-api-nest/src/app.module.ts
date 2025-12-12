@@ -18,11 +18,12 @@ import { ShutdownLogger } from './shutdown-logger.js';
 import { CategoriesModule } from './categories/categories.module.js';
 import { TrpcModule } from './trpc/trpc.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
+import { MetricsModule } from './metrics/metrics.module.js';
 
 @Module({
   imports: [
     LoggerModule.forRoot(loggerOptions),
-    PrismaModule, StorageModule, HealthModule, OrdersModule, UsersModule, ProductsModule, OutboxModule, MeModule, LeaderModule, AuthModule, NotificationsModule, CategoriesModule, TrpcModule, PaymentsModule],
+    MetricsModule, PrismaModule, StorageModule, HealthModule, OrdersModule, UsersModule, ProductsModule, OutboxModule, MeModule, LeaderModule, AuthModule, NotificationsModule, CategoriesModule, TrpcModule, PaymentsModule],
   controllers: [AppController],
   providers: [AppService, ShutdownLogger],
 })
