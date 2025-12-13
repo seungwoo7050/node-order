@@ -20,7 +20,13 @@ export class MetricsModule implements NestModule {
       help: "아직 발행되지 않은 outbox 이벤트 수",
       registers: [registry],
       async collect() {
-        this.set(await prisma.outboxEvent.count({ where: { publishedAt: null } }));
+        try {
+          const count = prisma.outboxEvent.count({ where: { publishedAt: null } });
+          const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("시간 초과")), 1000).unref());
+          this.set(await Promise.race([count, timeout]));
+        } catch {
+          this.set(Number.NaN);
+        }
       },
     });
   }
