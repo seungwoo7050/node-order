@@ -1,0 +1,52 @@
+rule_files:
+  - alert-rules.yml
+evaluation_interval: 5s
+
+tests:
+  - interval: 5s
+    input_series:
+      - series: 'up{job="order-api", instance="api:4000"}'
+        values: "1 1 0x12"
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: ApiDown
+        exp_alerts: []
+      - eval_time: 45s
+        alertname: ApiDown
+        exp_alerts:
+          - exp_labels: { severity: critical, job: order-api, instance: "api:4000" }
+            exp_annotations:
+              summary: "order-api가 응답하지 않는다"
+              description: "api:4000의 /metrics를 30초 넘게 가져오지 못했다"
+
+  - interval: 5s
+    input_series:
+      - series: 'http_request_duration_seconds_count{route="/products", status_code="200"}'
+        values: "0+50x40"
+      - series: 'http_request_duration_seconds_count{route="/products", status_code="500"}'
+        values: "0x4 50 100 100x34"
+    alert_rule_test:
+      - eval_time: 40s
+        alertname: HighErrorRate
+        exp_alerts: []
+      - eval_time: 100s
+        alertname: HighErrorRate
+        exp_alerts: []
+
+  - interval: 5s
+    input_series:
+      - series: 'http_request_duration_seconds_count{route="/products", status_code="200"}'
+        values: "0+50x40"
+      - series: 'http_request_duration_seconds_count{route="/products", status_code="500"}'
+        values: "0+50x40"
+    alert_rule_test:
+      - eval_time: 50s
+        alertname: HighErrorRate
+        exp_alerts: []
+      - eval_time: 100s
+        alertname: HighErrorRate
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: "5xx 응답 비율이 높다"
+              description: "최근 30초 5xx 비율 50%"
