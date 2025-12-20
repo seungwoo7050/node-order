@@ -4,11 +4,12 @@
 **/*.tsbuildinfo
 **/.env
 **/.env.*
+.git
+monitoring
+scripts
 order-api-nest/src/generated
 order-api-nest/test
 order-api-nest/scripts
-order-api-nest/scratch-client.mjs
+order-api-nest/loadtest
 order-api-nest/Dockerfile*
 order-console-next
-.git
-**/README.md
