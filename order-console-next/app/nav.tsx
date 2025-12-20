@@ -13,7 +13,6 @@ export function Nav() {
 
   return (
     <nav className="flex gap-3">
-      <Link href="/orders">주문 목록</Link>
       <Link href="/shop">상품</Link>
       <Link href="/me/orders">내 주문</Link>
       <span data-testid="cart-count">장바구니 {cartCount}</span>
