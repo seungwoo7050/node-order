@@ -11,7 +11,7 @@ export class NotificationsGateway implements OnGatewayConnection {
     if (!token) { socket.disconnect(true); return; }
     try {
       const payload = jwt.verify(token, process.env.JWT_SECRET!) as { sub: string };
-      socket.join(`user:${payload.sub}`);
+      void socket.join(`user:${payload.sub}`);
     } catch {
       socket.disconnect(true);
     }
