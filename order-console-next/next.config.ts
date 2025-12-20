@@ -1,7 +1,10 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  output: "standalone",
+  outputFileTracingRoot: path.join(import.meta.dirname, ".."),
+  typescript: { ignoreBuildErrors: process.env.SKIP_TYPECHECK === "1" },
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {
@@ -12,7 +15,6 @@ const nextConfig: NextConfig = {
       },
     },
   },
-  
   async headers() {
     return [
       {
