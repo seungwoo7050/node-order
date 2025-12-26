@@ -1,0 +1,119 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String      @id
+  name          String
+  passwordHash  String?     @map("password_hash")
+  githubId      String?     @unique @map("github_id")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  orders        Order[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model Order {
+  id                Int         @id @default(autoincrement())
+  userId            String      @map("user_id")
+  user              User        @relation(fields: [userId], references: [id])
+  price             Int
+  paid              Boolean
+  createdAt         DateTime    @default(now()) @map("created_at")
+  stripeSessionId   String?     @unique @map("stripe_session_id")
+  canceledAt        DateTime?   @map("canceled_at")
+  items             OrderItem[]
+
+  @@index([userId])
+  @@map("orders")
+}
+
+model StripeEvent {
+  id            String      @id
+  type          String
+  processedAt   DateTime    @default(now()) @map("processed_at")
+
+  @@map("stripe_events")
+}
+
+model Product {
+  id            Int         @id @default(autoincrement())
+  name          String
+  price         Int
+  stock         Int
+  imageKey      String?     @map("image_key")
+  items         OrderItem[]
+  categoryId    Int?        @map("category_id")
+  category      Category?   @relation(fields: [categoryId], references: [id])
+
+  @@index([categoryId])
+  @@map("products")
+}
+
+model Category {
+  id       Int        @id @default(autoincrement())
+  name     String
+  parentId Int?       @map("parent_id")
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@index([parentId])
+  @@map("categories")
+}
+
+model OrderItem {
+  orderId       Int       @map("order_id")
+  order         Order     @relation(fields: [orderId], references: [id])
+  productId     Int       @map("product_id")
+  product       Product   @relation(fields: [productId], references: [id])
+  quantity      Int
+  unitPrice     Int       @map("unit_price")
+
+  @@id([orderId, productId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+model IdempotencyKey {
+  userId        String      @map("user_id")
+  key           String
+  requestHash   String      @map("request_hash")
+  response      Json?
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@id([userId, key])
+  @@map("idempotency_keys")
+}
+
+model OutboxEvent {
+  id            Int         @id @default(autoincrement())
+  type          String
+  userId        String      @map("user_id") // 알림을 받을 사용자
+  payload       Json
+  createdAt     DateTime    @default(now()) @map("created_at")
+  publishedAt   DateTime?   @map("published_at")
+
+  @@map("outbox_events")
+}
+
+model RefreshToken {
+  id        Int       @id @default(autoincrement())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String    @unique @map("token_hash")
+  familyId  String    @map("family_id")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
