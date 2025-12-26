@@ -16,8 +16,8 @@ jobs:
     name: 린트/타입 검사
     runs-on: ubuntu-latest
     steps:
-      - uses: action/checkout@v4
-      - uses: action/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
