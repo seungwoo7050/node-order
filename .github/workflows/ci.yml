@@ -54,3 +54,60 @@ jobs:
           ADMIN_DATABASE_URL=postgresql://order:order@localhost:5433/order_api_test npx prisma migrate deploy
       - run: npm run test:api
 
+  test-web:
+    name: 프론트 e2e
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:17
+        env: { POSTGRES_USER: order, POSTGRES_PASSWORD: order, POSTGRES_DB: order_api }
+        ports: ["5433:5432"]
+        options: --health-cmd "pg_isready -U order -d order_api" --health-interval 2s --health-retries 15
+      redis:
+        image: redis:7
+        ports: ["6380:6379"]
+      storage:
+        image: rustfs/rustfs:latest
+        env: { RUSTFS_ACCESS_KEY: localaccess, RUSTFS_SECRET_KEY: localsecret123 }
+        ports: ["9000:9000"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: API 빌드·데모 데이터·실행
+        working-directory: order-api-nest
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy
+          npx prisma db seed
+          npm run build
+          node --env-file=.env dist/main.js > api.log 2>&1 &
+          # 준비될 때까지 최대 60초 기다린다(러너에 이미 있는 curl만 쓴다 - 실행 중에 패키지를 내려받지 않는다)
+          for _ in $(seq 1 60); do curl -sf localhost:4000/health/ready > /dev/null && exit 0; sleep 1; done
+          cat api.log; exit 1
+      - name: 프론트 환경 값
+        working-directory: order-console-next
+        run: |
+          cp .env.example .env.local
+          {
+            echo "AUTH_SECRET=$(openssl rand -base64 32)"
+            echo "AUTH_GITHUB_ID=ci-dummy-client-id"
+            echo "AUTH_GITHUB_SECRET=ci-dummy-secret"
+          } >> .env.local
+      - run: npx playwright install --with-deps chromium
+        working-directory: order-console-next
+      - run: npm run test:web
+      - name: 실패하면 API 로그와 Playwright 결과를 남긴다
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-web-logs
+          path: |
+            order-api-nest/api.log
+            order-console-next/test-results/
+          retention-days: 7
