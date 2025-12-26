@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     name: 린트/타입 검사
@@ -111,3 +115,34 @@ jobs:
             order-api-nest/api.log
             order-console-next/test-results/
           retention-days: 7
+
+  alert-rules:
+    name: 경보 규칙 테스트
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm run test:rules
+
+  images:
+    name: 이미지 빌드
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: API 이미지
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: order-api-nest/Dockerfile
+          target: runtime
+          push: false
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      - name: 웹 이미지
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: order-console-next/Dockerfile
+          push: false
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
