@@ -22,3 +22,35 @@ jobs:
         working-directory: order-api-nest
       - run: npm run lint
       - run: npm run typecheck
+
+  test-api:
+    name: 백엔드 테스트
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:17
+        env: { POSTGRES_USER: order, POSTGRES_PASSWORD: order, POSTGRES_DB: order_api }
+        ports: ["5433:5432"]
+        options: --health-cmd "pg_isready -U order -d order_api" --health-interval 2s --health-retries 15
+      redis:
+        image: redis:7
+        ports: ["6380:6379"]
+      storage:
+        image: rustfs/rustfs:latest
+        env: { RUSTFS_ACCESS_KEY: localaccess, RUSTFS_SECRET_KEY: localsecret123 }
+        ports: ["9000:9000"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: 테스트 DB 준비
+        working-directory: order-api-nest
+        run: |
+          npx prisma generate
+          PGPASSWORD=order psql -h localhost -p 5433 -U order -d order_api -c "CREATE DATABASE order_api_test"
+          ADMIN_DATABASE_URL=postgresql://order:order@localhost:5433/order_api_test npx prisma migrate deploy
+      - run: npm run test:api
+
