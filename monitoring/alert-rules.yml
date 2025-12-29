@@ -1,0 +1,31 @@
+groups:
+  - name: order-api
+    rules:
+      - alert: ApiDown
+        expr: up{job="order-api"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "order-api가 응답하지 않는다"
+          description: "{{ $labels.instance }}의 /metrics를 30초 넘게 가져오지 못했다"
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_request_duration_seconds_count{status_code=~"5.."}[30s]))
+            / sum(rate(http_request_duration_seconds_count[30s])) > 0.05
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "5xx 응답 비율이 높다"
+          description: "최근 30초 5xx 비율 {{ $value | humanizePercentage }}"
+
+      - alert: OutboxBacklog
+        expr: outbox_unpublished_events > 20
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "outbox 알림이 쌓이고 있다"
+          description: "발행되지 않은 이벤트 {{ $value }}건"
