@@ -10,7 +10,9 @@ function makeClient(endpoint: string | undefined) {
     endpoint: endpoint || undefined,
     region: process.env.S3_REGION,
     forcePathStyle: true,
-    credentials: { accessKeyId: process.env.S3_ACCESS_KEY!, secretAccessKey: process.env.S3_SECRET_KEY! },
+    credentials: process.env.S3_ACCESS_KEY
+      ? { accessKeyId: process.env.S3_ACCESS_KEY, secretAccessKey: process.env.S3_SECRET_KEY! }
+      : undefined,
     requestChecksumCalculation: "WHEN_REQUIRED",
   });
 }
