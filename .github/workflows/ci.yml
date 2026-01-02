@@ -11,6 +11,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  IMAGE_PREFIX: ghcr.io/seungwoo7050/node-order
+
 jobs:
   check:
     name: 린트/타입 검사
@@ -124,25 +127,79 @@ jobs:
       - run: npm run test:rules
 
   images:
-    name: 이미지 빌드
+    name: 이미지 빌드·올리기
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: API 이미지
         uses: docker/build-push-action@v6
         with:
           context: .
           file: order-api-nest/Dockerfile
           target: runtime
-          push: false
+          push: ${{ github.ref_name == vars.DEPLOY_BRANCH }}
+          tags: ${{ env.IMAGE_PREFIX }}/order-api:${{ github.sha }}
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
+      - name: 마이그레이션 이미지
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: order-api-nest/Dockerfile
+          target: migrate
+          push: ${{ github.ref_name == vars.DEPLOY_BRANCH }}
+          tags: ${{ env.IMAGE_PREFIX }}/order-api-migrate:${{ github.sha }}
+          cache-from: type=gha,scope=api
       - name: 웹 이미지
         uses: docker/build-push-action@v6
         with:
           context: .
           file: order-console-next/Dockerfile
-          push: false
+          push: ${{ github.ref_name == vars.DEPLOY_BRANCH }}
+          tags: ${{ env.IMAGE_PREFIX }}/order-web:${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://${{ vars.API_HOST }}
+            NEXT_PUBLIC_STORAGE_URL=${{ vars.STORAGE_URL }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
+
+  deploy:
+    name: 배포
+    if: github.ref_name == vars.DEPLOY_BRANCH
+    needs: [check, test-api, test-web, alert-rules, images]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: https://${{ vars.WEB_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH 준비
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+      - name: 설정 파일 올리기
+        run: scp deploy/compose.yml deploy/Caddyfile deploy/deploy.sh ubuntu@${{ vars.DEPLOY_HOST }}:/opt/node-order/
+      - name: 새 이미지로 바꾸기
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | ssh ubuntu@${{ vars.DEPLOY_HOST }} bash /opt/node-order/deploy.sh "${{ github.sha }}"
+      - name: 공개 주소로 확인
+        run: |
+          for i in $(seq 1 12); do curl -fsS https://${{ vars.API_HOST }}/health/ready && break; echo " ($i) 다시 시도"; sleep 5; done
+          curl -fsS https://${{ vars.API_HOST }}/health/ready
+          curl -fsS -o /dev/null -w "웹 %{http_code}\n" https://${{ vars.WEB_HOST }}/
