@@ -5,6 +5,10 @@ import { MailQueue } from "../queue/mail.queue.js";
 
 type PendingEvent = { id: number; type: string; user_id: string; payload: Record<string, unknown> };
 
+export function orderIdOf(e: Pick<PendingEvent, "type" | "payload">): number {
+  return Number(e.type === "order.paid" ? e.payload.orderId : e.payload.id);
+}
+
 @Injectable()
 export class OutboxRelay implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(OutboxRelay.name);
@@ -45,7 +49,7 @@ export class OutboxRelay implements OnApplicationBootstrap, OnModuleDestroy {
         WHERE published_at IS NULL ORDER BY id LIMIT 20 FOR UPDATE SKIP LOCKED`;
       for (const e of events) {
         this.notifications.notifyUser(e.user_id, e.type, { eventId: e.id, ...e.payload });
-        await this.mailQueue.enqueueOrderEmail(e.id, { to: `${e.user_id}@example.com`, orderId: Number(e.payload.id) });
+        await this.mailQueue.enqueueOrderEmail(e.id, { to: `${e.user_id}@example.com`, orderId: orderIdOf(e) });
       }
       if (events.length > 0) {
         await tx.outboxEvent.updateMany({
