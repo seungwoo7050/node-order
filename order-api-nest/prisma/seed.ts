@@ -7,7 +7,7 @@ const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: proc
 await prisma.$executeRaw`TRUNCATE categories, refresh_tokens, outbox_events, idempotency_keys, order_items, orders, products, users RESTART IDENTITY CASCADE`;
 
 const users = [
-  { id: "kim", name: "김" },
+  { id: "kim", name: "김", role: "admin" as const },
   { id: "lee", name: "이" },
   { id: "park", name: "박" },
   { id: "choi", name: "최" },
