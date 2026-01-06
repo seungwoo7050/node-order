@@ -90,7 +90,8 @@ export class AuthService {
   }
 
   private async issueTokens(db: Prisma.TransactionClient, userId: string, familyId: string): Promise<IssuedTokens> {
-    const accessToken = this.jwtService.sign({ sub: userId });
+    const { role } = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { role: true } });
+    const accessToken = this.jwtService.sign({ sub: userId, role });
     const refreshToken = randomBytes(32).toString("base64url");
     await db.refreshToken.create({
       data: {
