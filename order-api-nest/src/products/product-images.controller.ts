@@ -5,12 +5,13 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import { StorageService } from "../storage/storage.service.js";
 import { EXTENSIONS, looksLike } from "./image-signature.js";
 import { ConfirmImageDto, UploadUrlDto } from "./product-image.dto.js";
+import { AdminGuard } from "../auth/admin.guard.js";
 
 export const MAX_IMAGE_BYTES = Number(process.env.MAX_IMAGE_BYTES ?? 2 * 1024 * 1024); // 2MB
 const UPLOAD_URL_TTL_SECONDS = Number(process.env.UPLOAD_URL_TTL_SECONDS ?? 60);
 
 @Controller("products/:id/image")
-@UseGuards(AuthGuard("jwt"))
+@UseGuards(AuthGuard("jwt"), AdminGuard)
 export class ProductImagesController {
   constructor(
     private readonly prisma: PrismaService,
