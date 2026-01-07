@@ -22,7 +22,7 @@ export class StripeGateway {
         client_reference_id: String(order.id),
         metadata: { orderId: String(order.id) },
         success_url: `${frontend}/me/orders/${order.id}?checkout=success`,
-        cancel_url: `${frontend}/shop?checkout=canceled`,
+        cancel_url: `${frontend}/shop?checkout=canceled&order=${order.id}`,
       },
       attemptKey ? { idempotencyKey: `checkout-${attemptKey}` } : undefined,
     );
