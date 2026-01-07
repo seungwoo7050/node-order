@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { orderSelect } from "../me/order-select.js";
+import { orderDetailSelect, orderSelect } from "../me/order-select.js";
 import { protectedProcedure, publicProcedure, router } from "./trpc.js";
 
 export const appRouter = router({
@@ -23,14 +23,17 @@ export const appRouter = router({
   }),
 
   me: router({
+    profile: protectedProcedure.query(({ ctx }) =>
+      ctx.prisma.user.findUniqueOrThrow({ where: { id: ctx.userId }, select: { id: true, name: true, role: true } }),
+    ),
     orders: protectedProcedure.query(({ ctx }) =>
       ctx.prisma.asUser(ctx.userId, (tx) =>
-        tx.order.findMany({ where: { userId: ctx.userId }, select: orderSelect, orderBy: { id: "asc" } }),
+        tx.order.findMany({ where: { userId: ctx.userId }, select: orderSelect, orderBy: { id: "desc" } }),
       ),
     ),
     order: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ ctx, input }) => {
       const order = await ctx.prisma.asUser(ctx.userId, (tx) =>
-        tx.order.findFirst({ where: { id: input.id, userId: ctx.userId }, select: orderSelect }),
+        tx.order.findFirst({ where: { id: input.id, userId: ctx.userId }, select: orderDetailSelect }),
       );
       if (!order) throw new TRPCError({ code: "NOT_FOUND", message: `order ${input.id} not found` });
       return order;
