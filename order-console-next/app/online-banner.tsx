@@ -15,5 +15,9 @@ export function useOnline() {
 export function OnlineBanner() {
   const online = useOnline();
   if (online) return null;
-  return <p role="status" data-testid="offline-banner">오프라인 - 마지막으로 받은 내용을 보여 주며 결제는 할 수 없습니다</p>;
+  return (
+  <p role="status" data-testid="offline-banner" className="border-y border-line bg-notice py-3 text-sm">
+    <span className="page block">연결이 끊겼습니다. 마지막으로 받은 내용을 보여 주며, 다시 연결될 때까지 결제할 수 없습니다.</span>
+  </p>
+  );
 }
