@@ -8,6 +8,7 @@ type CartState = {
   checkoutKey: string | null;
   add: (item: Omit<CartItem, "quantity">) => void;
   remove: (productId: number) => void;
+  setQuantity: (productId: number, quantity: number) => void;
   beginCheckout: () => string;
   finishCheckout: () => void;
 };
@@ -30,6 +31,12 @@ export const useCartStore = create<CartState>()(
         }),
       remove: (productId) =>
         set((state) => ({ checkoutKey: null, items: state.items.filter((i) => i.productId !== productId) })),
+      setQuantity: (productId, quantity) =>
+        set((state) => {
+          const q = Math.floor(quantity);
+          if (q <= 0) return { checkoutKey: null, items: state.items.filter((i) => i.productId !== productId) };
+          return { checkoutKey: null, items: state.items.map((i) => (i.productId === productId ? { ...i, quantity: q } : i)) };
+        }),
       beginCheckout: () => {
         const existing = get().checkoutKey;
         if (existing) return existing;
