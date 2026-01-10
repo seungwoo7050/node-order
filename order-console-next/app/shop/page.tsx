@@ -2,6 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { ApiError, authFetch } from "@/lib/api-client";
 import { useCartStore } from "@/lib/cart-store";
 import { useAuthStore } from "@/lib/auth-store";
@@ -11,13 +13,27 @@ import { ProductImageUploader } from "./product-image-uploader";
 
 type CheckoutResult = { id: number; price: number; checkoutUrl: string };
 
+function ProductSkeleton() {
+  return (
+    <div aria-busy="true">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-4 border-b border-line py-4">
+          <span className="size-16 bg-surface" />
+          <span className="grid gap-2"><span className="h-3 w-2/5 bg-surface" /><span className="h-3 w-1/4 bg-surface" /></span>
+        </div>
+      ))}
+      <p role="status" className="mt-4 text-sm text-muted">상품을 불러오는 중입니다.</p>
+    </div>
+  );
+}
+
 function ProductList() {
   const trpc = useTRPC();
   const { data, isPending, error } = useQuery(trpc.products.list.queryOptions());
   const add = useCartStore((s) => s.add);
   const loggedIn = useAuthStore((s) => s.accessToken !== null);
 
-  if (isPending) return <p>상품을 불러오는 중...</p>;
+  if (isPending) return <ProductSkeleton />;
   if (error) return <p role="alert">상품을 불러오지 못했습니다: {error.message}</p>;
   return (
     <ul>
@@ -89,11 +105,24 @@ function CartPanel() {
   );
 }
 
+function CheckoutNotice() {
+  const params = useSearchParams();
+  if (params.get("checkout") !== "canceled") return null;
+  const order = params.get("order");
+  return (
+    <p role="status" className="note mb-8">
+      결제를 취소했습니다. {order ? <>주문 <Link href={`/me/orders/${order}`}>#{order}</Link>은</> : "방금 만든 주문은"} 결제 대기로 남아 있다가 24시간이 지나면
+      자동으로 취소되고, 담았던 수량은 재고로 돌아갑니다.
+    </p>
+  );
+}
+
 export default function ShopPage() {
   return (
-    <main>
-      <h1>상품</h1>
-      <ProductList />
+    <main className="page flex-1 pb-12 pt-2">
+      <Suspense><CheckoutNotice /></Suspense>
+      <h1 className="title mb-8">상품</h1>
+      <section aria-label="상품 목록"><ProductList /></section>
       <CartPanel />
     </main>
   );
