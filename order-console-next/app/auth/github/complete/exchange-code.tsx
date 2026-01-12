@@ -24,6 +24,6 @@ export function ExchangeCode({ code }: { code: string }) {
     })();
   }, [code, router]);
 
-  if (error) return <p role="alert">로그인을 마무리하지 못했습니다: {error}</p>;
-  return <p>로그인을 마무리하는 중...</p>;
+  if (error) return <p role="alert" className="alert">로그인을 마무리하지 못했습니다. 다시 시도해 주세요. ({error})</p>;
+  return <p role="status" className="text-sm text-muted">로그인을 마무리하는 중입니다.</p>;
 }
