@@ -6,7 +6,7 @@ test.use({ locale: "ko-KR" });
 test("테스트 카드로 결제하면 웹훅이 주문을 결제 완료로 바꾼다", async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto("/login");
-  await page.getByPlaceholder("password").fill("1234");
+  await page.getByLabel("비밀번호").fill("1234");
   await page.getByRole("button", { name: "로그인", exact: true }).click();
   await expect(page).toHaveURL(/\/shop$/);
 

@@ -30,7 +30,7 @@ test("로그인이 필요한 응답은 캐시하지 않는다 - 오프라인에�
   await waitForController(page);
 
   await page.goto("/login");
-  await page.getByPlaceholder("password").fill("1234");
+  await page.getByLabel("비밀번호").fill("1234");
   await page.getByRole("button", { name: "로그인", exact: true }).click();
   await expect(page).toHaveURL(/\/shop$/);
   await page.getByRole("link", { name: "내 주문" }).click();
