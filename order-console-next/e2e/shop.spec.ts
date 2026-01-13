@@ -4,7 +4,7 @@ test.use({ serviceWorkers: "block" });
 
 async function loginAsKim(page: Page) {
   await page.goto("/login");
-  await page.getByPlaceholder("password").fill("1234");
+  await page.getByLabel("비밀번호").fill("1234");
   await page.getByRole("button", { name: "로그인", exact: true }).click();
   await expect(page).toHaveURL(/\/shop$/);
 }
@@ -42,7 +42,10 @@ test("결제를 누르면 재고를 예약하고 Stripe 결제 화면으로 간�
   await expect(page.getByTestId("stock-2")).toHaveText(String(before - 1));
   await expect(page.getByTestId("cart-count")).toHaveText("장바구니 0");
   await page.goto("/me/orders");
-  await expect(page.getByTestId("my-orders").getByRole("listitem").last()).toContainText("결제 대기");
+  await expect(page.getByTestId("my-orders").getByRole("listitem").first()).toContainText("결제 대기");
+  await page.getByTestId("my-orders").getByRole("listitem").first().getByRole("link").click();
+  await expect(page.getByTestId("order-detail")).toContainText("마우스");
+  await expect(page.getByTestId("order-detail")).toContainText("30,000원 × 1");
 });
 
 test("새로고침 뒤 로그인이 필요한 요청 두 개가 동시에 나가도 refresh는 한 번이다", async ({ page }) => {
