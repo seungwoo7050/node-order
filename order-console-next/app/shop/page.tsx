@@ -6,7 +6,7 @@ import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { ApiError, authFetch } from "@/lib/api-client";
 import { useCartStore } from "@/lib/cart-store";
-import { useAuthStore } from "@/lib/auth-store";
+import { useIsAdmin } from "@/lib/use-profile";
 import { useOnline } from "../online-banner";
 import { useTRPC } from "@/lib/trpc";
 import { ProductImageUploader } from "./product-image-uploader";
@@ -31,7 +31,7 @@ function ProductList() {
   const trpc = useTRPC();
   const { data, isPending, error } = useQuery(trpc.products.list.queryOptions());
   const add = useCartStore((s) => s.add);
-  const loggedIn = useAuthStore((s) => s.accessToken !== null);
+  const isAdmin = useIsAdmin();
 
   if (isPending) return <ProductSkeleton />;
   if (error) return <p role="alert">상품을 불러오지 못했습니다: {error.message}</p>;
@@ -47,7 +47,7 @@ function ProductList() {
           <button disabled={p.stock === 0} onClick={() => add({ productId: p.id, name: p.name, price: p.price })}>
             담기
           </button>
-          {loggedIn && <ProductImageUploader productId={p.id} />}
+          {isAdmin && <ProductImageUploader productId={p.id} />}
         </li>
       ))}
     </ul>
