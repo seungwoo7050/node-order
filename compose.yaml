@@ -83,6 +83,7 @@ services:
       PORT: "4000"
       JWT_SECRET: ${JWT_SECRET:-change-me}
       DEMO_PASSWORD: "1234"
+      DEMO_LOGIN: "1"
       FRONTEND_URL: ${PUBLIC_WEB_URL:-http://localhost:3000}
       ACCESS_TOKEN_TTL: 15m
       DATABASE_URL: postgresql://order_app:order_app@db:5432/order_api

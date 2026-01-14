@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Prisma } from "../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -27,6 +27,19 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { id } });
     const ok = await verifyPassword(password, user?.passwordHash ?? (await this.dummyHash));
     if (!user?.passwordHash || !ok) throw new UnauthorizedException("id 또는 password가 올바르지 않습니다");
+    return this.issueTokens(this.prisma, user.id, randomUUID());
+  }
+
+  static readonly DEMO_ACCOUNTS = { user: "lee", admin: "kim" } as const;
+
+  demoEnabled(): boolean {
+    return process.env.DEMO_LOGIN === "1";
+  }
+
+  async loginAsDemo(as: "user" | "admin"): Promise<IssuedTokens> {
+    if (!this.demoEnabled()) throw new NotFoundException();
+    const user = await this.prisma.user.findUnique({ where: { id: AuthService.DEMO_ACCOUNTS[as] } });
+    if (!user) throw new NotFoundException("데모 계정이 없다 - 시드를 확인한다");
     return this.issueTokens(this.prisma, user.id, randomUUID());
   }
 

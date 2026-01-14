@@ -1,9 +1,10 @@
-import { Body, Controller, HttpCode, Post, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import type { CookieOptions, Request, Response } from "express";
 import { AuthService, REFRESH_TOKEN_TTL_SECONDS } from "./auth.service.js";
 import { LoginDto } from "./login.dto.js";
 import { ExchangeCodeDto, GithubLoginDto } from "./github-login.dto.js";
+import { DemoLoginDto } from "./demo-login.dto.js";
 
 const REFRESH_COOKIE = "refresh_token";
 const refreshCookieOptions: CookieOptions = {
@@ -21,6 +22,19 @@ export class AuthController {
   @HttpCode(200)
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const { accessToken, refreshToken } = await this.authService.login(dto.id, dto.password);
+    res.cookie(REFRESH_COOKIE, refreshToken, { ...refreshCookieOptions, maxAge: REFRESH_TOKEN_TTL_SECONDS * 1000 });
+    return { accessToken };
+  }
+
+  @Get("demo")
+  demo() {
+    return { enabled: this.authService.demoEnabled() };
+  }
+
+  @Post("demo")
+  @HttpCode(200)
+  async demoLogin(@Body() dto: DemoLoginDto, @Res({ passthrough: true }) res: Response) {
+    const { accessToken, refreshToken } = await this.authService.loginAsDemo(dto.as);
     res.cookie(REFRESH_COOKIE, refreshToken, { ...refreshCookieOptions, maxAge: REFRESH_TOKEN_TTL_SECONDS * 1000 });
     return { accessToken };
   }
