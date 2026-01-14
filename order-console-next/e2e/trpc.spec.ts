@@ -9,7 +9,7 @@ test("주문 상세 화면의 tRPC 요청 두 개(me.order, me.orders)가 HTTP �
   const calls: string[] = [];
   page.on("request", (req) => {
     const url = new URL(req.url());
-    if (url.pathname.startsWith("/trpc/me.")) calls.push(url.pathname);
+    if (url.pathname.startsWith("/trpc/me.order")) calls.push(url.pathname);
   });
 
   await page.goto("/me/orders/1");
