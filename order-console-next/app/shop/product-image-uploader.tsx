@@ -29,7 +29,7 @@ export function ProductImageUploader({ productId }: { productId: number }) {
 
   return (
     <label>
-      {" "}이미지:{" "}
+      {" "}이미지 바꾸기{" "}
       <input
         type="file"
         accept="image/png,image/jpeg,image/webp"

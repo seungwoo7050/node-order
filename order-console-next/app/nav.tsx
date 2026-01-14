@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { logout } from "@/lib/api-client";
@@ -23,6 +24,7 @@ function NavLink({ href, children, testId }: { href: string; children: React.Rea
 export function Nav() {
   const cartCount = useCartStore((s) => s.items.reduce((sum, i) => sum + i.quantity, 0));
   const router = useRouter();
+  const queryClient = useQueryClient();
   const loggedIn = useAuthStore((s) => s.accessToken !== null);
 
   return (
@@ -31,7 +33,11 @@ export function Nav() {
       <NavLink href="/me/orders">내 주문</NavLink>
       <span data-testid="cart-count">장바구니 {cartCount}</span>
       {loggedIn ? (
-        <button onClick={async () => { await logout(); router.push("/login"); }}>로그아웃</button>
+        <button onClick={async () => {
+          await logout();
+          queryClient.clear();
+          router.push("/login");
+        }}>로그아웃</button>
       ) : (
         <Link href="/login">로그인</Link>
       )}

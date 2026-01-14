@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ApiError, login } from "@/lib/api-client";
@@ -7,12 +8,18 @@ import { signInWithGithub } from "./actions";
 
 export default function LoginPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+
+  function done() {
+    queryClient.clear();
+    router.push("/shop");
+  }
 
   async function onSubmit(formData: FormData) {
     try {
       await login(String(formData.get("id")), String(formData.get("password")));
-      router.push("/shop");
+      done();
     } catch (e) {
       setError(e instanceof ApiError && e.status === 401 ? "아이디 또는 비밀번호가 맞지 않습니다." : "로그인하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
     }

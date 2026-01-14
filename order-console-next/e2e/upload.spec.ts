@@ -28,3 +28,17 @@ test("이미지가 아닌 파일은 확장자가 .png여도 거절된다", async
   });
   await expect(page.getByTestId("image-error-2")).toContainText("이미지 파일이 아니다");
 });
+
+test("이미지 바꾸기는 관리자에게만 보인다", async ({ page }) => {
+  await loginAsKim(page);
+  await expect(page.getByText("이미지 바꾸기")).toHaveCount(4);
+
+  await page.getByRole("button", { name: "로그아웃" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await page.getByLabel("아이디").fill("lee");
+  await page.getByLabel("비밀번호").fill("1234");
+  await page.getByRole("button", { name: "로그인", exact: true }).click();
+  await expect(page).toHaveURL(/\/shop$/);
+  await expect(page.getByTestId("stock-1")).toBeVisible();
+  await expect(page.getByText("이미지 바꾸기")).toHaveCount(0);
+});
