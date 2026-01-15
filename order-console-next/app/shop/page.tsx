@@ -1,17 +1,19 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { ApiError, authFetch } from "@/lib/api-client";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useCartStore } from "@/lib/cart-store";
-import { useIsAdmin } from "@/lib/use-profile";
-import { useOnline } from "../online-banner";
 import { useTRPC } from "@/lib/trpc";
-import { ProductImageUploader } from "./product-image-uploader";
+import { Stepper } from "./stepper";
 
-type CheckoutResult = { id: number; price: number; checkoutUrl: string };
+const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
+function eulReul(word: string) {
+  const code = word.charCodeAt(word.length - 1) - 0xac00;
+  if (code < 0 || code > 11171) return "을(를)";
+  return code % 28 === 0 ? "를" : "을";
+}
 
 function ProductSkeleton() {
   return (
@@ -27,81 +29,85 @@ function ProductSkeleton() {
   );
 }
 
+function AddedToast({ name, onDone }: { name: string; onDone: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 3000);
+    return () => clearTimeout(t);
+  }, [name, onDone]);
+  return (
+    <p role="status" className="sticky bottom-4 ml-auto mt-6 w-fit max-w-full bg-fg px-4 py-3 text-sm text-bg">
+      {name}{eulReul(name)} 담았습니다. <Link href="/cart" className="ml-3 text-bg">장바구니 보기</Link>
+    </p>
+  );
+}
+
 function ProductList() {
   const trpc = useTRPC();
   const { data, isPending, error } = useQuery(trpc.products.list.queryOptions());
   const add = useCartStore((s) => s.add);
-  const isAdmin = useIsAdmin();
+  const inCart = useCartStore((s) => s.items);
+  const [added, setAdded] = useState<string | null>(null);
+  const clearAdded = useCallback(() => setAdded(null), []);
 
   if (isPending) return <ProductSkeleton />;
-  if (error) return <p role="alert">상품을 불러오지 못했습니다: {error.message}</p>;
+  if (error)
+    return (
+      <p role="alert" className="alert">
+        상품을 불러오지 못했습니다.
+        <span className="block text-sm text-muted">잠시 뒤 새로 고침해 주세요. ({error.message})</span>
+      </p>
+    );
   return (
-    <ul>
-      {data.map((p) => (
-        <li key={p.id}>
-          {p.imageUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={p.imageUrl} alt={p.name} width={48} height={48} data-testid={`image-${p.id}`} />
-          )}
-          {p.name} - {p.price.toLocaleString()}원 (재고 <span data-testid={`stock-${p.id}`}>{p.stock}</span>)
-          <button disabled={p.stock === 0} onClick={() => add({ productId: p.id, name: p.name, price: p.price })}>
-            담기
-          </button>
-          {isAdmin && <ProductImageUploader productId={p.id} />}
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul className="border-t border-line">
+        {data.map((p) => {
+          const quantity = inCart.find((i) => i.productId === p.id)?.quantity ?? 0;
+          const soldOut = p.stock === 0;
+          return (
+            <li key={p.id} className="grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-4 border-b border-line py-4">
+              {p.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={p.imageUrl} alt={p.name} width={64} height={64} className="size-16 object-cover" data-testid={`image-${p.id}`} />
+              ) : (
+                <span aria-hidden="true" className="grid size-16 place-items-center bg-surface font-serif text-xl text-faint">{p.name.slice(0, 1)}</span>
+              )}
+              <div className="min-w-0">
+                <p className="font-normal">{p.name}</p>
+                <p className="flex flex-wrap gap-x-3 text-[0.8rem] text-muted">
+                  <span className="num">{won(p.price)}</span>
+                  {soldOut ? <span className="text-fg">품절</span> : <span>재고 <span className="num" data-testid={`stock-${p.id}`}>{p.stock}</span></span>}
+                </p>
+              </div>
+              {soldOut ? (
+                <button type="button" className="btn" disabled>품절</button>
+              ) : quantity > 0 ? (
+                <Stepper productId={p.id} name={p.name} quantity={quantity} max={p.stock} />
+              ) : (
+                <button type="button" className="btn" onClick={() => { add({ productId: p.id, name: p.name, price: p.price }); setAdded(p.name); }}>
+                  담기
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {added && <AddedToast name={added} onDone={clearAdded} />}
+    </>
   );
 }
 
-function CartPanel() {
-  const trpc = useTRPC();
+function CartDock() {
   const items = useCartStore((s) => s.items);
-  const remove = useCartStore((s) => s.remove);
-  const online = useOnline();
-  const queryClient = useQueryClient();
-
-  const checkout = useMutation({
-    mutationFn: () => {
-      const key = useCartStore.getState().beginCheckout();
-      return authFetch<CheckoutResult>("/orders/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": key },
-        body: JSON.stringify({ items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })) }),
-      });
-    },
-    onSuccess: (data) => {
-      useCartStore.getState().finishCheckout();
-      void queryClient.invalidateQueries({ queryKey: trpc.products.list.queryKey() });
-      void queryClient.invalidateQueries({ queryKey: trpc.me.orders.queryKey() });
-      window.location.assign(data.checkoutUrl);
-    },
-  });
-
+  if (items.length === 0) return null;
   const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const count = items.reduce((sum, i) => sum + i.quantity, 0);
   return (
-    <section>
-      <h2>장바구니</h2>
-      {items.length === 0 && <p>비어 있습니다</p>}
-      <ul>
-        {items.map((i) => (
-          <li key={i.productId}>
-            {i.name} × {i.quantity} <button onClick={() => remove(i.productId)}>빼기</button>
-          </li>
-        ))}
-      </ul>
-      <p>합계 {total.toLocaleString()}원</p>
-      <button disabled={items.length === 0 || checkout.isPending || !online} onClick={() => checkout.mutate()}>
-        {checkout.isPending ? "결제 중..." : "결제"}
-      </button>
-      {checkout.isSuccess && <p role="status">주문 #{checkout.data.id} - 결제 화면으로 이동하는 중...</p>}
-      {checkout.error && (
-        <p role="alert">
-          결제 실패: {checkout.error.message}
-          {checkout.error instanceof ApiError && checkout.error.status === 401 && <> - <Link href="/login">로그인</Link></>}
-        </p>
-      )}
-    </section>
+    <div className="sticky bottom-0 border-t border-line-strong bg-bg py-3 sm:hidden">
+      <div className="page flex items-center justify-between gap-3">
+        <span className="text-sm"><span className="label">장바구니 <span className="num">{count}</span></span><br /><span className="num">{won(total)}</span></span>
+        <Link href="/cart" className="btn no-underline">장바구니 보기</Link>
+      </div>
+    </div>
   );
 }
 
@@ -119,11 +125,13 @@ function CheckoutNotice() {
 
 export default function ShopPage() {
   return (
-    <main className="page flex-1 pb-12 pt-2">
-      <Suspense><CheckoutNotice /></Suspense>
-      <h1 className="title mb-8">상품</h1>
-      <section aria-label="상품 목록"><ProductList /></section>
-      <CartPanel />
-    </main>
+    <>
+      <main className="page flex-1 pb-12 pt-2">
+        <Suspense><CheckoutNotice /></Suspense>
+        <h1 className="title mb-8">상품</h1>
+        <section aria-label="상품 목록"><ProductList /></section>
+      </main>
+      <CartDock />
+    </>
   );
 }
