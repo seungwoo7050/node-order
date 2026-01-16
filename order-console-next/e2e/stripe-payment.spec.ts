@@ -6,11 +6,13 @@ test.use({ locale: "ko-KR" });
 test("테스트 카드로 결제하면 웹훅이 주문을 결제 완료로 바꾼다", async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto("/login");
+  await page.getByLabel("아이디").fill("kim");
   await page.getByLabel("비밀번호").fill("1234");
   await page.getByRole("button", { name: "로그인", exact: true }).click();
   await expect(page).toHaveURL(/\/shop$/);
 
   await page.getByRole("listitem").filter({ hasText: "마우스" }).getByRole("button", { name: "담기" }).click();
+  await page.getByTestId("cart-count").click();
   await Promise.all([page.waitForURL(/^https:\/\/checkout\.stripe\.com\//), page.getByRole("button", { name: "결제" }).click()]);
 
   await page.locator("#email").fill("test@example.com");
