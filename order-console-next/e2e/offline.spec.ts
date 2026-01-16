@@ -10,6 +10,9 @@ test("오프라인에서도 한 번 본 상품 목록이 보이고, 결제는 �
   await page.goto("/shop");
   await waitForController(page);
   await expect(page.getByText("한정판 키보드")).toBeVisible();
+  await page.goto("/cart");
+  await expect(page.getByRole("heading", { name: "장바구니" })).toBeVisible();
+  await page.goto("/shop");
 
   await context.setOffline(true);
   try {
@@ -18,6 +21,7 @@ test("오프라인에서도 한 번 본 상품 목록이 보이고, 결제는 �
     await expect(page.getByTestId("offline-banner")).toBeVisible();
 
     await page.getByRole("listitem").filter({ hasText: "마우스" }).getByRole("button", { name: "담기" }).click();
+    await page.goto("/cart");
     await expect(page.getByRole("button", { name: "결제" })).toBeDisabled();
   } finally {
     await context.setOffline(false);
@@ -30,6 +34,7 @@ test("로그인이 필요한 응답은 캐시하지 않는다 - 오프라인에�
   await waitForController(page);
 
   await page.goto("/login");
+  await page.getByLabel("아이디").fill("kim");
   await page.getByLabel("비밀번호").fill("1234");
   await page.getByRole("button", { name: "로그인", exact: true }).click();
   await expect(page).toHaveURL(/\/shop$/);
