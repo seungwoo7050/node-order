@@ -6,7 +6,7 @@ import { useTRPC } from "@/lib/trpc";
 
 type UploadUrl = { key: string; uploadUrl: string; expiresIn: number };
 
-export function ProductImageUploader({ productId }: { productId: number }) {
+export function ProductImageUploader({ productId, hasImage }: { productId: number; hasImage: boolean }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const upload = useMutation({
@@ -28,21 +28,24 @@ export function ProductImageUploader({ productId }: { productId: number }) {
   });
 
   return (
-    <label>
-      {" "}이미지 바꾸기{" "}
-      <input
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        data-testid={`image-input-${productId}`}
-        disabled={upload.isPending}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) upload.mutate(file);
-          e.target.value = "";
-        }}
-      />
-      {upload.isPending && " 올리는 중..."}
-      {upload.error && <span data-testid={`image-error-${productId}`}> {upload.error.message}</span>}
-    </label>
+    <span className="flex flex-wrap items-center gap-2">
+      <label className="btn focus-within:outline-2 focus-within:outline-fg">
+        {upload.isPending ? "올리는 중…" : hasImage ? "바꾸기" : "올리기"}
+        <input
+          type="file"
+          className="sr-only"
+          accept="image/png,image/jpeg,image/webp"
+          data-testid={`image-input-${productId}`}
+          disabled={upload.isPending}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) upload.mutate(file);
+            e.target.value = "";
+          }}
+        />
+      </label>
+      {upload.error && <span role="alert" className="text-[0.82rem] text-danger" data-testid={`image-error-${productId}`}>{upload.error.message}</span>}
+    </span>
+
   );
 }
