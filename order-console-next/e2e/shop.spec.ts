@@ -4,6 +4,7 @@ test.use({ serviceWorkers: "block" });
 
 async function loginAsKim(page: Page) {
   await page.goto("/login");
+  await page.getByLabel("아이디").fill("kim");
   await page.getByLabel("비밀번호").fill("1234");
   await page.getByRole("button", { name: "로그인", exact: true }).click();
   await expect(page).toHaveURL(/\/shop$/);
@@ -17,7 +18,7 @@ test("장바구니는 새로고침해도 남고, 하이드레이션 에러가 �
   await loginAsKim(page);
   const mouse = page.getByRole("listitem").filter({ hasText: "마우스" });
   await mouse.getByRole("button", { name: "담기" }).click();
-  await mouse.getByRole("button", { name: "담기" }).click();
+  await mouse.getByRole("button", { name: "마우스 수량 늘리기" }).click();
   await expect(page.getByTestId("cart-count")).toHaveText("장바구니 2");
 
   await page.reload();
@@ -33,6 +34,7 @@ test("결제를 누르면 재고를 예약하고 Stripe 결제 화면으로 간�
   const before = Number(await stock.textContent());
 
   await page.getByRole("listitem").filter({ hasText: "마우스" }).getByRole("button", { name: "담기" }).click();
+  await page.getByTestId("cart-count").click();
   await Promise.all([
     page.waitForURL(/^https:\/\/checkout\.stripe\.com\/c\/pay\//),
     page.getByRole("button", { name: "결제" }).click(),
@@ -84,8 +86,9 @@ test("결제 응답이 중간에 사라져 다시 눌러도 주문은 하나만 
   });
 
   await page.getByRole("listitem").filter({ hasText: "마우스" }).getByRole("button", { name: "담기" }).click();
+  await page.getByTestId("cart-count").click();
   await page.getByRole("button", { name: "결제" }).click();
-  await expect(page.getByText(/결제 실패/)).toBeVisible();
+  await expect(page.getByText(/결제를 시작하지 못했습니다/)).toBeVisible();
   await Promise.all([
     page.waitForURL(/^https:\/\/checkout\.stripe\.com\//),
     page.getByRole("button", { name: "결제" }).click(),
