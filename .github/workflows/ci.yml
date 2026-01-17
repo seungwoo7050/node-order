@@ -195,7 +195,7 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
       - name: 설정 파일 올리기
-        run: scp deploy/compose.yml deploy/Caddyfile deploy/deploy.sh ubuntu@${{ vars.DEPLOY_HOST }}:/opt/node-order/
+        run: scp -rp deploy/compose.yml deploy/Caddyfile deploy/deploy.sh deploy/ops ubuntu@${{ vars.DEPLOY_HOST }}:/opt/node-order/
       - name: 새 이미지로 바꾸기
         run: echo "${{ secrets.GITHUB_TOKEN }}" | ssh ubuntu@${{ vars.DEPLOY_HOST }} bash /opt/node-order/deploy.sh "${{ github.sha }}"
       - name: 공개 주소로 확인
