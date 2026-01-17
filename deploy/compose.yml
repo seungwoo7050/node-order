@@ -1,7 +1,12 @@
 name: node-order
 
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
 services:
   caddy:
+    logging: *logging
     image: caddy:2
     restart: unless-stopped
     ports:
@@ -14,11 +19,15 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
     depends_on: [web, api]
+
   redis:
+    logging: *logging
     image: redis:7
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
+
   migrate:
+    logging: *logging
     image: ghcr.io/seungwoo7050/node-order/order-api-migrate:${IMAGE_TAG:?}
     profiles: ["tools"]
     environment:
@@ -27,7 +36,9 @@ services:
       NODE_EXTRA_CA_CERTS: /certs/rds-ca.pem
     volumes:
       - ./rds-ca.pem:/certs/rds-ca.pem:ro
+
   api:
+    logging: *logging
     image: ghcr.io/seungwoo7050/node-order/order-api:${IMAGE_TAG:?}
     restart: unless-stopped
     init: true
@@ -56,7 +67,9 @@ services:
       interval: 10s
       retries: 6
       start_period: 20s
+
   web:
+    logging: *logging
     image: ghcr.io/seungwoo7050/node-order/order-web:${IMAGE_TAG:?}
     restart: unless-stopped
     init: true
