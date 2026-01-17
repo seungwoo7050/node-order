@@ -1,0 +1,9 @@
+[Unit]
+Description=node-order 데모 데이터 초기화
+Wants=network-online.target docker.service
+After=network-online.target docker.service node-order-backup.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/opt/node-order/ops/reset-demo.sh
