@@ -14,7 +14,7 @@ aws rds create-db-instance \
   --db-name order_api \
   --vpc-security-group-ids "$(sg_id "$NAME-db")" \
   --no-publicly-accessible --no-multi-az \
-  --backup-retention-period 0 \
+  --backup-retention-period 1 \
   --tags "$TAGS" \
   --query 'DBInstance.DBInstanceStatus' --output text
 aws rds wait db-instance-available --db-instance-identifier "$NAME-db"
