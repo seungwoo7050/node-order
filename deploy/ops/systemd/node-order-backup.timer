@@ -1,0 +1,9 @@
+[Unit]
+Description=node-order DB 백업 매일
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 Asia/Seoul
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,86 @@
+name: node-order
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  caddy:
+    logging: *logging
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      WEB_HOST: ${WEB_HOST:?WEB_HOST를 .env에 적는다}
+      API_HOST: ${API_HOST:?API_HOST를 .env에 적는다}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [web, api]
+
+  redis:
+    logging: *logging
+    image: redis:7
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  migrate:
+    logging: *logging
+    image: ghcr.io/seungwoo7050/node-order/order-api-migrate:${IMAGE_TAG:?}
+    profiles: ["tools"]
+    environment:
+      DATABASE_URL: ${ADMIN_DATABASE_URL:?}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+      NODE_EXTRA_CA_CERTS: /certs/rds-ca.pem
+    volumes:
+      - ./rds-ca.pem:/certs/rds-ca.pem:ro
+
+  api:
+    logging: *logging
+    image: ghcr.io/seungwoo7050/node-order/order-api:${IMAGE_TAG:?}
+    restart: unless-stopped
+    init: true
+    environment:
+      PORT: "4000"
+      JWT_SECRET: ${JWT_SECRET:?}
+      DEMO_LOGIN: ${DEMO_LOGIN:-0}
+      FRONTEND_URL: https://${WEB_HOST}
+      ACCESS_TOKEN_TTL: 15m
+      DATABASE_URL: ${DATABASE_URL:?}
+      NODE_EXTRA_CA_CERTS: /certs/rds-ca.pem
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: ""
+      S3_REGION: ${AWS_REGION:?}
+      S3_BUCKET: ${S3_BUCKET:?}
+      LOG_LEVEL: info
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+    volumes:
+      - ./rds-ca.pem:/certs/rds-ca.pem:ro
+    depends_on: [redis]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health/ready').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      retries: 6
+      start_period: 20s
+
+  web:
+    logging: *logging
+    image: ghcr.io/seungwoo7050/node-order/order-web:${IMAGE_TAG:?}
+    restart: unless-stopped
+    init: true
+    environment:
+      API_URL: http://api:4000
+      AUTH_URL: https://${WEB_HOST}
+      AUTH_SECRET: ${AUTH_SECRET:?}
+      AUTH_GITHUB_ID: ${GITHUB_CLIENT_ID:-}
+      AUTH_GITHUB_SECRET: ${GITHUB_CLIENT_SECRET:-}
+    depends_on:
+      api: { condition: service_healthy }
+
+volumes:
+  caddy_data:
