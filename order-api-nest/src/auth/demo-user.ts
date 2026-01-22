@@ -5,10 +5,19 @@ import { cancelUnpaidOrder } from "../payments/cancel-unpaid-order.js";
 export const DEMO_USER_TTL_MS = Number(process.env.DEMO_USER_TTL_SECONDS ?? 24 * 60 * 60) * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+export type DemoKind = "user" | "admin";
+
 export const newDemoUserId = () => `demo-${randomBytes(4).toString("hex")}`;
 
-export async function createDemoUser(tx: Prisma.TransactionClient, id: string): Promise<void> {
-  await tx.user.create({ data: { id, name: "데모 방문자", expiresAt: new Date(Date.now() + DEMO_USER_TTL_MS) } });
+export async function createDemoUser(tx: Prisma.TransactionClient, id: string, as: DemoKind): Promise<void> {
+  await tx.user.create({
+    data: {
+      id,
+      name: as === "admin" ? "데모 관리자" : "데모 방문자",
+      role: as === "admin" ? "demo_admin" : "user",
+      expiresAt: new Date(Date.now() + DEMO_USER_TTL_MS),
+    },
+  });
   await createSampleOrders(tx, id);
 }
 
