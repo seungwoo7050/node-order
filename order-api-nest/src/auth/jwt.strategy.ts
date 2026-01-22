@@ -2,6 +2,8 @@ import { Injectable } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
 
+const ROLES = new Set(["user", "admin", "demo_admin"]);
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor() {
@@ -14,6 +16,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   validate(payload: { sub: string; role?: string }) {
-    return { userId: payload.sub, role: payload.role === "admin" ? "admin" : "user" };
+    return { userId: payload.sub, role: payload.role && ROLES.has(payload.role) ? payload.role : "user" };
   }
 }
