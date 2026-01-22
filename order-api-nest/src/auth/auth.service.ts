@@ -6,7 +6,7 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import { hashPassword, verifyPassword } from "./password.js";
 import { AuthCodeStore } from "./auth-code.store.js";
 import { verifyGithubToken } from "./github.js";
-import { createDemoUser, newDemoUserId } from "./demo-user.js";
+import { createDemoUser, newDemoUserId, type DemoKind } from "./demo-user.js";
 
 export const REFRESH_TOKEN_TTL_SECONDS = Number(process.env.REFRESH_TOKEN_TTL_SECONDS ?? 60 * 60 * 24 * 7);
 
@@ -31,22 +31,15 @@ export class AuthService {
     return this.issueTokens(this.prisma, user.id, randomUUID());
   }
 
-  static readonly DEMO_ADMIN_ACCOUNT = "kim";
-
   demoEnabled(): boolean {
     return process.env.DEMO_LOGIN === "1";
   }
 
-  async loginAsDemo(as: "user" | "admin"): Promise<IssuedTokens> {
+  async loginAsDemo(as: DemoKind): Promise<IssuedTokens> {
     if (!this.demoEnabled()) throw new NotFoundException();
-    if (as === "user") {
-      const id = newDemoUserId();
-      await this.prisma.asUser(id, (tx) => createDemoUser(tx, id));
-      return this.issueTokens(this.prisma, id, randomUUID());
-    }
-    const user = await this.prisma.user.findUnique({ where: { id: AuthService.DEMO_ADMIN_ACCOUNT } });
-    if (!user) throw new NotFoundException("데모 계정이 없다 - 시드를 확인한다");
-    return this.issueTokens(this.prisma, user.id, randomUUID());
+    const id = newDemoUserId();
+    await this.prisma.asUser(id, (tx) => createDemoUser(tx, id, as));
+    return this.issueTokens(this.prisma, id, randomUUID());
   }
 
   async loginWithGithub(githubAccessToken: string): Promise<string> {
