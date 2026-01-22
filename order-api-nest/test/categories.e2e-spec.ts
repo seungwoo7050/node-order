@@ -24,7 +24,7 @@ describe("카테고리 트리 - 회귀 테스트", () => {
 
   beforeEach(async () => {
     await adminDb.$executeRaw`TRUNCATE categories, refresh_tokens, outbox_events, idempotency_keys, order_items, orders, products, users RESTART IDENTITY CASCADE`;
-    await adminDb.user.create({ data: { id: "kim", name: "김", passwordHash: await hashPassword("pw-for-test") } });
+    await adminDb.user.create({ data: { id: "kim", name: "김", role: "admin", passwordHash: await hashPassword("pw-for-test") } });
     for (const [name, parentId] of [["가", null], ["나", 1], ["다", 2]] as const) await adminDb.category.create({ data: { name, parentId } });
     const res = await fetch(`${baseUrl}/auth/login`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: "kim", password: "pw-for-test" }),

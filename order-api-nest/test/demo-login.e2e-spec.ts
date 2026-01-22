@@ -59,9 +59,9 @@ describe("데모 로그인", () => {
     expect(expiresAt!.getTime() - Date.now()).toBeGreaterThan(23 * 60 * 60 * 1000);
   });
 
-  it("관리자로 들어가면 시드의 kim이다", async () => {
+  it("관리자로 들어가면 임시 데모 관리자다", async () => {
     process.env.DEMO_LOGIN = "1";
-    expect(await roleOf(await demo("admin"))).toMatchObject({ sub: "kim", role: "admin" });
+    expect(await roleOf(await demo("admin"))).toMatchObject({ sub: expect.stringMatching(/^demo-/), role: "demo_admin" });
   });
 
   it("임시 사용자에게는 품목이 든 견본 주문이 1~2건 있고, 재고는 그대로다", async () => {
