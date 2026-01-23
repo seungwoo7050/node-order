@@ -48,7 +48,7 @@ export default function LoginPage() {
               <button type="button" className="btn" onClick={() => onDemo("user")}>일반 사용자로</button>
               <button type="button" className="btn" onClick={() => onDemo("admin")}>관리자로</button>
             </div>
-            <p className="text-[0.78rem] text-muted">비밀번호 없이 들어갑니다. 데모 데이터는 매일 초기화됩니다.</p>
+            <p className="text-[0.78rem] text-muted">누를 때마다 나만의 데모 계정을 새로 만듭니다. 비밀번호 없이 들어가고, 24시간 뒤 지워집니다.</p>
             <p className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-xs text-muted before:border-t before:border-line after:border-t after:border-line">또는</p>
           </section>
         )}
