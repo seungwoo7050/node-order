@@ -20,6 +20,13 @@ export const webhookEvents = new Counter({
   registers: [registry],
 });
 
+export const rateLimited = new Counter({
+  name: "http_rate_limited_total",
+  help: "요청 수 제한으로 거절한 요청 수",
+  labelNames: ["bucket"] as const,
+  registers: [registry],
+});
+
 function routeOf(req: Request): string {
   const path = req.route?.path as string | undefined;
   if (!path || path === "{/*splat}") return "unmatched";
