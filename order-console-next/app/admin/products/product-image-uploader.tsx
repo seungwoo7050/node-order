@@ -6,7 +6,7 @@ import { useTRPC } from "@/lib/trpc";
 
 type UploadUrl = { key: string; uploadUrl: string; expiresIn: number };
 
-export function ProductImageUploader({ productId, hasImage }: { productId: number; hasImage: boolean }) {
+export function ProductImageUploader({ productId, hasImage, readOnly }: { productId: number; hasImage: boolean; readOnly: boolean }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const upload = useMutation({
@@ -29,14 +29,15 @@ export function ProductImageUploader({ productId, hasImage }: { productId: numbe
 
   return (
     <span className="flex flex-wrap items-center gap-2">
-      <label className="btn focus-within:outline-2 focus-within:outline-fg">
+      <label className="btn focus-within:outline-2 focus-within:outline-fg has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50">
         {upload.isPending ? "올리는 중…" : hasImage ? "바꾸기" : "올리기"}
         <input
           type="file"
           className="sr-only"
           accept="image/png,image/jpeg,image/webp"
           data-testid={`image-input-${productId}`}
-          disabled={upload.isPending}
+          disabled={readOnly || upload.isPending}
+          aria-describedby={readOnly ? "read-only-note" : undefined}
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) upload.mutate(file);

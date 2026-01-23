@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { logout } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/auth-store";
 import { useCartStore } from "@/lib/cart-store";
-import { useIsAdmin } from "@/lib/use-profile";
+import { useCanSeeAdmin } from "@/lib/use-profile";
 
 function NavLink({ href, children, testId }: { href: string; children: React.ReactNode; testId?: string }) {
   const current = usePathname().startsWith(href);
@@ -27,7 +27,7 @@ export function Nav() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const loggedIn = useAuthStore((s) => s.accessToken !== null);
-  const isAdmin = useIsAdmin();
+  const canSeeAdmin = useCanSeeAdmin();
 
   return (
     <header className="page flex flex-wrap items-baseline gap-x-6 gap-y-2 py-4 sm:py-6">
@@ -35,7 +35,7 @@ export function Nav() {
       <nav aria-label="주요 메뉴" className="flex items-baseline gap-5">
         <NavLink href="/shop">상품</NavLink>
         <NavLink href="/me/orders">내 주문</NavLink>
-        {isAdmin && <NavLink href="/admin/products">관리</NavLink>}
+        {canSeeAdmin && <NavLink href="/admin/products">관리</NavLink>}
         <NavLink href="/cart" testId="cart-count">장바구니 <span className="num">{cartCount}</span></NavLink>
         {loggedIn ? (
           <button type="button" className="text-sm text-muted cursor-pointer" onClick={async () => {
