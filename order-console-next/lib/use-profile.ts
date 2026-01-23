@@ -10,8 +10,8 @@ export function useProfile() {
   return useQuery({ ...trpc.me.profile.queryOptions(), enabled: loggedIn });
 }
 
-export function useIsAdmin() {
+export function useCanSeeAdmin() {
   const loggedIn = useAuthStore((s) => s.accessToken !== null);
   const { data } = useProfile();
-  return loggedIn && data?.role === "admin";
+  return loggedIn && (data?.role === "admin" || data?.role === "demo_admin");
 }
