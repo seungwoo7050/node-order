@@ -1,5 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module.js';
 import { Logger } from 'nestjs-pino';
 import { PrismaExceptionFilter } from './prisma/prisma-exception.filter.js';
@@ -12,7 +13,8 @@ async function bootstrap() {
   
   // 1. 앱 생성과 앱 자체의 동작
   // bufferLogs : pino 로거가 준비될 때까지 부팅 로그를 모아 뒀다가 pino로 내보낸다
-  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true, rawBody: true });
+  if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY.split(',').map((s) => s.trim()));
   app.useLogger(app.get(Logger));
   app.enableShutdownHooks();
 

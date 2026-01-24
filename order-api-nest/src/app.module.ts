@@ -19,11 +19,12 @@ import { CategoriesModule } from './categories/categories.module.js';
 import { TrpcModule } from './trpc/trpc.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { MetricsModule } from './metrics/metrics.module.js';
+import { RateLimitModule } from './rate-limit/rate-limit.module.js';
 
 @Module({
   imports: [
     LoggerModule.forRoot(loggerOptions),
-    MetricsModule, PrismaModule, StorageModule, HealthModule, OrdersModule, UsersModule, ProductsModule, OutboxModule, MeModule, LeaderModule, AuthModule, NotificationsModule, CategoriesModule, TrpcModule, PaymentsModule],
+    MetricsModule, RateLimitModule, PrismaModule, StorageModule, HealthModule, OrdersModule, UsersModule, ProductsModule, OutboxModule, MeModule, LeaderModule, AuthModule, NotificationsModule, CategoriesModule, TrpcModule, PaymentsModule],
   controllers: [AppController],
   providers: [AppService, ShutdownLogger],
 })
