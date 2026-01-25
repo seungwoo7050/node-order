@@ -46,6 +46,9 @@ services:
       PORT: "4000"
       JWT_SECRET: ${JWT_SECRET:?}
       DEMO_LOGIN: ${DEMO_LOGIN:-0}
+      RATE_LIMIT_PER_MINUTE: "300"
+      AUTH_RATE_LIMIT_PER_MINUTE: "20"
+      TRUST_PROXY: uniquelocal
       FRONTEND_URL: https://${WEB_HOST}
       ACCESS_TOKEN_TTL: 15m
       DATABASE_URL: ${DATABASE_URL:?}
