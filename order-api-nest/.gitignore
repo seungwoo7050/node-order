@@ -49,3 +49,6 @@ pids
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 /src/generated/prisma
+
+# 만든 사람의 사진: 공개 저장소에 남기지 않는다. 운영 S3에는 deploy/aws/62-seed-private-photos.sh로 올린다
+/prisma/seed/photos/maker-*
