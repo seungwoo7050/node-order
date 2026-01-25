@@ -6,7 +6,7 @@ const s3 = new S3Client({
   endpoint: process.env.S3_ENDPOINT, region: process.env.S3_REGION, forcePathStyle: true,
   credentials: { accessKeyId: process.env.S3_ACCESS_KEY, secretAccessKey: process.env.S3_SECRET_KEY },
 });
-const { Contents = [] } = await s3.send(new ListObjectsV2Command({ Bucket: process.env.S3_BUCKET, Prefix: "products/" }));
+const { Contents = [] } = await s3.send(new ListObjectsV2Command({ Bucket: process.env.S3_BUCKET, Prefix: process.argv[2] ?? "products/" }));
 
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
