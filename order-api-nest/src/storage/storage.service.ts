@@ -25,12 +25,7 @@ export class StorageService implements OnModuleInit {
   private readonly presigner = makeClient(process.env.S3_PUBLIC_ENDPOINT || process.env.S3_ENDPOINT);
 
   async onModuleInit() {
-    try {
-      await this.s3.send(new HeadBucketCommand({ Bucket: this.bucket }));
-    } catch {
-      await this.s3.send(new CreateBucketCommand({ Bucket: this.bucket }));
-      this.logger.log(`버킷 생성: ${this.bucket}`);
-    }
+    await this.ensureBucket();
     await this.s3.send(new PutBucketCorsCommand({
       Bucket: this.bucket,
       CORSConfiguration: {
@@ -42,6 +37,21 @@ export class StorageService implements OnModuleInit {
         }],
       },
     }));
+  }
+
+  async ensureBucket(): Promise<void> {
+    try {
+      await this.s3.send(new HeadBucketCommand({ Bucket: this.bucket }));
+    } catch {
+      await this.s3.send(new CreateBucketCommand({ Bucket: this.bucket }));
+      this.logger.log(`버킷 생성: ${this.bucket}`);
+    }
+  }
+
+  async putIfAbsent(key: string, body: Buffer, contentType: string): Promise<boolean> {
+    if ((await this.head(key))?.size === body.length) return false;
+    await this.s3.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }));
+    return true;
   }
 
   createUploadUrl(key: string, contentType: string, size: number, expiresIn: number): Promise<string> {
