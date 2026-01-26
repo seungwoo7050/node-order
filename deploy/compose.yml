@@ -34,6 +34,9 @@ services:
       DATABASE_URL: ${ADMIN_DATABASE_URL:?}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-}
       NODE_EXTRA_CA_CERTS: /certs/rds-ca.pem
+      S3_ENDPOINT: ""
+      S3_REGION: ${AWS_REGION:?}
+      S3_BUCKET: ${S3_BUCKET:?}
     volumes:
       - ./rds-ca.pem:/certs/rds-ca.pem:ro
 
