@@ -1,44 +1,91 @@
+import { readFile } from "node:fs/promises";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 import { hashPassword } from "../src/auth/password.js";
+import { deleteUsers } from "../src/auth/demo-user.js";
+import { StorageService } from "../src/storage/storage.service.js";
+
+type Catalog = {
+  categories: { id: number; name: string; parentId: number | null }[];
+  products: { id: number; name: string; price: number; stock: number; category: string; photo: string }[];
+};
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.ADMIN_DATABASE_URL ?? process.env.DATABASE_URL! }) });
+const storage = new StorageService();
+const dir = new URL("./seed/", import.meta.url);
+const catalog = JSON.parse(await readFile(new URL("catalog.json", dir), "utf8")) as Catalog;
 
-await prisma.$executeRaw`TRUNCATE categories, refresh_tokens, outbox_events, idempotency_keys, order_items, orders, products, users RESTART IDENTITY CASCADE`;
+// 1. 임시 사용자
+const temp = await prisma.user.findMany({ where: { expiresAt: { not: null } }, select: { id: true } });
+const deletedTemp = await prisma.$transaction((tx) => deleteUsers(tx, temp.map((u) => u.id)));
 
-const users = [
+// 2. 사진
+await storage.ensureBucket();
+let uploaded = 0;
+const noPhoto = new Set<string>();
+for (const p of catalog.products) {
+  const key = `seed/${p.photo}`;
+  const body = await readFile(new URL(`photos/${p.photo}`, dir)).catch((err: NodeJS.ErrnoException) => {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  });
+  if (body) {
+    if (await storage.putIfAbsent(key, body, "image/webp")) uploaded++;
+  } else if (!(await storage.head(key))) {
+    noPhoto.add(p.photo);
+  }
+}
+if (noPhoto.size > 0) console.warn(`사진 없음(파일도 저장소의 키도 없다): ${[...noPhoto].join(", ")}`);
+
+// 3. 카테고리·상품
+for (const c of catalog.categories) {
+  await prisma.category.upsert({ where: { id: c.id }, create: c, update: { name: c.name, parentId: c.parentId } });
+}
+const categoryIds = new Map(catalog.categories.map((c) => [c.name, c.id]));
+for (const p of catalog.products) {
+  const categoryId = categoryIds.get(p.category);
+  if (categoryId === undefined) throw new Error(`catalog.json: 없는 카테고리 "${p.category}" (${p.name})`);
+  const data = { name: p.name, price: p.price, stock: p.stock, categoryId, imageKey: noPhoto.has(p.photo) ? null : `seed/${p.photo}` };
+  await prisma.product.upsert({ where: { id: p.id }, create: { id: p.id, ...data }, update: data });
+}
+const productIds = catalog.products.map((p) => p.id);
+await prisma.product.deleteMany({ where: { id: { notIn: productIds }, items: { none: {} } } });
+await prisma.product.updateMany({ where: { id: { notIn: productIds } }, data: { stock: 0 } });
+await prisma.$executeRaw`SELECT setval(pg_get_serial_sequence('categories', 'id'), (SELECT max(id) FROM categories))`;
+await prisma.$executeRaw`SELECT setval(pg_get_serial_sequence('products', 'id'), (SELECT max(id) FROM products))`;
+
+// 4. 시드 사용자와 그 주문
+const seedUsers = [
   { id: "kim", name: "김", role: "admin" as const },
-  { id: "lee", name: "이" },
-  { id: "park", name: "박" },
-  { id: "choi", name: "최" },
+  { id: "lee", name: "이", role: "user" as const },
+  { id: "park", name: "박", role: "user" as const },
+  { id: "choi", name: "최", role: "user" as const },
 ];
+for (const u of seedUsers) {
+  const passwordHash = await hashPassword(process.env.DEMO_PASSWORD!);
+  await prisma.user.upsert({ where: { id: u.id }, create: { ...u, passwordHash }, update: { passwordHash } });
+}
 
-const tree: [string, number | null][] = [
-  ["전자기기", null], ["컴퓨터", 1], ["키보드", 2], ["마우스", 2], ["음향", 1], ["헤드폰", 5], ["생활", null], ["주방", 7],
+const seedOrders: { userId: string; paid: boolean; items: [productId: number, quantity: number][] }[] = [
+  { userId: "kim", paid: true, items: [[6, 1], [16, 2]] },
+  { userId: "lee", paid: false, items: [[8, 1]] },
+  { userId: "kim", paid: true, items: [[9, 1]] },
+  { userId: "lee", paid: true, items: [[7, 1], [13, 1]] },
+  { userId: "park", paid: true, items: [[15, 1], [16, 1]] },
 ];
-for (const [name, parentId] of tree) await prisma.category.create({ data: { name, parentId } });
+const seedUserIds = seedUsers.map((u) => u.id);
+await prisma.orderItem.deleteMany({ where: { order: { userId: { in: seedUserIds } } } });
+await prisma.order.deleteMany({ where: { userId: { in: seedUserIds } } });
+const priceOf = new Map(catalog.products.map((p) => [p.id, p.price]));
+for (const o of seedOrders) {
+  const items = o.items.map(([productId, quantity]) => ({ productId, quantity, unitPrice: priceOf.get(productId)! }));
+  await prisma.order.create({
+    data: { userId: o.userId, paid: o.paid, price: items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0), items: { create: items } },
+  });
+}
 
-await prisma.user.createMany({
-  data: await Promise.all(users.map(async (u) => ({ ...u, passwordHash: await hashPassword(process.env.DEMO_PASSWORD!) }))),
-});
-
-await prisma.order.createMany({
-  data: [
-    { userId: "kim", price: 12000, paid: true },
-    { userId: "lee", price: 8000, paid: false },
-    { userId: "kim", price: 5000, paid: true },
-    { userId: "lee", price: 30000, paid: true },
-    { userId: "park", price: 7000, paid: true },
-  ],
-});
-
-await prisma.product.createMany({
-  data: [
-    { name: "한정판 키보드", price: 150000, stock: 10, categoryId: 3 },
-    { name: "마우스", price: 30000, stock: 100, categoryId: 4 },
-    { name: "무선 헤드폰", price: 90000, stock: 30, categoryId: 6 },
-    { name: "전기 주전자", price: 40000, stock: 20, categoryId: 8 },
-  ],
-});
-
-console.log("seed 완료: 사용자", await prisma.user.count(), "명, 주문", await prisma.order.count(), "건, 상품", await prisma.product.count(), "개");
+console.log(
+  `seed 완료: 상품 ${catalog.products.length}개(사진 새로 올림 ${uploaded}장, 사진 없음 ${noPhoto.size}개), 임시 사용자 ${deletedTemp}명 삭제,`,
+  `사용자 ${await prisma.user.count()}명, 주문 ${await prisma.order.count()}건`,
+);
+await prisma.$disconnect();
