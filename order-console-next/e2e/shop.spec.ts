@@ -29,7 +29,7 @@ test("장바구니는 새로고침해도 남고, 하이드레이션 에러가 �
 test("결제를 누르면 재고를 예약하고 Stripe 결제 화면으로 간다", async ({ page }) => {
   await page.route("https://checkout.stripe.com/**", (route) => route.fulfill({ status: 200, contentType: "text/html", body: "stripe" }));
   await loginAsKim(page);
-  const stock = page.getByTestId("stock-2");
+  const stock = page.getByTestId("stock-6");
   await expect(stock).not.toHaveText("");
   const before = Number(await stock.textContent());
 
@@ -41,7 +41,7 @@ test("결제를 누르면 재고를 예약하고 Stripe 결제 화면으로 간�
   ]);
 
   await page.goto("/shop");
-  await expect(page.getByTestId("stock-2")).toHaveText(String(before - 1));
+  await expect(page.getByTestId("stock-6")).toHaveText(String(before - 1));
   await expect(page.getByTestId("cart-count")).toHaveText("장바구니 0");
   await page.goto("/me/orders");
   await expect(page.getByTestId("my-orders").getByRole("listitem").first()).toContainText("결제 대기");

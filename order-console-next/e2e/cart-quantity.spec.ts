@@ -30,7 +30,7 @@ test("장바구니 페이지에서 수량을 바꾸면 금액이 따라오고, �
 test("재고보다 많이 담을 수 없다", async ({ page }) => {
   await page.goto("/shop");
   const keyboard = page.getByRole("listitem").filter({ hasText: "한정판 키보드" });
-  const stock = Number(await keyboard.getByTestId("stock-1").textContent());
+  const stock = Number(await keyboard.getByTestId("stock-5").textContent());
   await keyboard.getByRole("button", { name: "담기" }).click();
   const plus = keyboard.getByRole("button", { name: "한정판 키보드 수량 늘리기" });
   for (let i = 1; i < stock; i++) await plus.click();
