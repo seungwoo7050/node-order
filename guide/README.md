@@ -242,18 +242,23 @@ import { randomBytes } from "node:crypto";
 import type { Prisma } from "../generated/prisma/client.js";
 import { cancelUnpaidOrder } from "../payments/cancel-unpaid-order.js";
 
+// 임시 사용자의 수명. 테스트에서 줄여 볼 수 있게 환경 변수로 둔다
 export const DEMO_USER_TTL_MS = Number(process.env.DEMO_USER_TTL_SECONDS ?? 24 * 60 * 60) * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// "demo-" + 무작위 16진수 8자리. 접두사는 사람이 로그·DB에서 알아보라고 붙인다(지우는 기준은 expires_at)
 export const newDemoUserId = () => `demo-${randomBytes(4).toString("hex")}`;
 
 export async function createDemoUser(tx: Prisma.TransactionClient, id: string): Promise<void> {
+  // 만료 시각을 행에 적어 둔다. 정리 작업은 이 값만 보고 지운다
   await tx.user.create({ data: { id, name: "데모 방문자", expiresAt: new Date(Date.now() + DEMO_USER_TTL_MS) } });
   await createSampleOrders(tx, id);
 }
 
+// 지난 주문처럼 보이게 하는 견본. 재고는 건드리지 않는다(방문자가 많아도 상점의 재고가 줄지 않게)
 async function createSampleOrders(tx: Prisma.TransactionClient, userId: string): Promise<void> {
   const products = await tx.product.findMany({ where: { stock: { gt: 0 } }, select: { id: true, price: true } });
+  // 상품을 섞어 최대 3개를 골라 두 주문(2개 + 1개)으로 나눈다
   const picked = products.sort(() => Math.random() - 0.5).slice(0, 3);
   const groups = [picked.slice(0, 2), picked.slice(2)].filter((g) => g.length > 0);
   for (const [i, group] of groups.entries()) {
@@ -263,6 +268,7 @@ async function createSampleOrders(tx: Prisma.TransactionClient, userId: string):
         userId,
         price: items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0),
         paid: i === 0,
+        // 둘째는 취소됨. 결제 세션 없는 "결제 대기"는 영원히 대기로 보이기 때문
         canceledAt: i === 0 ? null : new Date(),
         createdAt: new Date(Date.now() - (groups.length - i) * DAY_MS),
         items: { create: items },
@@ -271,10 +277,13 @@ async function createSampleOrders(tx: Prisma.TransactionClient, userId: string):
   }
 }
 
+// 사용자와 딸린 행을 지운다. 정리 작업(asAdmin 안)과 시드(소유자 연결)가 같이 쓴다
 export async function deleteUsers(tx: Prisma.TransactionClient, ids: string[]): Promise<number> {
   if (ids.length === 0) return 0;
   const pending = await tx.order.findMany({ where: { userId: { in: ids }, paid: false, canceledAt: null }, select: { id: true } });
+  // 결제 대기 주문이 잡아 둔 재고를 먼저 돌려준다
   for (const o of pending) await cancelUnpaidOrder(tx, o.id);
+  // 외래 키 때문에 자식부터: 품목 → 주문 → 토큰 → (외래 키 없는 것) → 사용자
   await tx.orderItem.deleteMany({ where: { order: { userId: { in: ids } } } });
   await tx.order.deleteMany({ where: { userId: { in: ids } } });
   await tx.refreshToken.deleteMany({ where: { userId: { in: ids } } });
@@ -313,7 +322,9 @@ export async function deleteUsers(tx: Prisma.TransactionClient, ids: string[]): 
 -    const user = await this.prisma.user.findUnique({ where: { id: AuthService.DEMO_ACCOUNTS[as] } });
 +    if (as === "user") {
 +      const id = newDemoUserId();
++      // orders의 RLS(WITH CHECK)를 통과하려면 app.user_id가 새 사용자여야 한다. 그래서 id를 먼저 정한다
 +      await this.prisma.asUser(id, (tx) => createDemoUser(tx, id));
++      // 트랜잭션이 커밋된 뒤 발급한다. issueTokens가 DB에서 역할을 다시 읽는다
 +      return this.issueTokens(this.prisma, id, randomUUID());
 +    }
 +    const user = await this.prisma.user.findUnique({ where: { id: AuthService.DEMO_ADMIN_ACCOUNT } });
@@ -359,8 +370,11 @@ export class DemoUserCleanupJob implements OnApplicationBootstrap, OnModuleDestr
   }
 
   async run() {
+    // 여러 대 중 리더 한 대만 돈다
     if (!this.leaderElection.isLeader) return;
+    // 여러 사용자의 주문을 지우므로 RLS를 넘는 관리자 트랜잭션
     const deleted = await this.prisma.asAdmin(async (tx) => {
+      // 한 번에 100명까지. 트랜잭션을 짧게 두고 남은 것은 다음 차례에
       const expired = await tx.user.findMany({ where: { expiresAt: { lt: new Date() } }, select: { id: true }, take: 100 });
       return deleteUsers(tx, expired.map((u) => u.id));
     });
@@ -403,6 +417,7 @@ export class DemoUserCleanupJob implements OnApplicationBootstrap, OnModuleDestr
 @@
      await adminDb.$executeRaw`TRUNCATE categories, refresh_tokens, outbox_events, idempotency_keys, order_items, orders, products, users RESTART IDENTITY CASCADE`;
      await adminDb.user.createMany({ data: [{ id: "kim", name: "김", role: "admin" }, { id: "lee", name: "이" }] });
++    // 견본 주문을 만들 상품. adminDb는 소유자 연결이라 RLS를 거치지 않는다
 +    await adminDb.product.createMany({ data: [{ name: "가", price: 1000, stock: 5 }, { name: "나", price: 2000, stock: 5 }, { name: "다", price: 3000, stock: 5 }] });
    });
  
@@ -451,6 +466,7 @@ export class DemoUserCleanupJob implements OnApplicationBootstrap, OnModuleDestr
 +    await adminDb.product.update({ where: { id: 1 }, data: { stock: { decrement: 2 } } });
 +    await adminDb.user.update({ where: { id: sub }, data: { expiresAt: new Date(Date.now() - 1000) } });
 +
++    // 리더 선출은 2초 간격이라 테스트 시점에 정해져 있지 않다. 판단만 보려고 리더로 고정한다
 +    const leader = vi.spyOn(app.get(LeaderElection, { strict: false }), "isLeader", "get").mockReturnValue(true);
 +    await app.get(DemoUserCleanupJob, { strict: false }).run();
 +    leader.mockRestore();
@@ -588,6 +604,7 @@ npx prisma generate
 @@
  import { ExtractJwt, Strategy } from "passport-jwt";
  
++// 모르는 역할은 가장 약한 user로 읽는다. demo_admin을 빠뜨리면 Guard가 데모 관리자를 가르지 못한다
 +const ROLES = new Set(["user", "admin", "demo_admin"]);
 +
  @Injectable()
@@ -606,6 +623,7 @@ npx prisma generate
 @@
    canActivate(context: ExecutionContext): boolean {
      const user = context.switchToHttp().getRequest<{ user?: { role?: string } }>().user;
++    // 판정은 그대로 "admin만 통과". 데모 관리자에게는 막는 이유를 따로 말한다
 +    if (user?.role === "demo_admin") throw new ForbiddenException("데모 관리자는 볼 수만 있습니다");
      if (user?.role !== "admin") throw new ForbiddenException("관리자만 할 수 있습니다");
      return true;
@@ -626,15 +644,19 @@ npx prisma generate
  
 +export type DemoKind = "user" | "admin";
 +
+ // "demo-" + 무작위 16진수 8자리. 접두사는 사람이 로그·DB에서 알아보라고 붙인다(지우는 기준은 expires_at)
  export const newDemoUserId = () => `demo-${randomBytes(4).toString("hex")}`;
  
 -export async function createDemoUser(tx: Prisma.TransactionClient, id: string): Promise<void> {
+-  // 만료 시각을 행에 적어 둔다. 정리 작업은 이 값만 보고 지운다
 -  await tx.user.create({ data: { id, name: "데모 방문자", expiresAt: new Date(Date.now() + DEMO_USER_TTL_MS) } });
 +export async function createDemoUser(tx: Prisma.TransactionClient, id: string, as: DemoKind): Promise<void> {
++  // 만료 시각을 행에 적어 둔다. 정리 작업은 이 값만 보고 지운다
 +  await tx.user.create({
 +    data: {
 +      id,
 +      name: as === "admin" ? "데모 관리자" : "데모 방문자",
++      // 데모 버튼으로는 admin이 될 수 없다. 관리자로 눌러도 읽기 전용 역할이다
 +      role: as === "admin" ? "demo_admin" : "user",
 +      expiresAt: new Date(Date.now() + DEMO_USER_TTL_MS),
 +    },
@@ -661,14 +683,18 @@ npx prisma generate
      if (!this.demoEnabled()) throw new NotFoundException();
 -    if (as === "user") {
 -      const id = newDemoUserId();
+-      // orders의 RLS(WITH CHECK)를 통과하려면 app.user_id가 새 사용자여야 한다. 그래서 id를 먼저 정한다
 -      await this.prisma.asUser(id, (tx) => createDemoUser(tx, id));
+-      // 트랜잭션이 커밋된 뒤 발급한다. issueTokens가 DB에서 역할을 다시 읽는다
 -      return this.issueTokens(this.prisma, id, randomUUID());
 -    }
 -    const user = await this.prisma.user.findUnique({ where: { id: AuthService.DEMO_ADMIN_ACCOUNT } });
 -    if (!user) throw new NotFoundException("데모 계정이 없다 - 시드를 확인한다");
 -    return this.issueTokens(this.prisma, user.id, randomUUID());
 +    const id = newDemoUserId();
++    // orders의 RLS(WITH CHECK)를 통과하려면 app.user_id가 새 사용자여야 한다. 그래서 id를 먼저 정한다
 +    await this.prisma.asUser(id, (tx) => createDemoUser(tx, id, as));
++    // 트랜잭션이 커밋된 뒤 발급한다. issueTokens가 DB에서 역할을 다시 읽는다
 +    return this.issueTokens(this.prisma, id, randomUUID());
    }
 ```
@@ -774,6 +800,7 @@ import { JwtService } from "@nestjs/jwt";
 import { Test } from "@nestjs/testing";
 import { AppModule } from "../src/app.module.js";
 
+// 관리자 전용 API 목록. 새 API를 더할 때 여기에 한 줄 더하는 것이 점검이다
 const ADMIN_ONLY = [
   ["GET", "/orders"], ["GET", "/orders/totals"], ["GET", "/orders/1"], ["POST", "/orders"],
   ["GET", "/users"], ["POST", "/users"],
@@ -792,6 +819,7 @@ describe("관리자 전용 API", () => {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
     await app.listen(0);
     baseUrl = await app.getUrl();
+    // Guard는 토큰의 역할만 본다. DB의 사용자 행 없이 토큰만 만들어 시험한다
     tokenOf = (role) => app.get(JwtService, { strict: false }).sign({ sub: `someone-${role}`, role });
   });
 
@@ -854,6 +882,7 @@ npm run test:e2e
    const loggedIn = useAuthStore((s) => s.accessToken !== null);
    const { data } = useProfile();
 -  return loggedIn && data?.role === "admin";
++  // 메뉴를 보여 줄지만 정한다. 막는 것은 서버의 AdminGuard다
 +  return loggedIn && (data?.role === "admin" || data?.role === "demo_admin");
  }
 ```
@@ -915,7 +944,9 @@ npm run test:e2e
 @@
            data-testid={`image-input-${productId}`}
 -          disabled={upload.isPending}
++          // 끄기만 하고 숨기지 않는다. 데모 관리자도 어떤 기능이 있는지 보게
 +          disabled={readOnly || upload.isPending}
++          // 화면 낭독기가 꺼진 버튼에서 이유 문장도 읽게 잇는다
 +          aria-describedby={readOnly ? "read-only-note" : undefined}
            onChange={(e) => {
 ```
@@ -968,6 +999,7 @@ npm run test:web
 --- a/order-api-nest/src/auth/admin.guard.ts
 +++ b/order-api-nest/src/auth/admin.guard.ts
 @@
+-    // 판정은 그대로 "admin만 통과". 데모 관리자에게는 막는 이유를 따로 말한다
 -    if (user?.role === "demo_admin") throw new ForbiddenException("데모 관리자는 볼 수만 있습니다");
 -    if (user?.role !== "admin") throw new ForbiddenException("관리자만 할 수 있습니다");
 +    if (user?.role !== "admin" && user?.role !== "demo_admin") throw new ForbiddenException("관리자만 할 수 있습니다");
@@ -1006,9 +1038,7 @@ git restore order-api-nest/src/auth/admin.guard.ts
 
 API를 다시 띄우면 같은 `curl`이 이제 403이다.
 
-<!-- 재측정 -->
-```text
-(예상 모양)
+```sh
 {
   "message": "데모 관리자는 볼 수만 있습니다",
   "error": "Forbidden",
@@ -1079,8 +1109,6 @@ UPDATE users SET role = 'admin' WHERE github_id = '<GitHub 숫자 id>';
 
 ## 3. 3단계: 요청 수 제한
 
-<!-- 검증 안 됨: 새로 쓴 절 -->
-
 1장 뒤로 데모 버튼은 누를 때마다 DB에 사용자 행과 주문을 만든다. 한 IP가 이것을 끝없이 누르지 못하게 한다.
 
 ### 작업 1. [커밋] 거절한 요청을 세는 지표
@@ -1116,12 +1144,16 @@ import { Redis } from "ioredis";
 import { rateLimited } from "../metrics/metrics.js";
 
 const WINDOW_SECONDS = 60;
+// 로그인 계열: 비밀번호 대입과 데모 계정 대량 생성을 막으려고 따로 더 낮게 센다. /auth/github는 Next 서버가 부르므로 넣지 않는다
 const AUTH_PATHS = new Set(["/auth/login", "/auth/demo", "/auth/exchange", "/auth/refresh"]);
+// 세지 않는 경로: 헬스 체크·지표 수집·결제사 웹훅처럼 사람이 아닌 서버가 정기적으로 부르는 것
 const SKIP_PREFIXES = ["/health", "/metrics", "/payments/webhook"];
 
+// 값이 없거나 0이면 그 제한은 꺼진다(로컬·테스트 기본값)
 const limitOf = (name: string) => Number(process.env[name] ?? 0) || 0;
 
 @Injectable()
+// 카운터용 Redis 연결. 미들웨어에는 종료 훅이 없으므로 provider로 두고 onModuleDestroy에서 닫는다
 export class RateLimitStore implements OnModuleDestroy {
   private readonly redis = new Redis(process.env.REDIS_URL!, { lazyConnect: true, maxRetriesPerRequest: 1 });
 
@@ -1130,6 +1162,7 @@ export class RateLimitStore implements OnModuleDestroy {
   }
 
   async hit(key: string, ttlSeconds: number): Promise<number> {
+    // INCR과 EXPIRE를 한 번에. NX: 첫 요청에서만 만료를 건다 → 창이 끝나면 키가 저절로 사라진다
     const results = await this.redis.multi().incr(key).expire(key, ttlSeconds, "NX").exec();
     return Number(results?.[0]?.[1] ?? 0);
   }
@@ -1155,12 +1188,14 @@ export class RateLimitMiddleware implements NestMiddleware {
     const limit = isAuth ? this.auth : this.general;
     if (limit <= 0) return next();
 
+    // 고정 창: 시계를 1분 칸으로 자른 칸 번호. req.ip는 TRUST_PROXY에 따라 접속 주소 또는 X-Forwarded-For의 주소
     const window = Math.floor(Date.now() / 1000 / WINDOW_SECONDS);
     const key = `rate:${bucket}:${req.ip}:${window}`;
     let count: number;
     try {
       count = await this.store.hit(key, WINDOW_SECONDS);
     } catch (err) {
+      // Redis 장애 때는 막지 않고 통과(fail open). 장애는 /health/ready가 드러낸다
       this.logger.warn(`요청 수를 세지 못해 통과시킨다: ${(err as Error).message}`);
       return next();
     }
@@ -1170,6 +1205,7 @@ export class RateLimitMiddleware implements NestMiddleware {
     res.setHeader("RateLimit-Remaining", Math.max(0, limit - count));
     if (count <= limit) return next();
 
+    // 거절 수를 지표로 남긴다(http_rate_limited_total)
     rateLimited.inc({ bucket });
     res.setHeader("Retry-After", retryAfter);
     res.status(429).json({ statusCode: 429, message: `요청이 너무 많습니다. ${retryAfter}초 뒤에 다시 시도하세요` });
@@ -1185,6 +1221,7 @@ import { RateLimitMiddleware, RateLimitStore } from "./rate-limit.middleware.js"
 @Module({ providers: [RateLimitStore] })
 export class RateLimitModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
+    // 모든 경로에 건다. 건너뛸 경로는 미들웨어 안에서 가른다
     consumer.apply(RateLimitMiddleware).forRoutes("*");
   }
 }
@@ -1221,6 +1258,7 @@ export class RateLimitModule implements NestModule {
 @@
 -  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
 +  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true, rawBody: true });
++  // 믿을 프록시를 정해야 X-Forwarded-For의 원래 주소가 req.ip가 된다. 없으면 헤더를 믿지 않는다
 +  if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY.split(',').map((s) => s.trim()));
    app.useLogger(app.get(Logger));
 ```
@@ -1242,6 +1280,7 @@ export class RateLimitModule implements NestModule {
 +import { headers } from "next/headers";
 @@
        if (account?.provider === "github" && account.access_token) {
++        // Caddy가 붙인 방문자 주소. 그대로 넘기지 않으면 모든 GitHub 로그인이 웹 컨테이너 주소 하나로 세어진다
 +        const forwardedFor = (await headers()).get("x-forwarded-for");
          const res = await fetch(`${API_URL}/auth/github`, {
            method: "POST",
@@ -1281,6 +1320,7 @@ describe("요청 수 제한", () => {
     app = moduleRef.createNestApplication<NestExpressApplication>();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
     app.use(cookieParser());
+    // 테스트는 같은 PC에서 보내므로 loopback을 믿고, X-Forwarded-For를 바꿔 가며 다른 방문자처럼 보낸다
     app.set("trust proxy", "loopback");
     await app.listen(0);
     baseUrl = await app.getUrl();
@@ -1335,6 +1375,7 @@ describe("요청 수 제한", () => {
   });
 
   it("WebSocket 연결은 세지 않는다 — 한도 5에서 8번 붙어도 HTTP 한도는 그대로다", async () => {
+    // WebSocket은 socket.io가 Express보다 먼저 받으므로 요청 수 제한을 거치지 않는다
     const token = app.get(JwtService, { strict: false }).sign({ sub: "kim" });
     for (let i = 0; i < 8; i++) {
       const socket = io(baseUrl, { transports: ["websocket"], auth: { token }, extraHeaders: { "X-Forwarded-For": "192.0.2.12" }, reconnection: false, forceNew: true });
@@ -1370,8 +1411,10 @@ npm run test:e2e -- rate-limit
        PORT: "4000"
        JWT_SECRET: ${JWT_SECRET:?}
        DEMO_LOGIN: ${DEMO_LOGIN:-0}
++      # IP마다 1분 한도. 로그인 계열은 아래 값으로 따로 센다
 +      RATE_LIMIT_PER_MINUTE: "300"
 +      AUTH_RATE_LIMIT_PER_MINUTE: "20"
++      # 사설망(Compose 네트워크)의 Caddy·웹 컨테이너만 믿는다
 +      TRUST_PROXY: uniquelocal
        FRONTEND_URL: https://${WEB_HOST}
 ```
@@ -1395,11 +1438,7 @@ RATE_LIMIT_PER_MINUTE=5 npm run start:dev
 
 ```sh
 for i in $(seq 1 8); do curl -s -o /dev/null -w "%{http_code} " -H "X-Forwarded-For: 203.0.113.$i" localhost:4000/products; done; echo
-```
 
-<!-- 재측정 -->
-```text
-(예상 모양)
 200 200 200 200 200 429 429 429
 ```
 
@@ -1407,11 +1446,7 @@ for i in $(seq 1 8); do curl -s -o /dev/null -w "%{http_code} " -H "X-Forwarded-
 
 ```sh
 RATE_LIMIT_PER_MINUTE=5 TRUST_PROXY=0.0.0.0/0,::/0 npm run start:dev
-```
 
-<!-- 재측정 -->
-```text
-(예상 모양)
 200 200 200 200 200 200 200 200
 ```
 
@@ -1479,8 +1514,6 @@ Redis가 죽은 것은 `/health/ready`가 503으로 드러낸다(`07`).
 
 ## 4. 4단계: 데모 카탈로그 고정과 초기화 범위
 
-<!-- 검증 안 됨: 새로 쓴 절 -->
-
 지금 시드는 상품 4개를 사진·설명 없이 만든다. 매일 초기화가 `products`를 TRUNCATE하고 다시 만들기 때문에, 관리자가 올린 사진은 다음 날 어느 상품도 가리키지 않아 `06`의 고아 이미지 정리가 지운다.
 
 초기화 시점의 상품을 저장소의 파일로 고정한다. 사진도 저장소에 두고, 시드가 고정 키로 올린다.
@@ -1540,10 +1573,10 @@ git status --short order-api-nest/prisma/seed/photos                     # maker
     { "id": 9, "name": "만든 사람", "parentId": null }
   ],
   "products": [
-    { "id": 1, "name": "만든 사람의 명함", "price": 1000, "stock": 100, "category": "만든 사람", "photo": "maker-card.webp" },
-    { "id": 2, "name": "증명사진 · 20대", "price": 5000, "stock": 10, "category": "만든 사람", "photo": "maker-photo-1.webp" },
-    { "id": 3, "name": "증명사진 · 20대 중후반", "price": 5000, "stock": 10, "category": "만든 사람", "photo": "maker-photo-2.webp" },
-    { "id": 4, "name": "증명사진 · 30대 초", "price": 5000, "stock": 10, "category": "만든 사람", "photo": "maker-photo-3.webp" },
+    { "id": 1, "name": "네임 카드", "price": 1000, "stock": 100, "category": "만든 사람", "photo": "maker-card.webp" },
+    { "id": 2, "name": "증명사진 20대", "price": 5000, "stock": 10, "category": "만든 사람", "photo": "maker-photo-1.webp" },
+    { "id": 3, "name": "증명사진 20대 중후반", "price": 5000, "stock": 10, "category": "만든 사람", "photo": "maker-photo-2.webp" },
+    { "id": 4, "name": "증명사진 30대 초", "price": 5000, "stock": 10, "category": "만든 사람", "photo": "maker-photo-3.webp" },
     { "id": 5, "name": "한정판 키보드", "price": 150000, "stock": 10, "category": "키보드", "photo": "keyboard-limited.webp" },
     { "id": 6, "name": "마우스", "price": 30000, "stock": 100, "category": "마우스", "photo": "mouse.webp" },
     { "id": 7, "name": "무선 헤드폰", "price": 90000, "stock": 30, "category": "헤드폰", "photo": "headphones.webp" },
@@ -1570,36 +1603,6 @@ JSON에는 주석을 쓸 수 없다. 첫 줄의 경로 주석은 빼고 저장�
 
 - 카테고리 `마우스` 안에 "트랙볼"이 있어도 괜찮다. 상점 목록은 카테고리 이름을 그리지 않는다.
 
-사진의 출처를 적는다.
-
-```md
-<!-- order-api-nest/prisma/seed/README.md -->
-# 데모 카탈로그
-
-`catalog.json`은 매일 초기화(`npx prisma db seed`) 때의 카테고리와 상품이다. 운영의 상품을 바꾸려면 이 파일을 고쳐 커밋한다.
-사진은 `photos/`에 있고, 시드가 저장소(S3·RustFS)의 `seed/<파일 이름>`에 올린다. 사진을 바꿀 때는 파일 이름도 바꾼다.
-
-## 사진 출처
-
-| 파일 | 원본 | 만든 사람 | 라이선스 |
-|---|---|---|---|
-| `maker-card.webp`, `maker-photo-1.webp`, `maker-photo-2.webp`, `maker-photo-3.webp` | 이 저장소에 없다(`.gitignore`). 운영 S3의 `seed/`에만 있다 | 만든 사람 | 직접 찍음·직접 만듦. 이 데모 밖에서 쓰지 않는다 |
-| `keyboard-limited.webp` | [Computer keyboard rainbow.jpg](https://commons.wikimedia.org/wiki/File:Computer_keyboard_rainbow.jpg) | Kurt Kaiser | CC0 |
-| `mouse.webp` | [ComputerMouseCloseup3.jpg](https://commons.wikimedia.org/wiki/File:ComputerMouseCloseup3.jpg) | Raysonho @ Open Grid Scheduler / Grid Engine | CC0 |
-| `headphones.webp` | [Audio-Technica Headphones (Custom Earpads).jpg](https://commons.wikimedia.org/wiki/File:Audio-Technica_Headphones_(Custom_Earpads).jpg) | P0lykey | CC0 |
-| `kettle.webp` | [Дисковый электрочайник f01.jpg](https://commons.wikimedia.org/wiki/File:%D0%94%D0%B8%D1%81%D0%BA%D0%BE%D0%B2%D1%8B%D0%B9_%D1%8D%D0%BB%D0%B5%D0%BA%D1%82%D1%80%D0%BE%D1%87%D0%B0%D0%B9%D0%BD%D0%B8%D0%BA_f01.jpg) | Ural-66 | CC0 |
-| `keycaps.webp` | [Double-shot keycaps.jpg](https://commons.wikimedia.org/wiki/File:Double-shot_keycaps.jpg) | Mercury | CC0 |
-| `usb-hub.webp` | [USB hub Gembird.jpg](https://commons.wikimedia.org/wiki/File:USB_hub_Gembird.jpg) | А. Кабанов | CC0 |
-| `webcam.webp` | [USB webcam for PC.jpg](https://commons.wikimedia.org/wiki/File:USB_webcam_for_PC.jpg) | WrS.tm.pl | CC0 |
-| `trackball.webp` | [Atari Trakball - 48929499743.jpg](https://commons.wikimedia.org/wiki/File:Atari_Trakball_-_48929499743.jpg) | stiefkind | CC0 |
-| `headphones-wired.webp` | [Alphacolor 13 2016-12-29 (Unsplash).jpg](https://commons.wikimedia.org/wiki/File:Alphacolor_13_2016-12-29_(Unsplash).jpg) | Alphacolor 13 duck58cth | CC0 |
-| `radio.webp` | [Radio receiver Olimpik-305 (радиоприемник Олимпик-305).jpg](https://commons.wikimedia.org/wiki/File:Radio_receiver_Olimpik-305_(%D1%80%D0%B0%D0%B4%D0%B8%D0%BE%D0%BF%D1%80%D0%B8%D0%B5%D0%BC%D0%BD%D0%B8%D0%BA_%D0%9E%D0%BB%D0%B8%D0%BC%D0%BF%D0%B8%D0%BA-305).jpg) | El nomad | CC0 |
-| `moka-pot.webp` | [Moka Pot (55013301353).jpg](https://commons.wikimedia.org/wiki/File:Moka_Pot_(55013301353).jpg) | ajay_suresh | CC0 |
-| `mug.webp` | [Coffee steaming in a mug.jpg](https://commons.wikimedia.org/wiki/File:Coffee_steaming_in_a_mug.jpg) | PedanticNarrativeController | CC0 |
-
-CC0 사진은 출처를 밝힐 의무가 없지만, 어디서 왔는지 다시 확인할 수 있게 적어 둔다. 모두 긴 변 800px의 webp로 줄였다.
-```
-
 - 저장소에서 빼도 데모 화면에는 보인다. 상점은 상품 사진을 누구나 볼 수 있는 주소로 내보낸다. 저장소에서 빼는 것이 막는 것은 "git 기록에 영원히 남는 것"과 "저장소를 받은 누구나 원본 파일을 갖는 것"이다.
 
 - 데모에서도 보이면 안 되는 것(예: 명함의 연락처)이 있으면 사진 자체에서 가린다.
@@ -1625,6 +1628,7 @@ CC0 사진은 출처를 밝힐 의무가 없지만, 어디서 왔는지 다시 �
      }));
    }
  
++  // 시드가 API보다 먼저 돌 수 있으므로(CI) 버킷 만들기를 따로 꺼낸다
 +  async ensureBucket(): Promise<void> {
 +    try {
 +      await this.s3.send(new HeadBucketCommand({ Bucket: this.bucket }));
@@ -1634,6 +1638,7 @@ CC0 사진은 출처를 밝힐 의무가 없지만, 어디서 왔는지 다시 �
 +    }
 +  }
 +
++  // 고정 키 파일: 같은 크기로 이미 있으면 올리지 않는다. 지워졌거나 바뀌었으면 다시 올린다
 +  async putIfAbsent(key: string, body: Buffer, contentType: string): Promise<boolean> {
 +    if ((await this.head(key))?.size === body.length) return false;
 +    await this.s3.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }));
@@ -1679,6 +1684,7 @@ CC0 사진은 출처를 밝힐 의무가 없지만, 어디서 왔는지 다시 �
  
  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.ADMIN_DATABASE_URL ?? process.env.DATABASE_URL! }) });
 +const storage = new StorageService();
++// 이 파일 기준의 prisma/seed/ 폴더. 실행 위치와 상관없이 같은 곳을 가리킨다
 +const dir = new URL("./seed/", import.meta.url);
 +const catalog = JSON.parse(await readFile(new URL("catalog.json", dir), "utf8")) as Catalog;
  
@@ -1729,6 +1735,7 @@ CC0 사진은 출처를 밝힐 의무가 없지만, 어디서 왔는지 다시 �
 +let uploaded = 0;
 +const noPhoto = new Set<string>();
 +for (const p of catalog.products) {
++  // 고정 키. 매번 같으므로 초기화가 몇 번 돌아도 같은 파일을 가리킨다(고아 정리는 products/만 본다)
 +  const key = `seed/${p.photo}`;
 +  const body = await readFile(new URL(`photos/${p.photo}`, dir)).catch((err: NodeJS.ErrnoException) => {
 +    if (err.code === "ENOENT") return null;
@@ -1736,6 +1743,7 @@ CC0 사진은 출처를 밝힐 의무가 없지만, 어디서 왔는지 다시 �
 +  });
 +  if (body) {
 +    if (await storage.putIfAbsent(key, body, "image/webp")) uploaded++;
++  // 파일이 저장소에 없는 사진(maker-*)은 S3에 미리 올려 둔 키를 쓴다. 키도 없으면 사진 없이 둔다
 +  } else if (!(await storage.head(key))) {
 +    noPhoto.add(p.photo);
 +  }
@@ -1751,11 +1759,14 @@ CC0 사진은 출처를 밝힐 의무가 없지만, 어디서 왔는지 다시 �
 +  const categoryId = categoryIds.get(p.category);
 +  if (categoryId === undefined) throw new Error(`catalog.json: 없는 카테고리 "${p.category}" (${p.name})`);
 +  const data = { name: p.name, price: p.price, stock: p.stock, categoryId, imageKey: noPhoto.has(p.photo) ? null : `seed/${p.photo}` };
++  // TRUNCATE 대신 id로 덮어쓴다. 남겨야 할 주문의 품목이 CASCADE로 지워지지 않는다
 +  await prisma.product.upsert({ where: { id: p.id }, create: { id: p.id, ...data }, update: data });
 +}
 +const productIds = catalog.products.map((p) => p.id);
++// 파일에서 뺀 상품: 주문에 없으면 지우고, 있으면 품절로 남긴다(지난 주문의 품목 이름 유지)
 +await prisma.product.deleteMany({ where: { id: { notIn: productIds }, items: { none: {} } } });
 +await prisma.product.updateMany({ where: { id: { notIn: productIds } }, data: { stock: 0 } });
++// id를 직접 넣었으므로 자동 증가 순번을 맞춘다. 안 하면 다음 자동 id가 겹친다
 +await prisma.$executeRaw`SELECT setval(pg_get_serial_sequence('categories', 'id'), (SELECT max(id) FROM categories))`;
 +await prisma.$executeRaw`SELECT setval(pg_get_serial_sequence('products', 'id'), (SELECT max(id) FROM products))`;
 +
@@ -1768,6 +1779,7 @@ CC0 사진은 출처를 밝힐 의무가 없지만, 어디서 왔는지 다시 �
 +];
 +for (const u of seedUsers) {
 +  const passwordHash = await hashPassword(process.env.DEMO_PASSWORD!);
++  // 없으면 만들고, 있으면 비밀번호만 맞춘다. 역할(진짜 관리자)은 덮어쓰지 않는다
 +  await prisma.user.upsert({ where: { id: u.id }, create: { ...u, passwordHash }, update: { passwordHash } });
 +}
 +
@@ -1779,6 +1791,7 @@ CC0 사진은 출처를 밝힐 의무가 없지만, 어디서 왔는지 다시 �
 +  { userId: "park", paid: true, items: [[15, 1], [16, 1]] },
 +];
 +const seedUserIds = seedUsers.map((u) => u.id);
++// 시드 사용자의 주문만 지우고 품목을 넣어 다시 만든다. GitHub 사용자의 주문은 남긴다
 +await prisma.orderItem.deleteMany({ where: { order: { userId: { in: seedUserIds } } } });
 +await prisma.order.deleteMany({ where: { userId: { in: seedUserIds } } });
 +const priceOf = new Map(catalog.products.map((p) => [p.id, p.price]));
@@ -1882,6 +1895,7 @@ CC0 사진은 출처를 밝힐 의무가 없지만, 어디서 왔는지 다시 �
        NODE_EXTRA_CA_CERTS: /certs/rds-ca.pem
 +      S3_ENDPOINT: ""
 +      S3_REGION: ${AWS_REGION:?}
++      # 시드가 사진을 올릴 버킷. 키는 주지 않고 EC2의 IAM 역할을 쓴다
 +      S3_BUCKET: ${S3_BUCKET:?}
      volumes:
        - ./rds-ca.pem:/certs/rds-ca.pem:ro
@@ -1907,6 +1921,7 @@ PHOTOS="$(dirname "$0")/../../order-api-nest/prisma/seed/photos"
 step "저장소에 넣지 않은 시드 사진 → s3://$BUCKET/seed/"
 for f in "$PHOTOS"/maker-*.webp; do
   [ -e "$f" ] || { echo "$PHOTOS에 maker-*.webp가 없다"; exit 1; }
+  # 시드와 같은 고정 키. content-type을 주지 않으면 binary/octet-stream으로 저장된다
   aws s3 cp "$f" "s3://$BUCKET/seed/$(basename "$f")" --content-type image/webp --only-show-errors
   echo "올림  seed/$(basename "$f")"
 done
@@ -1930,11 +1945,7 @@ chmod +x deploy/aws/62-seed-private-photos.sh
 cd order-api-nest
 npx prisma db seed
 npx prisma db seed
-```
 
-<!-- 재측정 -->
-```text
-(예상 모양)
 seed 완료: 상품 16개(사진 새로 올림 16장, 사진 없음 0개), 임시 사용자 <N>명 삭제, 사용자 4명, 주문 5건
 seed 완료: 상품 16개(사진 새로 올림 0장, 사진 없음 0개), 임시 사용자 0명 삭제, 사용자 4명, 주문 5건
 ```
@@ -1943,20 +1954,35 @@ seed 완료: 상품 16개(사진 새로 올림 0장, 사진 없음 0개), 임시
 
 ```sh
 node scripts/list-objects.mjs seed/
-```
 
-<!-- 재측정 -->
-```text
-(예상 모양) key가 seed/… 인 16행, "가리키는 상품"이 1~16
+┌─────────┬──────────────────────────────┬────────┬───────────────┬───────────────┐
+│ (index) │ key                          │ size   │ 올라간 지(초) │ 가리키는 상품 │
+├─────────┼──────────────────────────────┼────────┼───────────────┼───────────────┤
+│ 0       │ 'seed/headphones-wired.webp' │ 98602  │ 37            │ 13            │
+│ 1       │ 'seed/headphones.webp'       │ 40594  │ 37            │ 7             │
+│ 2       │ 'seed/kettle.webp'           │ 71670  │ 37            │ 8             │
+│ 3       │ 'seed/keyboard-limited.webp' │ 98454  │ 37            │ 5             │
+│ 4       │ 'seed/keycaps.webp'          │ 97188  │ 37            │ 9             │
+│ 5       │ 'seed/maker-card.webp'       │ 71730  │ 37            │ 1             │
+│ 6       │ 'seed/maker-photo-1.webp'    │ 107604 │ 37            │ 2             │
+│ 7       │ 'seed/maker-photo-2.webp'    │ 67996  │ 37            │ 3             │
+│ 8       │ 'seed/maker-photo-3.webp'    │ 74964  │ 37            │ 4             │
+│ 9       │ 'seed/moka-pot.webp'         │ 98326  │ 37            │ 15            │
+│ 10      │ 'seed/mouse.webp'            │ 97098  │ 37            │ 6             │
+│ 11      │ 'seed/mug.webp'              │ 101702 │ 37            │ 16            │
+│ 12      │ 'seed/radio.webp'            │ 90832  │ 37            │ 14            │
+│ 13      │ 'seed/trackball.webp'        │ 85978  │ 37            │ 12            │
+│ 14      │ 'seed/usb-hub.webp'          │ 97432  │ 37            │ 10            │
+│ 15      │ 'seed/webcam.webp'           │ 93204  │ 37            │ 11            │
+└─────────┴──────────────────────────────┴────────┴───────────────┴───────────────┘
 ```
 
 `http://localhost:3000/shop`에 사진이 붙은 상품 16개가 보이고, "내 주문"(`kim`)의 주문을 열면 품목이 있다.
 
 관리 화면에서 `kim`으로 마우스 사진을 다른 파일로 바꾼 뒤 시드를 다시 돌린다.
 
-<!-- 재측정 -->
-```text
-(예상 모양)
+```sh
+npx prisma db seed
 seed 완료: 상품 16개(사진 새로 올림 1장, 사진 없음 0개), …
 ```
 
@@ -1978,12 +2004,8 @@ Settings → Environments → `production` → Deployment branches and tags에�
 
 ```sh
 ./deploy/aws/62-seed-private-photos.sh
-```
 
-<!-- 재측정 -->
-```text
-(예상 모양)
-== 저장소에 넣지 않은 시드 사진 → s3://node-order-images-<계정 번호>/seed/
+== 저장소에 넣지 않은 시드 사진 → s3://node-order-images-042449721455/seed/
 올림  seed/maker-card.webp
 올림  seed/maker-photo-1.webp
 올림  seed/maker-photo-2.webp
@@ -1993,14 +2015,10 @@ Settings → Environments → `production` → Deployment branches and tags에�
 바뀐 시드를 한 번 돌린다.
 
 ```sh
-ssh … 'cd /opt/node-order && FORCE=1 ops/reset-demo.sh'
-```
-
-<!-- 재측정 -->
-```text
-(예상 모양)
+ssh -i deploy/aws/.local/admin_ed25519 -o UserKnownHostsFile=deploy/aws/.local/known_hosts ubuntu@3.106.98.215
+cd /opt/node-order && FORCE=1 ops/reset-demo.sh
 <시각> 데모 데이터 초기화 시작
-seed 완료: 상품 16개(사진 새로 올림 12장, 사진 없음 0개), 임시 사용자 0명 삭제, 사용자 <N>명, 주문 <M>건
+...
 <시각> 데모 데이터 초기화 끝
 ```
 
@@ -2015,7 +2033,7 @@ seed 완료: 상품 16개(사진 새로 올림 12장, 사진 없음 0개), 임�
 이제 초기화가 GitHub 사용자를 남기므로 역할도 남는다. 운영 화면에서 GitHub로 한 번 로그인해 사용자 행을 만든 뒤, 서버에서 SQL 한 줄로 올린다(2장 "진짜 관리자는 어디서 정하나").
 
 ```sh
-ssh …
+ssh -i deploy/aws/.local/admin_ed25519 -o UserKnownHostsFile=deploy/aws/.local/known_hosts ubuntu@3.106.98.215
 cd /opt/node-order
 echo "UPDATE users SET role = 'admin' WHERE github_id = '<GitHub 숫자 id>';" \
   | docker compose run --rm -T migrate npx prisma db execute --stdin
@@ -2082,6 +2100,31 @@ echo "UPDATE users SET role = 'admin' WHERE github_id = '<GitHub 숫자 id>';" \
 
 - `id`는 한 번 쓰면 다른 상품에 다시 주지 않는다. 그 id를 가리키는 지난 주문의 품목 이름이 바뀌어 보인다. 상품을 내릴 때는 파일에서 빼고(품절로 남는다), 새 상품은 새 id를 받는다.
 
+#### 고친 뒤 운영에 반영되는 때
+
+배포만으로는 바뀌지 않는다. 시드가 돌아야 바뀐다.
+
+| 단계 | 일어나는 일 |
+|---|---|
+| 커밋·푸시 | CI가 새 마이그레이션 이미지를 만든다. 바뀐 `catalog.json`과 `photos/`가 이미지에 들어간다(`.json`은 문서만 바꾼 푸시처럼 건너뛰지 않는다) |
+| 배포(`deploy.sh`) | 마이그레이션만 적용한다. 시드는 돌리지 않으므로 운영 DB의 상품은 아직 옛 값이다 |
+| 다음 04:00 초기화 | 지금 배포된 이미지로 시드를 돈다. 여기서 바뀐다 |
+
+바로 바꾸려면 배포가 끝난 뒤 초기화를 한 번 돌린다(작업 7과 같은 명령).
+
+```sh
+ssh -i deploy/aws/.local/admin_ed25519 -o UserKnownHostsFile=deploy/aws/.local/known_hosts ubuntu@3.106.98.215
+cd /opt/node-order && FORCE=1 ops/reset-demo.sh
+```
+
+- 그날 03:30 백업이 이미 성공했으면 `FORCE=1`은 빼도 된다.
+
+- 문구·가격만 바꿨으면 출력이 `사진 새로 올림 0장, 사진 없음 0개`다. 공개 사진을 새 이름으로 더했으면 그 수만큼 올린다.
+
+- 만든 사람의 사진(`maker-*`)을 바꿨으면, 새 이름의 파일로 `62-seed-private-photos.sh`를 먼저 돌린 뒤 초기화를 돌린다. 이 사진은 이미지에 없으므로 시드가 올리지 못한다.
+
+- 손으로 돌려도 매일 초기화와 같은 일을 한다. 그 시각에 둘러보던 방문자의 임시 계정이 지워지고, 재고와 시드 사용자의 주문도 파일 값으로 돌아간다.
+
 ### 남길 것
 
 - **찾아보면 되는 것**: Prisma `upsert`·`deleteMany`의 `items: { none: {} }`, `setval`·`pg_get_serial_sequence`, `import.meta.url`로 파일 경로 만들기, `cwebp -size`. 외울 필요 없다.
@@ -2105,10 +2148,9 @@ echo "UPDATE users SET role = 'admin' WHERE github_id = '<GitHub 숫자 id>';" \
   - 프론트 e2e에서 `stock-1`·`image-input-2`를 못 찾는다 → 상품 id가 바뀌었다(작업 4)
   - ``Unique constraint failed on the fields: (`id`)`` → id를 직접 넣은 뒤 순번(`setval`)을 맞추지 않았다
   - 초기화 뒤 GitHub 사용자가 사라지고 모두 로그아웃됐다 → 서버의 마이그레이션 이미지가 아직 옛 시드다(배포가 안 됐다)
+  - `catalog.json`을 고쳐 배포했는데 상품이 그대로다 → 배포는 시드를 돌리지 않는다. 다음 04:00을 기다리거나 `ops/reset-demo.sh`를 손으로 돌린다
 
 ## 5. 디버깅
-
-<!-- 검증 안 됨: 새로 쓴 절 -->
 
 ### 진단 1. 지금 누구로, 어떤 역할로 들어와 있나
 
@@ -2128,11 +2170,7 @@ DB의 역할과 다르면 토큰이 옛것이다(2장 "역할은 토큰에 실�
 
 ```sh
 ssh … 'cd /opt/node-order && docker compose exec -T redis redis-cli --scan --pattern "rate:*"'
-```
 
-<!-- 재측정 -->
-```text
-(예상 모양)
 rate:all:<방문자 IP>:<칸 번호>
 rate:auth:<방문자 IP>:<칸 번호>
 ```
@@ -2181,10 +2219,9 @@ curl -s localhost:4000/metrics | grep http_rate_limited_total
 | e2e가 `stock-1`·`image-input-2`를 못 찾는다 | 상품 id가 바뀌었다 | 4장 작업 4 | 4 |
 | ``Unique constraint failed on the fields: (`id`)`` | 자동 증가 순번이 직접 넣은 id보다 작다 | `setval` | 4 |
 | 초기화 뒤 GitHub 사용자가 사라졌다 | 서버가 아직 옛 시드다 | 배포된 `IMAGE_TAG` | 4 |
+| `catalog.json`을 고쳐 배포했는데 상품이 그대로다 | 배포는 마이그레이션만 하고 시드는 돌리지 않는다 | 다음 04:00, 또는 `FORCE=1 ops/reset-demo.sh` | 4 |
 
 ## 6. 완성 확인
-
-<!-- 검증 안 됨: 새로 쓴 절 -->
 
 ### 시험해보기
 
@@ -2208,8 +2245,6 @@ npm run lint && npm run typecheck && npm run test:api && npm run test:web
 - [ ] 만든 사람의 사진은 git 기록에 없고(`git log --all -- '*maker-*'`가 비어 있다), 운영 S3의 `seed/`에만 있다
 
 ## 7. 다음 단계
-
-<!-- 검증 안 됨: 새로 쓴 절 -->
 
 공개 URL에 띄운 데모는 이제 방문자마다 따로 놀고, 아무도 남의 것을 바꾸지 못하며, 매일 같은 카탈로그로 돌아온다. 다음 단계에서 상품을 등록·수정하는 관리 기능이나 서버 렌더링을 더할 때, 이 문서의 표(관리자 전용 API, 세지 않는 경로, 초기화가 되돌리는 것)에 한 줄씩 더하는 것부터 한다.
 
