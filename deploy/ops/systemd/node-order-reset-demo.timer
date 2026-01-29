@@ -1,0 +1,9 @@
+[Unit]
+Description=node-order 데모 데이터 초기화 매일
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 Asia/Seoul
+Persistent=true
+
+[Install]
+WantedBy=timers.target
