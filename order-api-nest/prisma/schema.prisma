@@ -39,7 +39,8 @@ model Order {
   canceledAt        DateTime?   @map("canceled_at")
   items             OrderItem[]
 
-  @@index([userId])
+  @@index([createdAt, id])
+  @@index([userId, createdAt, id])
   @@map("orders")
 }
 
