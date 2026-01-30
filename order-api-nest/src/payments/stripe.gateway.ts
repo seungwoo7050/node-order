@@ -3,11 +3,20 @@ import Stripe from "stripe";
 
 export type CheckoutSession = { id: string; url: string };
 
+export const SIMULATOR_WEBHOOK_SECRET = "whsec_simulator";
+
+function simulatorUrl(): URL | undefined {
+  const url = process.env.STRIPE_SIMULATOR_URL;
+  return url && process.env.NODE_ENV !== "production" ? new URL(url) : undefined;
+}
+
 @Injectable()
 export class StripeGateway {
   private client?: Stripe;
 
   private get stripe(): Stripe {
+    const sim = simulatorUrl();
+    if (sim) return (this.client ??= new Stripe("sk_test_simulator", { protocol: "http", host: sim.hostname, port: sim.port }));
     const key = process.env.STRIPE_SECRET_KEY;
     if (!key) throw new Error("STRIPE_SECRET_KEY 환경변수가 없습니다");
     return (this.client ??= new Stripe(key));
@@ -30,7 +39,7 @@ export class StripeGateway {
   }
 
   constructWebhookEvent(rawBody: Buffer, signature: string | undefined): Stripe.Event {
-    const secret = process.env.STRIPE_WEBHOOK_SECRET;
+    const secret = simulatorUrl() ? SIMULATOR_WEBHOOK_SECRET : process.env.STRIPE_WEBHOOK_SECRET;
     if (!secret) throw new Error("STRIPE_WEBHOOK_SECRET 환경변수가 없습니다");
     return Stripe.webhooks.constructEvent(rawBody, signature ?? "", secret);
   }
