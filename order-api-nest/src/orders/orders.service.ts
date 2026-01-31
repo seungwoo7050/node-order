@@ -6,12 +6,14 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import type { CheckoutItemDto } from "./dto/checkout.dto.js";
 import { cancelUnpaidOrder } from "../payments/cancel-unpaid-order.js";
 import { StripeGateway } from "../payments/stripe.gateway.js";
+import { afterOrder, encodeOrderCursor, orderListOrder, toPage, type Page } from "../pagination/cursor.js";
 
 export type Order = { id: number; user: string; price: number; paid: boolean; }
 export type CheckoutResult = Order & { items: { productId: number; quantity: number; unitPrice: number }[] };
 export type CheckoutResponse = CheckoutResult & { checkoutUrl: string };
 
 const orderSelect = { id: true, userId: true, price: true, paid: true } as const;
+const listSelect = { ...orderSelect, createdAt: true } as const; // 다음 cursor를 만들려면 정렬 키도 읽어야 한다
 const toOrder = (row: { id: number; userId: string; price: number; paid: boolean }): Order =>(
   { id: row.id,user: row.userId, price: row.price, paid: row.paid }
 );
@@ -26,9 +28,16 @@ export class OrdersService {
     private readonly stripe: StripeGateway,
   ) {}
 
-  async list(paid?: boolean): Promise<Order[]> {
-    const rows = await this.prisma.asAdmin((tx) => tx.order.findMany({ where: { paid }, select: orderSelect, orderBy: { id: "asc" } }));
-    return rows.map(toOrder);
+  async list(query: { limit: number; cursor?: string; offset?: number; paid?: boolean }): Promise<Page<Order & { createdAt: Date }>> {
+    const rows = await this.prisma.asAdmin((tx) => tx.order.findMany({
+      where: { paid: query.paid, ...afterOrder(query.cursor) },
+      select: listSelect,
+      orderBy: [...orderListOrder],
+      skip: query.cursor ? undefined : query.offset,
+      take: query.limit + 1,
+    }));
+    const page = toPage(rows, query.limit, encodeOrderCursor);
+    return { items: page.items.map((r) => ({ ...toOrder(r), createdAt: r.createdAt })), nextCursor: page.nextCursor };
   }
 
   async findOne(id: number): Promise<Order> {

@@ -5,6 +5,8 @@ import { CreateOrderDto } from "./dto/create-order.dto.js";
 import { OrdersService } from "./orders.service.js";
 import { CheckoutDto } from "./dto/checkout.dto.js";
 import { AdminGuard } from "../auth/admin.guard.js";
+import { AdminOrderQueryDto } from "../pagination/page-query.dto.js";
+import { PAGE_QUERY } from "../pagination/page-query.pipe.js";
 
 @Controller("orders")
 export class OrdersController {
@@ -12,8 +14,8 @@ export class OrdersController {
 
   @Get()
   @UseGuards(AuthGuard("jwt"), AdminGuard)
-  list(@Query("paid") paid?: string) {
-    return this.ordersService.list(paid === undefined ? undefined : paid === "true");
+  list(@Query(PAGE_QUERY) query: AdminOrderQueryDto) {
+    return this.ordersService.list(query);
   }
 
   @Get("totals")

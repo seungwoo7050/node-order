@@ -1,6 +1,9 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, Query } from "@nestjs/common";
+import { ProductPageQueryDto } from "../pagination/page-query.dto.js";
+import { PAGE_QUERY } from "../pagination/page-query.pipe.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { StorageService } from "../storage/storage.service.js";
+import { listProducts } from "./product-list.js";
 
 @Controller("products")
 export class ProductsController {
@@ -10,13 +13,7 @@ export class ProductsController {
   ) {}
 
   @Get()
-  async list() {
-    const products = await this.prisma.product.findMany({ orderBy: { id: "asc" } });
-    return Promise.all(
-      products.map(async ({ imageKey, ...p }) => ({
-        ...p,
-        imageUrl: imageKey ? await this.storage.createDownloadUrl(imageKey, 600) : null,
-      })),
-    );
+  list(@Query(PAGE_QUERY) query: ProductPageQueryDto) {
+    return listProducts(this.prisma, this.storage, query);
   }
 }
