@@ -1,19 +1,16 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { orderDetailSelect, orderSelect } from "../me/order-select.js";
+import { listMyOrders } from "../me/my-orders.js";
+import { orderDetailSelect } from "../me/order-select.js";
+import { DEFAULT_LIMIT, MAX_LIMIT } from "../pagination/cursor.js";
+import { listProducts } from "../products/product-list.js";
 import { protectedProcedure, publicProcedure, router } from "./trpc.js";
 
 export const appRouter = router({
   products: router({
-    list: publicProcedure.query(async ({ ctx }) => {
-      const products = await ctx.prisma.product.findMany({ orderBy: { id: "asc" } });
-      return Promise.all(
-        products.map(async ({ imageKey, ...p }) => ({
-          ...p,
-          imageUrl: imageKey ? await ctx.storage.createDownloadUrl(imageKey, 600) : null,
-        })),
-      );
-    }),
+    list: publicProcedure
+      .input(z.object({ limit: z.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT), cursor: z.number().int().positive().nullish() }).default({ limit: DEFAULT_LIMIT }))
+      .query(({ ctx, input }) => listProducts(ctx.prisma, ctx.storage, input)),
   }),
 
   categories: router({
@@ -26,11 +23,9 @@ export const appRouter = router({
     profile: protectedProcedure.query(({ ctx }) =>
       ctx.prisma.user.findUniqueOrThrow({ where: { id: ctx.userId }, select: { id: true, name: true, role: true } }),
     ),
-    orders: protectedProcedure.query(({ ctx }) =>
-      ctx.prisma.asUser(ctx.userId, (tx) =>
-        tx.order.findMany({ where: { userId: ctx.userId }, select: orderSelect, orderBy: { id: "desc" } }),
-      ),
-    ),
+    orders: protectedProcedure
+      .input(z.object({ limit: z.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT), cursor: z.string().nullish() }).default({ limit: DEFAULT_LIMIT }))
+      .query(({ ctx, input }) => ctx.prisma.asUser(ctx.userId, (tx) => listMyOrders(tx, ctx.userId, input))),
     order: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ ctx, input }) => {
       const order = await ctx.prisma.asUser(ctx.userId, (tx) =>
         tx.order.findFirst({ where: { id: input.id, userId: ctx.userId }, select: orderDetailSelect }),
