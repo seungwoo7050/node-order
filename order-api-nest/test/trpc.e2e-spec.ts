@@ -47,7 +47,7 @@ describe("tRPC - 회귀 테스트", () => {
 
   it("kim은 자기 주문만 받고, lee의 주문은 NOT_FOUND", async () => {
     const kim = callerAs("kim");
-    expect((await kim.me.orders()).map((o) => o.price)).toEqual([1000]);
+    expect((await kim.me.orders()).items.map((o) => o.price)).toEqual([1000]);
     expect(await codeOf(kim.me.order({ id: 2 }))).toBe("NOT_FOUND");
   });
 
@@ -64,7 +64,7 @@ describe("tRPC - 회귀 테스트", () => {
     const token = app.get(JwtService, { strict: false }).sign({ sub: "kim" });
     const ok = await fetch(`${baseUrl}/trpc/me.orders`, { headers: { Authorization: `Bearer ${token}` } });
     expect(ok.status).toBe(200);
-    expect((await ok.json()).result.data).toHaveLength(1);
+    expect((await ok.json()).result.data.items).toHaveLength(1);
 
     const bad = await fetch(`${baseUrl}/trpc/me.orders`, { headers: { Authorization: "Bearer not-a-token" } });
     expect(bad.status).toBe(401);
@@ -83,7 +83,7 @@ describe("tRPC - 회귀 테스트", () => {
       data: { userId: "kim", price: 210000, paid: false, items: { create: [{ productId: 2, quantity: 2, unitPrice: 30000 }, { productId: 1, quantity: 1, unitPrice: 150000 }] } },
     }); // id 3
     const kim = callerAs("kim");
-    expect((await kim.me.orders()).map((o) => o.id)).toEqual([3, 1]);
+    expect((await kim.me.orders()).items.map((o) => o.id)).toEqual([3, 1]);
     const detail = await kim.me.order({ id: 3 });
     expect(detail.items).toEqual([
       { quantity: 1, unitPrice: 150000, product: { id: 1, name: "키보드" } },
