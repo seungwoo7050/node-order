@@ -1,11 +1,13 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useCartStore } from "@/lib/cart-store";
+import { productListOptions } from "@/lib/lists";
 import { useTRPC } from "@/lib/trpc";
+import { LoadMore } from "../load-more";
 import { Stepper } from "./stepper";
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
@@ -43,24 +45,25 @@ function AddedToast({ name, onDone }: { name: string; onDone: () => void }) {
 
 function ProductList() {
   const trpc = useTRPC();
-  const { data, isPending, error } = useQuery(trpc.products.list.queryOptions());
+  const { data, isPending, error, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = useInfiniteQuery(productListOptions(trpc));
   const add = useCartStore((s) => s.add);
   const inCart = useCartStore((s) => s.items);
   const [added, setAdded] = useState<string | null>(null);
   const clearAdded = useCallback(() => setAdded(null), []);
 
   if (isPending) return <ProductSkeleton />;
-  if (error)
+  if (error && !data)
     return (
       <p role="alert" className="alert">
         상품을 불러오지 못했습니다.
         <span className="block text-sm text-muted">잠시 뒤 새로 고침해 주세요. ({error.message})</span>
       </p>
     );
+  const products = data.pages.flatMap((page) => page.items);
   return (
     <>
       <ul className="border-t border-line">
-        {data.map((p) => {
+        {products.map((p) => {
           const quantity = inCart.find((i) => i.productId === p.id)?.quantity ?? 0;
           const soldOut = p.stock === 0;
           return (
@@ -91,6 +94,8 @@ function ProductList() {
           );
         })}
       </ul>
+      <LoadMore hasNextPage={hasNextPage} isFetchingNextPage={isFetchingNextPage} isFetchNextPageError={isFetchNextPageError}
+      fetchNextPage={fetchNextPage} loaded={products.length} pages={data.pages.length} noun="상품" />
       {added && <AddedToast name={added} onDone={clearAdded} />}
     </>
   );
