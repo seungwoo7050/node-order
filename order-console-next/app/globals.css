@@ -71,7 +71,7 @@ body {
   .num { font-variant-numeric: tabular-nums; }
 
   .btn { border: 1px solid var(--line-strong); padding: 7px 16px; font-size: 0.82rem; font-weight: 400; cursor: pointer; }
-  .btn:disabled { color: var(--faint); border-color: var(--line); cursor: not-allowed; }
+  .btn:disabled, .btn[aria-disabled="true"] { color: var(--faint); border-color: var(--line); cursor: not-allowed; }
   .btn-primary { background: var(--fg); color: var(--bg); border-color: var(--fg); padding: 12px 24px; letter-spacing: 0.06em; }
   .btn-primary:disabled { background: var(--line); border-color: var(--line); color: var(--faint); }
   .link-quiet { font-size: 0.8rem; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
