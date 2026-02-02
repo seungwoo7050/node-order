@@ -1,9 +1,10 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { ApiError, authFetch } from "@/lib/api-client";
 import { useCartStore } from "@/lib/cart-store";
+import { productListOptions } from "@/lib/lists";
 import { useTRPC } from "@/lib/trpc";
 import { useOnline } from "../online-banner";
 import { Stepper } from "../shop/stepper";
@@ -18,8 +19,8 @@ export default function CartPage() {
   const online = useOnline();
   const queryClient = useQueryClient();
   const trpc = useTRPC();
-  const { data: products } = useQuery(trpc.products.list.queryOptions());
-  const stockOf = (productId: number) => products?.find((p) => p.id === productId)?.stock ?? Infinity;
+  const { data: products } = useInfiniteQuery(productListOptions(trpc));
+  const stockOf = (productId: number) => products?.pages.flatMap((p) => p.items).find((p) => p.id === productId)?.stock ?? Infinity;
 
   const checkout = useMutation({
     mutationFn: () => {
@@ -32,8 +33,8 @@ export default function CartPage() {
     },
     onSuccess: (data) => {
       useCartStore.getState().finishCheckout();
-      void queryClient.invalidateQueries({ queryKey: trpc.products.list.queryKey() });
-      void queryClient.invalidateQueries({ queryKey: trpc.me.orders.queryKey() });
+      void queryClient.invalidateQueries({ queryKey: trpc.products.list.pathKey() });
+      void queryClient.invalidateQueries({ queryKey: trpc.me.orders.pathKey() });
       window.location.assign(data.checkoutUrl);
     },
   });
