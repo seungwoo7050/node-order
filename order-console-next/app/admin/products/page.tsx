@@ -1,18 +1,22 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { productListOptions } from "@/lib/lists";
 import { useTRPC } from "@/lib/trpc";
+import { LoadMore } from "../../load-more";
 import { ProductImageUploader } from "./product-image-uploader";
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
 function ProductTable({ readOnly }: { readOnly: boolean }) {
   const trpc = useTRPC();
-  const { data, isPending, error } = useQuery(trpc.products.list.queryOptions());
+  const { data, isPending, error, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = useInfiniteQuery(productListOptions(trpc));
   if (isPending) return <p role="status" className="text-sm text-muted">상품을 불러오는 중입니다.</p>;
-  if (error) return <p role="alert" className="alert">상품을 불러오지 못했습니다. ({error.message})</p>;
+  if (error && !data) return <p role="alert" className="alert">상품을 불러오지 못했습니다. ({error.message})</p>;
+  const products = data.pages.flatMap((page) => page.items);
   return (
+    <>
     <table className="w-full border-collapse text-left">
       <thead>
         <tr className="border-b border-line-strong">
@@ -23,7 +27,7 @@ function ProductTable({ readOnly }: { readOnly: boolean }) {
         </tr>
       </thead>
       <tbody>
-        {data.map((p) => (
+        {products.map((p) => (
           <tr key={p.id} className="border-b border-line">
             <td className="py-3">
               <span className="flex items-center gap-3">
@@ -43,6 +47,9 @@ function ProductTable({ readOnly }: { readOnly: boolean }) {
         ))}
       </tbody>
     </table>
+    <LoadMore hasNextPage={hasNextPage} isFetchingNextPage={isFetchingNextPage} isFetchNextPageError={isFetchNextPageError}
+      fetchNextPage={fetchNextPage} loaded={products.length} pages={data.pages.length} noun="상품" />
+    </>
   );
 }
 

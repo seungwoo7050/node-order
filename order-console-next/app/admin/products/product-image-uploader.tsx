@@ -24,7 +24,7 @@ export function ProductImageUploader({ productId, hasImage, readOnly }: { produc
         body: JSON.stringify({ key }),
       });
     },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: trpc.products.list.queryKey() }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: trpc.products.list.pathKey() }),
   });
 
   return (
