@@ -23,17 +23,18 @@ const statuses = await Promise.all(
         ...(idempotencyKey && { "Idempotency-Key": idempotencyKey }),
       },
       body: JSON.stringify({ items }),
-    }).then((r) => r.status),
+    }).then(async (r) => (r.ok ? String(r.status) : `${r.status} ${(await r.json()).message}`)),
   ),
 );
 const tally = statuses.reduce((acc, s) => ({ ...acc, [s]: (acc[s] ?? 0) + 1 }), {});
-console.log("응답 코드별 개수:", tally);
+console.log("응답별 개수:", tally);
 
 const db = new pg.Client({ connectionString: process.env.ADMIN_DATABASE_URL ?? process.env.DATABASE_URL });
 await db.connect();
 const { rows } = await db.query(`
   SELECT p.id, p.name, p.stock AS "남은 재고", COALESCE(SUM(oi.quantity), 0)::int AS "팔린 수량"
   FROM products p LEFT JOIN order_items oi ON oi.product_id = p.id
-  GROUP BY p.id ORDER BY p.id`);
+  WHERE p.id = ANY($1)
+  GROUP BY p.id ORDER BY p.id`, [items.map((i) => i.productId)]);
 console.table(rows);
 await db.end();
