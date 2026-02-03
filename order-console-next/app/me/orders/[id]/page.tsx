@@ -1,8 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
+import { useEffect } from "react";
+import { myOrderListOptions } from "@/lib/lists";
 import { useTRPC } from "@/lib/trpc";
 import { MyOrderList } from "../my-order-list";
 import { OrderStatus, orderDate } from "../order-status";
@@ -16,6 +18,15 @@ function MyOrderDetail({ id }: { id: number }) {
     ...trpc.me.order.queryOptions({ id }),
     refetchInterval: (query) => (fromCheckout && query.state.data && !query.state.data.paid && !query.state.data.canceledAt ? 1000 : false),
   });
+  const queryClient = useQueryClient();
+  const paid = data?.paid === true;
+  useEffect(() => {
+    if (!fromCheckout || !paid) return;
+    queryClient.setQueryData(myOrderListOptions(trpc).queryKey, (old) => old && {
+      ...old,
+      pages: old.pages.map((page) => ({ ...page, items: page.items.map((o) => (o.id === id ? { ...o, paid: true } : o)) })),
+    });
+  }, [fromCheckout, paid, id, queryClient, trpc]);
   if (isPending) return <p role="status" className="text-sm text-muted">주문을 불러오는 중입니다.</p>;
   if (error?.data?.code === "NOT_FOUND") return <p className="note">주문 #{id}을 찾을 수 없습니다.</p>;
   if (error) return <p role="alert" className="alert">주문을 불러오지 못했습니다. ({error.message})</p>;
