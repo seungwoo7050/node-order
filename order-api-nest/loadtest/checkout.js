@@ -17,11 +17,18 @@ export function setup() {
   const res = http.post(`${API}/auth/login`, JSON.stringify({ id: "kim", password: "1234" }), {
     headers: { "Content-Type": "application/json" },
   });
-  return { token: res.json("accessToken") };
+  const loadIds = [];
+  for (let cursor = null; ;) {
+    const page = http.get(`${API}/products?limit=100${cursor ? `&cursor=${cursor}` : ""}`).json();
+    loadIds.push(...page.items.filter((p) => p.name.startsWith("부하용 상품") && p.stock > 0).map((p) => p.id));
+    if (!page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return { token: res.json("accessToken"), loadIds };
 }
 
 export default function (data) {
-  const productId = HOT ? 1 : 3 + Math.floor(Math.random() * 50);
+  const productId = HOT ? 5 : data.loadIds[Math.floor(Math.random() * data.loadIds.length)];
   const res = http.post(`${API}/orders/checkout`, JSON.stringify({ items: [{ productId, quantity: 1 }] }), {
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.token}` },
     tags: { name: "checkout" },
