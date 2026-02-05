@@ -8,6 +8,7 @@ const ADMIN_ONLY = [
   ["GET", "/users"], ["POST", "/users"],
   ["PATCH", "/categories/1"], ["DELETE", "/categories/1"],
   ["POST", "/products/1/image/upload-url"], ["POST", "/products/1/image/confirm"],
+  ["POST", "/products/1/stock-adjustments"],
 ] as const;
 
 describe("관리자 전용 API", () => {
