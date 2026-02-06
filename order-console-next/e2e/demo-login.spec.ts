@@ -20,4 +20,5 @@ test("데모 관리자는 관리 화면을 볼 수 있지만 사진 올리기는
   await page.getByRole("link", { name: "관리" }).click();
   await expect(page.getByTestId("read-only-note")).toContainText("볼 수만 있습니다");
   await expect(page.getByTestId(/^image-input-/).first()).toBeDisabled();
+  await expect(page.getByTestId(/^stock-delta-/).first()).toBeDisabled();
 });
