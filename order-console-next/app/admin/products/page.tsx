@@ -6,6 +6,7 @@ import { productListOptions } from "@/lib/lists";
 import { useTRPC } from "@/lib/trpc";
 import { LoadMore } from "../../load-more";
 import { ProductImageUploader } from "./product-image-uploader";
+import { StockAdjuster } from "./stock-adjuster";
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
@@ -23,6 +24,7 @@ function ProductTable({ readOnly }: { readOnly: boolean }) {
           <th scope="col" className="label py-3 font-normal">상품</th>
           <th scope="col" className="label hidden py-3 font-normal sm:table-cell">가격</th>
           <th scope="col" className="label hidden py-3 font-normal sm:table-cell">재고</th>
+          <th scope="col" className="label hidden py-3 font-normal sm:table-cell">입고·조정</th>
           <th scope="col" className="label py-3 font-normal">이미지</th>
         </tr>
       </thead>
@@ -41,7 +43,8 @@ function ProductTable({ readOnly }: { readOnly: boolean }) {
               </span>
             </td>
             <td className="num hidden py-3 sm:table-cell">{won(p.price)}</td>
-            <td className="num hidden py-3 sm:table-cell">{p.stock}</td>
+            <td className="num hidden py-3 sm:table-cell" data-testid={`admin-stock-${p.id}`}>{p.stock}</td>
+            <td className="hidden py-3 sm:table-cell"><StockAdjuster productId={p.id} name={p.name} readOnly={readOnly} /></td>
             <td className="py-3"><ProductImageUploader productId={p.id} hasImage={p.imageUrl !== null} readOnly={readOnly} /></td>
           </tr>
         ))}
@@ -66,7 +69,7 @@ export default function AdminProductsPage() {
       <>
         {profile.role === "demo_admin" ? (
           <p id="read-only-note" className="note mb-8" data-testid="read-only-note">
-            데모 관리자는 볼 수만 있습니다. 사진 올리기·바꾸기는 진짜 관리자만 할 수 있어 버튼을 꺼 두었습니다.
+            데모 관리자는 볼 수만 있습니다. 사진 올리기·바꾸기와 재고 조정은 진짜 관리자만 할 수 있어 입력을 꺼 두었습니다.
           </p>
         ) : (
           <p className="note mb-8">이미지는 PNG·JPEG·WebP, 2MB까지 올릴 수 있습니다. 올린 이미지는 상품 화면에 바로 보입니다.</p>
