@@ -1,5 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module.js';
 import { Logger } from 'nestjs-pino';
@@ -30,6 +31,9 @@ async function bootstrap() {
   const redisIoAdapter = new RedisIoAdapter(app);
   await redisIoAdapter.connectToRedis(process.env.REDIS_URL!);
   app.useWebSocketAdapter(redisIoAdapter);
+
+  const docs = new DocumentBuilder().setTitle('order-api').setDescription('주문 서비스 REST API').addBearerAuth().build();
+  SwaggerModule.setup('docs', app, () => SwaggerModule.createDocument(app, docs));
 
   // 5. 마지막 요청 받기 시작
   await app.listen(process.env.PORT ?? 3000);
