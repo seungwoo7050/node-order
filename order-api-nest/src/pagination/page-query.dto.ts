@@ -1,14 +1,15 @@
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform, Type } from "class-transformer";
 import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
 import { DEFAULT_LIMIT, MAX_LIMIT } from "./cursor.js";
 
 export class PageQueryDto {
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(MAX_LIMIT) limit: number = DEFAULT_LIMIT;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(MAX_LIMIT) limit: number = DEFAULT_LIMIT;
   @IsOptional() @IsString() cursor?: string;
 }
 
 export class ProductPageQueryDto {
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(MAX_LIMIT) limit: number = DEFAULT_LIMIT;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(MAX_LIMIT) limit: number = DEFAULT_LIMIT;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) cursor?: number;
 }
 
