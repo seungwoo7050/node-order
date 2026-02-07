@@ -1,4 +1,5 @@
 import { Controller, Get, OnModuleDestroy, ServiceUnavailableException } from "@nestjs/common";
+import { ApiTags } from "@nestjs/swagger";
 import { Redis } from "ioredis";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { StorageService } from "../storage/storage.service.js";
@@ -6,6 +7,7 @@ import { StorageService } from "../storage/storage.service.js";
 const withTimeout = <T>(p: Promise<T>, ms: number) =>
   Promise.race([p, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${ms}ms 초과`)), ms))]);
 
+@ApiTags("health")
 @Controller("health")
 export class HealthController implements OnModuleDestroy {
   private readonly redis = new Redis(process.env.REDIS_URL!, { lazyConnect: true, maxRetriesPerRequest: 1 });

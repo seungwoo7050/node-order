@@ -1,9 +1,12 @@
 import { Body, ConflictException, Controller, HttpCode, NotFoundException, Param, ParseIntPipe, Post, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { AdminGuard } from "../auth/admin.guard.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { StockAdjustmentDto } from "./stock-adjustment.dto.js";
 
+@ApiTags("products")
+@ApiBearerAuth()
 @Controller("products/:id")
 @UseGuards(AuthGuard("jwt"), AdminGuard)
 export class ProductStockController {

@@ -1,8 +1,10 @@
 import { Controller, Get, Header, MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
+import { ApiExcludeController } from "@nestjs/swagger";
 import { Gauge } from "prom-client";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { httpMetricsMiddleware, registry } from "./metrics.js";
 
+@ApiExcludeController()
 @Controller()
 class MetricsController {
   @Get("metrics")

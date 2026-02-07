@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, Req, UseGuards, Headers } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { CreateOrderDto } from "./dto/create-order.dto.js";
 import { OrdersService } from "./orders.service.js";
@@ -8,6 +9,8 @@ import { AdminGuard } from "../auth/admin.guard.js";
 import { AdminOrderQueryDto } from "../pagination/page-query.dto.js";
 import { PAGE_QUERY } from "../pagination/page-query.pipe.js";
 
+@ApiTags("orders")
+@ApiBearerAuth()
 @Controller("orders")
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
