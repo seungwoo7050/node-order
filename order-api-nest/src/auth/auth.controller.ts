@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { CookieOptions, Request, Response } from "express";
 import { AuthService, REFRESH_TOKEN_TTL_SECONDS } from "./auth.service.js";
 import { LoginDto } from "./login.dto.js";
@@ -14,6 +15,7 @@ const refreshCookieOptions: CookieOptions = {
   path: "/auth",
 };
 
+@ApiTags("auth")
 @Controller("auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -70,6 +72,7 @@ export class AuthController {
 
   @Post("logout-all")
   @HttpCode(200)
+  @ApiBearerAuth()
   @UseGuards(AuthGuard("jwt"))
   async logoutAll(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const revoked = await this.authService.logoutAll((req.user as { userId: string }).userId);

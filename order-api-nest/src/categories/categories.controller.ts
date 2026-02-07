@@ -1,10 +1,12 @@
 import { Body, ConflictException, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Patch, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { MoveCategoryDto } from "./move-category.dto.js";
 import { CategoriesService } from "./categories.service.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 
+@ApiTags("categories")
 @Controller("categories")
 export class CategoriesController {
   constructor(
@@ -33,6 +35,7 @@ export class CategoriesController {
   }
 
   @Patch(":id")
+  @ApiBearerAuth()
   @UseGuards(AuthGuard("jwt"), AdminGuard)
   move(@Param("id", ParseIntPipe) id: number, @Body() dto: MoveCategoryDto) {
     return this.categories.move(id, dto.parentId);
@@ -40,6 +43,7 @@ export class CategoriesController {
 
   @Delete(":id")
   @HttpCode(204)
+  @ApiBearerAuth()
   @UseGuards(AuthGuard("jwt"), AdminGuard)
   async remove(@Param("id", ParseIntPipe) id: number) {
     const children = await this.prisma.category.count({ where: { parentId: id } });

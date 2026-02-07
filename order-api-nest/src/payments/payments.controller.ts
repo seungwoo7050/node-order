@@ -1,9 +1,11 @@
 import { BadRequestException, Controller, Headers, HttpCode, Post, Req, type RawBodyRequest } from "@nestjs/common";
+import { ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import type Stripe from "stripe";
 import { PaymentsService } from "./payments.service.js";
 import { StripeGateway } from "./stripe.gateway.js";
 
+@ApiTags("payments")
 @Controller("payments")
 export class PaymentsController {
   constructor(
