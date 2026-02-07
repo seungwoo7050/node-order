@@ -1,5 +1,6 @@
 import { Controller, Get, NotFoundException, Param, ParseIntPipe, Query, Req, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { PageQueryDto } from "../pagination/page-query.dto.js";
@@ -7,6 +8,8 @@ import { PAGE_QUERY } from "../pagination/page-query.pipe.js";
 import { listMyOrders } from "./my-orders.js";
 import { orderDetailSelect } from "./order-select.js";
 
+@ApiTags("me")
+@ApiBearerAuth()
 @Controller("me")
 @UseGuards(AuthGuard("jwt"))
 export class MeController {
