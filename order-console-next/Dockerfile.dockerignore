@@ -1,0 +1,13 @@
+**/node_modules
+**/.next
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+.git
+monitoring
+scripts
+order-api-nest
+order-console-next/e2e
+order-console-next/test-results
+order-console-next/playwright-report
+order-console-next/Dockerfile*
