@@ -1,0 +1,17 @@
+{
+  "name": "node-order",
+  "private": true,
+  "workspaces": [
+    "order-api-nest",
+    "order-console-next"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev -w order-api-nest",
+    "dev:web": "npm run dev -w order-console-next",
+    "lint": "npm run lint -w order-api-nest && npm run lint -w order-console-next",
+    "typecheck": "npm exec -w order-api-nest -- tsc --noEmit && cd order-console-next && npx next typegen && npx tsc --noEmit",
+    "test:api": "npm run test -w order-api-nest && npm run test:e2e -w order-api-nest",
+    "test:web": "npm run test -w order-console-next && npm run test:e2e -w order-console-next",
+    "test:rules": "docker run --rm -v \"$PWD/monitoring:/m\" --entrypoint promtool prom/prometheus:latest test rules /m/alert-rules.test.yml"
+  }
+}
