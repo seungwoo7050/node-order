@@ -27,6 +27,19 @@ export const rateLimited = new Counter({
   registers: [registry],
 });
 
+export const catalogCacheRequests = new Counter({
+  name: "catalog_cache_requests_total",
+  help: "카탈로그 캐시 조회 수",
+  labelNames: ["result"] as const,
+  registers: [registry],
+});
+
+export const catalogLoads = new Counter({
+  name: "catalog_loads_total",
+  help: "카탈로그를 DB에서 읽은 횟수",
+  registers: [registry],
+});
+
 function routeOf(req: Request): string {
   const path = req.route?.path as string | undefined;
   if (!path || path === "{/*splat}") return "unmatched";
