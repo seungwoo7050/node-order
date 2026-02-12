@@ -31,6 +31,7 @@ services:
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
   db:
     image: postgres:17
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
     environment:
       POSTGRES_USER: order
       POSTGRES_PASSWORD: order
