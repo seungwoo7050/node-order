@@ -3,6 +3,7 @@ import { JwtService } from "@nestjs/jwt";
 import { Test } from "@nestjs/testing";
 import { TRPCError } from "@trpc/server";
 import { AppModule } from "../src/app.module.js";
+import { CatalogCache } from "../src/cache/catalog-cache.js";
 import { CategoriesService } from "../src/categories/categories.service.js";
 import { PrismaService } from "../src/prisma/prisma.service.js";
 import { StorageService } from "../src/storage/storage.service.js";
@@ -23,6 +24,7 @@ describe("tRPC - 회귀 테스트", () => {
       prisma: app.get(PrismaService),
       storage: app.get(StorageService),
       categories: app.get(CategoriesService, { strict: false }),
+      catalogCache: app.get(CatalogCache),
     };
     callerAs = (userId) => appRouter.createCaller({ userId, ...deps });
   });
