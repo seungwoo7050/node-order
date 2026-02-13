@@ -1,5 +1,6 @@
 import { HttpException } from "@nestjs/common";
 import { initTRPC, TRPCError, type TRPC_ERROR_CODE_KEY } from "@trpc/server";
+import type { CatalogCache } from "../cache/catalog-cache.js";
 import type { CategoriesService } from "../categories/categories.service.js";
 import type { PrismaService } from "../prisma/prisma.service.js";
 import type { StorageService } from "../storage/storage.service.js";
@@ -9,6 +10,7 @@ export interface Context {
   prisma: PrismaService;
   storage: StorageService;
   categories: CategoriesService;
+  catalogCache: CatalogCache;
 }
 
 const t = initTRPC.context<Context>().create({

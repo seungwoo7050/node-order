@@ -2,6 +2,7 @@ import { Logger, MiddlewareConsumer, Module, NestModule, RequestMethod } from "@
 import { ModuleRef } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
+import { CatalogCache } from "../cache/catalog-cache.js";
 import { CategoriesService } from "../categories/categories.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { StorageService } from "../storage/storage.service.js";
@@ -18,6 +19,7 @@ export class TrpcModule implements NestModule {
     const prisma = get(PrismaService);
     const storage = get(StorageService);
     const categories = get(CategoriesService);
+    const catalogCache = get(CatalogCache);
     const logger = new Logger("tRPC");
 
     const handler = createExpressMiddleware({
@@ -35,7 +37,7 @@ export class TrpcModule implements NestModule {
             userId = null;
           }
         }
-        return { userId, prisma, storage, categories };
+        return { userId, prisma, storage, categories, catalogCache };
       },
     });
 
