@@ -10,7 +10,7 @@ export const appRouter = router({
   products: router({
     list: publicProcedure
       .input(z.object({ limit: z.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT), cursor: z.number().int().positive().nullish() }).default({ limit: DEFAULT_LIMIT }))
-      .query(({ ctx, input }) => listProducts(ctx.prisma, ctx.storage, input)),
+      .query(({ ctx, input }) => listProducts({ prisma: ctx.prisma, storage: ctx.storage, cache: ctx.catalogCache }, input)),
   }),
 
   categories: router({
