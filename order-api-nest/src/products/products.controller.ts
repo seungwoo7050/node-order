@@ -1,11 +1,14 @@
-import { Controller, Get, Query } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import { Body, Controller, Get, NotFoundException, Param, ParseIntPipe, Patch, Query, UseGuards } from "@nestjs/common";
+import { AuthGuard } from "@nestjs/passport";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { AdminGuard } from "../auth/admin.guard.js";
 import { CatalogCache } from "../cache/catalog-cache.js";
 import { ProductPageQueryDto } from "../pagination/page-query.dto.js";
 import { PAGE_QUERY } from "../pagination/page-query.pipe.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { StorageService } from "../storage/storage.service.js";
 import { listProducts } from "./product-list.js";
+import { UpdateProductDto } from "./update-product.dto.js";
 
 @ApiTags("products")
 @Controller("products")
@@ -19,5 +22,15 @@ export class ProductsController {
   @Get()
   list(@Query(PAGE_QUERY) query: ProductPageQueryDto) {
     return listProducts({ prisma: this.prisma, storage: this.storage, cache: this.cache }, query);
+  }
+
+  @Patch(":id")
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard("jwt"), AdminGuard)
+  async update(@Param("id", ParseIntPipe) id: number, @Body() dto: UpdateProductDto) {
+    const { count } = await this.prisma.product.updateMany({ where: { id }, data: dto });
+    if (count === 0) throw new NotFoundException(`product ${id} not found`);
+    await this.cache.invalidate();
+    return this.prisma.product.findUniqueOrThrow({ where: { id }, select: { id: true, name: true, price: true } });
   }
 }
