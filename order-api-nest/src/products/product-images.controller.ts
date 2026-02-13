@@ -7,6 +7,7 @@ import { StorageService } from "../storage/storage.service.js";
 import { EXTENSIONS, looksLike } from "./image-signature.js";
 import { ConfirmImageDto, UploadUrlDto } from "./product-image.dto.js";
 import { AdminGuard } from "../auth/admin.guard.js";
+import { CatalogCache } from "../cache/catalog-cache.js";
 
 export const MAX_IMAGE_BYTES = Number(process.env.MAX_IMAGE_BYTES ?? 2 * 1024 * 1024); // 2MB
 const UPLOAD_URL_TTL_SECONDS = Number(process.env.UPLOAD_URL_TTL_SECONDS ?? 60);
@@ -19,6 +20,7 @@ export class ProductImagesController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly cache: CatalogCache,
   ) {}
 
   @Post("upload-url")
@@ -43,6 +45,7 @@ export class ProductImagesController {
     }
     const before = await this.prisma.product.findUnique({ where: { id }, select: { imageKey: true } });
     await this.prisma.product.update({ where: { id }, data: { imageKey: dto.key } });
+    await this.cache.invalidate();
     if (before?.imageKey && before.imageKey !== dto.key) await this.storage.delete(before.imageKey);
     return { key: dto.key, imageUrl: await this.storage.createDownloadUrl(dto.key, 600) };
   }
