@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { Redis } from "ioredis";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 import { hashPassword } from "../src/auth/password.js";
 import { deleteUsers } from "../src/auth/demo-user.js";
 import { StorageService } from "../src/storage/storage.service.js";
+import { CATALOG_KEY } from "../src/cache/catalog-key.js";
 
 type Catalog = {
   categories: { id: number; name: string; parentId: number | null }[];
@@ -84,8 +86,23 @@ for (const o of seedOrders) {
   });
 }
 
+// 5. 카탈로그 캐시
+let cacheCleared = "건너뜀(REDIS_URL 없음)";
+if (process.env.REDIS_URL) {
+  const redis = new Redis(process.env.REDIS_URL, { lazyConnect: true, enableOfflineQueue: false, maxRetriesPerRequest: 0, connectTimeout: 2000 });
+  try {
+    await redis.connect();
+    await redis.del(CATALOG_KEY);
+    cacheCleared = "지움";
+  } catch (err) {
+    cacheCleared = `못 지움(${(err as Error).message}, TTL이 지나면 사라진다)`;
+  } finally {
+    redis.disconnect();
+  }
+}
+
 console.log(
   `seed 완료: 상품 ${catalog.products.length}개(사진 새로 올림 ${uploaded}장, 사진 없음 ${noPhoto.size}개), 임시 사용자 ${deletedTemp}명 삭제,`,
-  `사용자 ${await prisma.user.count()}명, 주문 ${await prisma.order.count()}건`,
+  `사용자 ${await prisma.user.count()}명, 주문 ${await prisma.order.count()}건, 카탈로그 캐시 ${cacheCleared}`,
 );
 await prisma.$disconnect();
