@@ -2,6 +2,7 @@ import { INestApplication } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Test } from "@nestjs/testing";
 import { AppModule } from "../src/app.module.js";
+import { CatalogCache } from "../src/cache/catalog-cache.js";
 import { adminDb } from "./admin-db.js";
 
 describe("페이지네이션 - 회귀 테스트", () => {
@@ -86,6 +87,7 @@ describe("페이지네이션 - 회귀 테스트", () => {
 
   it("상품: id 순으로, cursor는 마지막 상품의 id", async () => {
     await adminDb.product.createMany({ data: [1, 2, 3].map((i) => ({ name: `상품 ${i}`, price: 1000, stock: 1 })) });
+    await app.get(CatalogCache).invalidate();
     const first = await get("/products", { limit: 2 });
     expect(first.body).toMatchObject({ items: [{ id: 1 }, { id: 2 }], nextCursor: 2 });
     const last = await get("/products", { limit: 2, cursor: 2 });
