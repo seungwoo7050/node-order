@@ -3,7 +3,7 @@ import { z } from "zod";
 import { listMyOrders } from "../me/my-orders.js";
 import { orderDetailSelect } from "../me/order-select.js";
 import { DEFAULT_LIMIT, MAX_LIMIT } from "../pagination/cursor.js";
-import { listProducts } from "../products/product-list.js";
+import { getProduct, listProducts } from "../products/product-list.js";
 import { protectedProcedure, publicProcedure, router } from "./trpc.js";
 
 export const appRouter = router({
@@ -11,6 +11,11 @@ export const appRouter = router({
     list: publicProcedure
       .input(z.object({ limit: z.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT), cursor: z.number().int().positive().nullish() }).default({ limit: DEFAULT_LIMIT }))
       .query(({ ctx, input }) => listProducts({ prisma: ctx.prisma, storage: ctx.storage, cache: ctx.catalogCache }, input)),
+    byId: publicProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const product = await getProduct({ prisma: ctx.prisma, storage: ctx.storage, cache: ctx.catalogCache }, input.id);
+      if (!product) throw new TRPCError({ code: "NOT_FOUND", message: `product ${input.id} not found` });
+      return product;
+    }),
   }),
 
   categories: router({

@@ -5,6 +5,7 @@ import { toPage } from "../pagination/cursor.js";
 
 export type CatalogItem = { id: number; name: string; price: number; imageKey: string | null; categoryPath: string[] };
 type CatalogPage = { items: CatalogItem[]; nextCursor: number | null };
+type CatalogProduct = CatalogItem & { description: string };
 export type ProductDeps = { prisma: PrismaService; storage: StorageService; cache: CatalogCache };
 
 async function categoryPaths(prisma: PrismaService, leaves: number[]): Promise<Map<number, string[]>> {
@@ -46,4 +47,24 @@ export async function listProducts(deps: ProductDeps, page: { limit: number; cur
     })),
   );
   return { items, nextCursor: catalog.nextCursor };
+}
+
+async function loadProduct(prisma: PrismaService, id: number): Promise<CatalogProduct | null> {
+  const row = await prisma.product.findUnique({
+    where: { id },
+    select: { id: true, name: true, price: true, description: true, imageKey: true, categoryId: true },
+  });
+  if (!row) return null;
+  const { categoryId, ...p } = row;
+  const pathOf = await categoryPaths(prisma, categoryId ? [categoryId] : []);
+  return { ...p, categoryPath: (categoryId && pathOf.get(categoryId)) || [] };
+}
+
+export async function getProduct(deps: ProductDeps, id: number) {
+  const catalog = await deps.cache.getOrLoad(`product:${id}`, () => loadProduct(deps.prisma, id));
+  if (!catalog) return null;
+  const row = await deps.prisma.product.findUnique({ where: { id }, select: { stock: true } });
+  if (!row) return null;
+  const { imageKey, ...p } = catalog;
+  return { ...p, stock: row.stock, imageUrl: imageKey ? await deps.storage.createDownloadUrl(imageKey, 600) : null };
 }
