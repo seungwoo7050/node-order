@@ -9,7 +9,7 @@ import { CATALOG_KEY } from "../src/cache/catalog-key.js";
 
 type Catalog = {
   categories: { id: number; name: string; parentId: number | null }[];
-  products: { id: number; name: string; price: number; stock: number; category: string; photo: string }[];
+  products: { id: number; name: string; price: number; stock: number; category: string; photo: string; description: string }[];
 };
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.ADMIN_DATABASE_URL ?? process.env.DATABASE_URL! }) });
@@ -47,7 +47,7 @@ const categoryIds = new Map(catalog.categories.map((c) => [c.name, c.id]));
 for (const p of catalog.products) {
   const categoryId = categoryIds.get(p.category);
   if (categoryId === undefined) throw new Error(`catalog.json: 없는 카테고리 "${p.category}" (${p.name})`);
-  const data = { name: p.name, price: p.price, stock: p.stock, categoryId, imageKey: noPhoto.has(p.photo) ? null : `seed/${p.photo}` };
+  const data = { name: p.name, price: p.price, stock: p.stock, description: p.description, categoryId, imageKey: noPhoto.has(p.photo) ? null : `seed/${p.photo}` };
   await prisma.product.upsert({ where: { id: p.id }, create: { id: p.id, ...data }, update: data });
 }
 const productIds = catalog.products.map((p) => p.id);
