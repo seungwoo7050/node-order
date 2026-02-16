@@ -7,7 +7,7 @@ import { ProductPageQueryDto } from "../pagination/page-query.dto.js";
 import { PAGE_QUERY } from "../pagination/page-query.pipe.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { StorageService } from "../storage/storage.service.js";
-import { listProducts } from "./product-list.js";
+import { getProduct, listProducts } from "./product-list.js";
 import { UpdateProductDto } from "./update-product.dto.js";
 
 @ApiTags("products")
@@ -22,6 +22,13 @@ export class ProductsController {
   @Get()
   list(@Query(PAGE_QUERY) query: ProductPageQueryDto) {
     return listProducts({ prisma: this.prisma, storage: this.storage, cache: this.cache }, query);
+  }
+
+  @Get(":id")
+  async detail(@Param("id", ParseIntPipe) id: number) {
+    const product = await getProduct({ prisma: this.prisma, storage: this.storage, cache: this.cache }, id);
+    if (!product) throw new NotFoundException(`product ${id} not found`);
+    return product;
   }
 
   @Patch(":id")

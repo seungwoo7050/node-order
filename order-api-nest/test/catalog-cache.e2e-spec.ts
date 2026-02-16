@@ -53,6 +53,14 @@ describe("카탈로그 캐시 - 회귀 테스트", () => {
     expect((await list()).body.items[0]).toMatchObject({ price: 2000, stock: 5 });
   });
 
+  it("상세는 목록과 같은 해시에 있다. 수정 한 번에 목록과 상세가 함께 새 값이다. 없는 상품은 404", async () => {
+    expect((await request(app.getHttpServer()).get("/products/1").expect(200)).body).toMatchObject({ price: 1000, stock: 5, categoryPath: ["전자기기", "키보드"] });
+    await list();
+    await request(app.getHttpServer()).patch("/products/1").set("Authorization", `Bearer ${tokenOf("admin")}`).send({ description: "새 설명" }).expect(200);
+    expect((await request(app.getHttpServer()).get("/products/1").expect(200)).body.description).toBe("새 설명");
+    await request(app.getHttpServer()).get("/products/999").expect(404);
+  });
+
   it("REST와 tRPC가 같은 캐시를 본다", async () => {
     const input = encodeURIComponent(JSON.stringify({ limit: 20 }));
     await request(app.getHttpServer()).get(`/trpc/products.list?input=${input}`).expect(200);
