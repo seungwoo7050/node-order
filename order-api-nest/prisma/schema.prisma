@@ -57,6 +57,7 @@ model Product {
   name          String
   price         Int
   stock         Int
+  description   String      @default("")
   imageKey      String?     @map("image_key")
   items         OrderItem[]
   categoryId    Int?        @map("category_id")
