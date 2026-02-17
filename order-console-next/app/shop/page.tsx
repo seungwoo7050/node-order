@@ -75,7 +75,7 @@ function ProductList() {
                 <span aria-hidden="true" className="grid size-16 place-items-center bg-surface font-serif text-xl text-faint">{p.name.slice(0, 1)}</span>
               )}
               <div className="min-w-0">
-                <p className="font-normal">{p.name}</p>
+                <p className="font-normal"><Link href={`/shop/${p.id}`} className="no-underline">{p.name}</Link></p>
                 <p className="flex flex-wrap gap-x-3 text-[0.8rem] text-muted">
                   <span className="num">{won(p.price)}</span>
                   {soldOut ? <span className="text-fg">품절</span> : <span>재고 <span className="num" data-testid={`stock-${p.id}`}>{p.stock}</span></span>}
