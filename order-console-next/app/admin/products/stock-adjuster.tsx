@@ -24,6 +24,7 @@ export function StockAdjuster({ productId, name, readOnly }: { productId: number
       }),
     onSuccess: ({ stock }) => {
       setDelta("");
+      queryClient.setQueryData(trpc.products.byId.queryKey({ id: productId }), (old) => old && { ...old, stock });
       queryClient.setQueryData(productListOptions(trpc).queryKey, (old) => old && {
         ...old,
         pages: old.pages.map((page) => ({ ...page, items: page.items.map((p) => (p.id === productId ? { ...p, stock } : p)) })),
