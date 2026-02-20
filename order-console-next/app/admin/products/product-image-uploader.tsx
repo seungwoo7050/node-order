@@ -3,11 +3,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/lib/api-client";
 import { useTRPC } from "@/lib/trpc";
+import { useReadOnly } from "./admin-only";
 
 type UploadUrl = { key: string; uploadUrl: string; expiresIn: number };
 
-export function ProductImageUploader({ productId, hasImage, readOnly }: { productId: number; hasImage: boolean; readOnly: boolean }) {
+export function ProductImageUploader({ productId, hasImage }: { productId: number; hasImage: boolean }) {
   const trpc = useTRPC();
+  const readOnly = useReadOnly();
   const queryClient = useQueryClient();
   const upload = useMutation({
     mutationFn: async (file: File) => {
