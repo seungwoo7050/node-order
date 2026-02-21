@@ -13,11 +13,11 @@ test("이미지를 고르면 저장소에 직접 올라가고, 목록에 보인�
   await loginAsKim(page);
   await page.getByRole("link", { name: "관리" }).click();
   const storagePut = page.waitForResponse((r) => r.request().method() === "PUT" && r.url().startsWith("http://localhost:9000/"));
-  const confirm = page.waitForResponse((r) => r.url().endsWith("/products/6/image/confirm"));
   await page.getByTestId("image-input-6").setInputFiles(path.join(__dirname, "fixtures/pixel.png"));
 
-  expect((await storagePut).status()).toBe(200);
-  const { key } = (await (await confirm).json()) as { key: string };
+  const put = await storagePut;
+  expect(put.status()).toBe(200);
+  const key = new URL(put.url()).pathname.replace(/^\/product-images\//, "");
   const img = page.getByTestId("image-6").filter({ visible: true });
   await expect(img).toHaveAttribute("src", new RegExp(`^http://localhost:9000/product-images/${key}\\?`));
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);

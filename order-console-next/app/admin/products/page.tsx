@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { getProducts } from "@/lib/catalog";
@@ -20,6 +21,7 @@ async function ProductTable() {
           <th scope="col" className="label hidden py-3 font-normal sm:table-cell">재고</th>
           <th scope="col" className="label hidden py-3 font-normal sm:table-cell">입고·조정</th>
           <th scope="col" className="label py-3 font-normal">이미지</th>
+          <th scope="col" className="sr-only">수정</th>
         </tr>
       </thead>
       <tbody>
@@ -39,6 +41,7 @@ async function ProductTable() {
             <td className="num hidden py-3 sm:table-cell" data-testid={`price-${p.id}`}>{won(p.price)}</td>
             <StockCell productId={p.id} name={p.name} />
             <td className="py-3"><ProductImageUploader productId={p.id} hasImage={p.imageUrl !== null} /></td>
+            <td className="py-3 text-right"><Link href={`/admin/products/${p.id}`} aria-label={`${p.name} 수정`}>수정</Link></td>
           </tr>
         ))}
       </tbody>
