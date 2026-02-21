@@ -1,8 +1,10 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { authFetch } from "@/lib/api-client";
+import { authFetch, refreshAccessToken } from "@/lib/api-client";
+import { useAuthStore } from "@/lib/auth-store";
 import { useTRPC } from "@/lib/trpc";
+import { confirmProductImage } from "./actions";
 import { useReadOnly } from "./admin-only";
 
 type UploadUrl = { key: string; uploadUrl: string; expiresIn: number };
@@ -20,13 +22,13 @@ export function ProductImageUploader({ productId, hasImage }: { productId: numbe
       });
       const put = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
       if (!put.ok) throw new Error(`저장소 업로드 실패(${put.status})`);
-      await authFetch(`/products/${productId}/image/confirm`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key }),
-      });
+      let token = useAuthStore.getState().accessToken ?? (await refreshAccessToken());
+      if (!token) throw new Error("로그인이 필요합니다.");
+      let failed = await confirmProductImage(token, productId, key);
+      if (failed?.status === 401 && (token = await refreshAccessToken())) failed = await confirmProductImage(token, productId, key);
+      if (failed) throw new Error(failed.message);
     },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: trpc.products.list.pathKey() }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: trpc.products.pathKey() }),
   });
 
   return (
