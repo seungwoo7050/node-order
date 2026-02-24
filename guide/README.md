@@ -11,7 +11,6 @@
 5. 관리자 상품 화면을 Server Component와 `"use cache"`로 바꾸고, 상품 수정(이름·가격·설명)을 Server Action으로 만든다. 저장 뒤 목록 태그와 상품별 태그를 지운다
 6. 캐시가 세 겹(Redis, Next 서버, 브라우저)일 때 수정 한 번이 어디를 지워야 하는지 표로 정리한다
 
-<!-- 재측정 -->
 | 측정 | 경우 | 결과 |
 |---|---|---|
 | k6 20초, 목록 보는 사람 20 + 결제하는 사람 20 | 캐시 없음 | 목록 3,256건, p95 166ms |
@@ -952,25 +951,43 @@ docker compose -f ../compose.yaml exec -T db psql -q -U order -d order_api -c "S
 # 출력
    pg_stat_statements_reset    
 -------------------------------
- 2026-10-17 13:35:28.343944+00
+ 2026-02-14 13:35:28.343944+00
 
-docker run --rm -i --network host -v "$PWD/loadtest:/scripts" grafana/k6 run --quiet -e API=http://localhost:4000 -e BUYERS=20 /scripts/browse.js
+docker run --rm -i --add-host=host.docker.internal:host-gateway -v "$PWD/loadtest:/scripts" grafana/k6 run --quiet -e API=http://host.docker.internal:4000 -e BUYERS=20 /scripts/browse.js
+# 출력(줄임)
+  █ THRESHOLDS 
+    checks
+    ✓ 'rate>0.99' rate=100.00%
+    http_req_duration{name:list}
+    ✓ 'p(95)<1000' p(95)=79.18ms
+    http_reqs{name:checkout}
+    ✓ 'count>0' count=2590
+    http_reqs{name:list}
+    ✓ 'count>0' count=7069
 
 curl -s localhost:4000/metrics | grep '^catalog_'
 # 출력
-catalog_cache_requests_total{result="miss"} 1
-catalog_cache_requests_total{result="hit"} 1
-catalog_loads_total 1
+catalog_cache_requests_total{result="miss"} 21
+catalog_cache_requests_total{result="hit"} 7049
+catalog_loads_total 2
 
 docker compose -f ../compose.yaml exec -T db psql -U order -d order_api -c "SELECT calls, left(regexp_replace(query, '\s+', ' ', 'g'), 70) AS query FROM pg_stat_statements WHERE query ~* 'products|categories' ORDER BY calls DESC LIMIT 6"
 # 출력
- calls | query 
--------+-------
+ calls |                                query                                 
+-------+------------------------------------------------------------------------
+  7070 | SELECT "public"."products"."id", "public"."products"."stock" FROM "pub
+     2 | SELECT "public"."products"."id", "public"."products"."name", "public".
+     2 |  WITH RECURSIVE up AS ( SELECT id AS leaf, id, name, parent_id, 0 AS d
+(3 rows)
 ```
+
+k6는 컨테이너 안에서 돌므로 `localhost`는 컨테이너 자신이다. 이 PC의 API에는 `host.docker.internal`로 닿는다. Docker Desktop(macOS)에서는 `--network host`를 줘도 설정에서 host 네트워킹을 켜지 않았으면 `localhost:4000`이 `connection refused`라, 그 방법은 쓰지 않는다. `--add-host=host.docker.internal:host-gateway`는 Linux에서도 같은 이름이 이 PC를 가리키게 한다.
 
 `-v "$PWD/loadtest:/scripts"`는 `order-api-nest/`에서 쳐야 한다. 다른 폴더에서 치면 Docker가 빈 폴더를 만들어 붙이고 k6가 `browse.js`를 찾지 못한다.
 
 결제하는 사람이 적을 때와도 비교하려면 `-e BUYERS=20`을 `-e BUYERS=5`로 바꿔 한 번 더 돈다. 아래 개념의 표 두 개가 그 두 경우다.
+
+`catalog_loads_total`이 2인 것은 `setup`이 부하용 상품을 찾으려고 부른 `?limit=100`이 다른 칸(`list:0:100`)이라서다. 목록 칸(`list:0:20`)은 20초 동안 한 번 읽었다. `WITH RECURSIVE` 줄의 `calls 2`도 같은 두 번이다.
 
 결과에서 세 가지를 읽는다. k6 요약의 `http_reqs{name:list}`(목록 요청 수)와 `http_req_duration{name:list}`의 `p(95)`, 지표의 hit·miss(적중률 = hit / 전체), `pg_stat_statements`에서 `WITH RECURSIVE`로 시작하는 줄의 `calls`(카탈로그를 DB에서 조립한 횟수)다.
 
@@ -1068,27 +1085,25 @@ git status --short
 
 ### 개념 | 결제하는 사람이 5명일 때
 
-<!-- 재측정 -->
 | 경우 | 캐시 적중률 | 목록 요청(20초) | 목록 p95 | 카탈로그를 DB에서 읽은 횟수 | 결제 |
 |---|---|---|---|---|---|
-| 캐시 없음 | - | 9,223 | 60ms | 9,223 | 1,074 |
+| 캐시 없음 | - | 9,223 | 60ms | 9,224 | 1,074 |
 | 통째로 캐시 | 49.6% | 30,748 | 22ms | 776 | 1,728 |
-| 카탈로그만 캐시 | 99.9% | 18,562 | 31ms | 1 | 914 |
+| 카탈로그만 캐시 | 99.9% | 18,562 | 31ms | 2 | 914 |
 
-`-e BUYERS=5`로 잰 값이다. 결제가 드물면 통째로 캐시한 쪽이 가장 빠르다. 재고를 따로 읽는 쿼리가 없기 때문이다. 그런데 결제하는 사람이 겨우 5명인데 적중률이 이미 절반이다.
+`-e BUYERS=5`로 잰 값이다. "카탈로그를 DB에서 읽은 횟수"에는 `setup`이 부른 `?limit=100` 한 번이 들어 있다. 결제가 드물면 통째로 캐시한 쪽이 가장 빠르다. 재고를 따로 읽는 쿼리가 없기 때문이다. 그런데 결제하는 사람이 겨우 5명인데 적중률이 이미 절반이다.
 
 ### 개념 | 결제하는 사람이 20명일 때
 
-<!-- 재측정 -->
 | 경우 | 캐시 적중률 | 목록 요청(20초) | 목록 p95 | 카탈로그를 DB에서 읽은 횟수 | 결제 |
 |---|---|---|---|---|---|
-| 캐시 없음 | - | 3,256 | 166ms | 3,256 | 2,973 |
+| 캐시 없음 | - | 3,256 | 166ms | 3,257 | 2,973 |
 | 통째로 캐시 | 22.2% | 5,495 | 114ms | 214 | 3,409 |
-| 카탈로그만 캐시 | 99.7% | 7,069 | 79ms | 1 | 2,590 |
+| 카탈로그만 캐시 | 99.7% | 7,069 | 79ms | 2 | 2,590 |
 
 결제가 늘자 통째로 캐시한 쪽의 적중률이 22%로 떨어졌다. 결제 3,409건이 캐시를 3,409번 지웠고, 그 사이사이에 목록 요청이 빈 캐시를 만났다. 목록 처리량은 캐시 없음보다 낫지만 카탈로그만 캐시한 쪽에 못 미친다. **통째로 캐시한 쪽의 효과는 쓰기 빈도에 달려 있고, 쓰기는 읽기가 몰리는 순간(할인, 한정판)에 함께 몰린다.**
 
-카탈로그만 캐시한 쪽은 결제가 5명이든 20명이든 적중률이 99%를 넘는다. DB에서 카탈로그(재귀 CTE 포함)를 읽은 것은 20초 동안 한 번이다. 대신 목록마다 재고를 기본키로 한 번 읽는다. 비싼 조립은 한 번, 싼 조회는 매번이다.
+카탈로그만 캐시한 쪽은 결제가 5명이든 20명이든 적중률이 99%를 넘는다. DB에서 카탈로그(재귀 CTE 포함)를 읽은 것은 20초 동안 두 번이고, 그중 하나는 `setup`의 `?limit=100`이다. 목록 칸은 한 번 읽었다. 대신 목록마다 재고를 기본키로 한 번 읽는다. 비싼 조립은 한 번, 싼 조회는 매번이다.
 
 > "카탈로그를 DB에서 읽은 횟수"가 빗나간 수보다 훨씬 적은 것은 5장의 single-flight 때문이다. 캐시가 빈 순간 몰린 요청들이 한 번의 읽기를 함께 기다린다.
 
@@ -1115,6 +1130,8 @@ git status --short
   - k6가 `browse.js`를 찾지 못한다(`no such file or directory`) → `order-api-nest/`에서 쳤는지(`$PWD/loadtest`)
 
   - `Error: kim으로 로그인하지 못했다(401)` → 시드를 넣었는지, API의 `DEMO_PASSWORD`가 `1234`인지
+
+  - `Error: kim으로 로그인하지 못했다(0)` → k6가 API에 닿지 않았다. `-e API=http://host.docker.internal:4000`과 `--add-host`를 줬는지(`localhost`는 컨테이너 자신이다)
 
   - `Error: 부하용 상품이 없다. loadtest/load-seed.sql을 넣었는지 본다` → 1장 작업 2의 `load-seed.sql`
 
@@ -1152,7 +1169,6 @@ curl -s 'localhost:4000/products?limit=6' | jq -c '.items[-1] | {name, price}'
 docker compose exec redis redis-cli TTL catalog
 ```
 
-<!-- 재측정 -->
 ```text
 # 출력
 {"name":"마우스","price":30000}
@@ -1261,12 +1277,11 @@ DB에서 카탈로그를 읽은 횟수: 1
 
 API를 다시 빌드해 띄운 뒤 같은 스크립트를 두 번 돌린다.
 
-<!-- 재측정 -->
 ```text
 # 출력(single-flight 없음)
-요청 200개: 200개 200, 637ms
+요청 200개: 200개 200, 742ms
 DB에서 카탈로그를 읽은 횟수: 111
-요청 200개: 200개 200, 403ms
+요청 200개: 200개 200, 611ms
 DB에서 카탈로그를 읽은 횟수: 92
 ```
 
@@ -1331,7 +1346,6 @@ curl -s -o /dev/null -m 30 -w 'redis 멈춤: %{http_code} %{time_total}s\n' loca
 docker compose start redis
 ```
 
-<!-- 재측정 -->
 ```text
 # 출력(ioredis 기본값)
 redis 켜짐: 200 0.043976s
@@ -1358,7 +1372,6 @@ curl -s localhost:4000/health/ready; echo
 docker compose start redis
 ```
 
-<!-- 재측정 -->
 ```text
 # 출력
 redis 멈춤: 200 0.080226s
@@ -1426,7 +1439,6 @@ Cache Components를 켜면 `"use cache"`로 표시한 함수·컴포넌트의 �
 npx next build
 ```
 
-<!-- 재측정 -->
 ```text
 # 출력(줄임)
 - Cache Components enabled
@@ -1476,10 +1488,9 @@ npx next build
 git restore app/layout.tsx
 ```
 
-<!-- 재측정 -->
 ```text
 # 출력(줄임)
-Error: Route "/cart": Next.js encountered uncached or runtime data during prerendering.
+Error: Route "/_not-found": Next.js encountered uncached or runtime data during prerendering.
 
 `fetch(...)`, `cookies()`, `headers()`, `params`, `searchParams`, or `connection()` accessed outside of `<Suspense>` prevents the route from being prerendered, blocking the page load and leading to a slower user experience.
 
@@ -1487,9 +1498,14 @@ Ways to fix this:
   - [stream] Provide a placeholder with `<Suspense fallback={...}>` around the data access
   - [cache] For uncached data (`fetch`, database calls): cache the access with `"use cache"` (does not apply to `connection()`)
   - [block] Set `export const instant = false` to allow a blocking route
+
+Learn more: https://nextjs.org/docs/messages/blocking-prerender-dynamic
+…
+Error occurred prerendering page "/_not-found". Read more: https://nextjs.org/docs/messages/prerender-error
+Export encountered an error on /_not-found/page: /_not-found, exiting the build.
 ```
 
-루트 레이아웃의 `await connection()`이 `<Suspense>` 밖에 있어 모든 페이지의 정적 셸이 비었다. 오류가 제안하는 세 길 중 이 앱은 `[block]`을 골라 둔 것이다. 어느 경로(`/cart`)가 먼저 찍히는지는 빌드마다 다를 수 있다. 블록의 둘째 줄이 되돌리기다.
+루트 레이아웃의 `await connection()`이 `<Suspense>` 밖에 있어 모든 페이지의 정적 셸이 비었다. 오류가 제안하는 세 길 중 이 앱은 `[block]`을 골라 둔 것이다. 먼저 걸린 `/_not-found`는 Next가 만드는 404 페이지다. 이 페이지도 루트 레이아웃 아래에 있다. 어느 경로가 먼저 찍히는지는 페이지 구성에 따라 다르다(`/cart`가 찍히기도 한다). 블록의 둘째 줄이 되돌리기다.
 
 ### 남길 것
 
@@ -1501,7 +1517,7 @@ Ways to fix this:
 
 - **에러 신호**:
 
-  - `Error: Route "/cart": Next.js encountered uncached or runtime data during prerendering.` → 루트 레이아웃의 `instant = false`가 빠졌는지
+  - `Error: Route "/_not-found": Next.js encountered uncached or runtime data during prerendering.`(경로는 `/cart` 등 다를 수 있다) → 루트 레이아웃의 `instant = false`가 빠졌는지
 
 ## 8. 7단계: 상품 상세 페이지
 
@@ -2402,7 +2418,7 @@ export function StockCell({ productId, name }: { productId: number; name: string
 }
 ```
 
-`StockCell`은 줄마다 `products.byId`를 부른다. 상품이 66개면 66번이지만, `lib/trpc.ts`의 `httpBatchLink`가 같은 순간의 호출을 HTTP 요청 하나로 묶는다. API는 그 안에서 칸마다 Redis와 재고 조회를 한다. 관리 화면이라 받아들인다. 상품이 수천 개라면 재고만 묶어 받는 API를 따로 둔다.
+`StockCell`은 줄마다 `products.byId`를 부른다. 상품이 66개면 66번이다. `lib/trpc.ts`의 `httpBatchLink`가 같은 순간의 호출을 HTTP 요청 하나로 묶어 주지만, 줄어드는 것은 왕복 수뿐이다. API는 그 요청 안에서 상품마다 `getProduct`를 따로 돈다. 상품 하나에 Redis 조회(`HGET catalog product:<id>`) 한 번과 재고 쿼리(`findUnique`) 한 번이니, 표를 한 번 열 때 66번씩이다. 관리 화면이라 받아들인다. 상품이 수천 개라면 id 목록을 받아 재고만 한 쿼리(`WHERE id IN (...)`)로 돌려주는 API를 따로 둔다.
 
 관리자 상품 화면을 Server Component로 바꾼다. 맨 위의 `"use client"`를 지우고, 관리자 확인은 `AdminOnly`로, 재고 두 칸은 `StockCell`로 옮긴다. 무한 목록(`LoadMore`)은 걷어 낸다. 관리 화면은 모든 상품을 한 표에서 보고, 서버가 페이지를 끝까지 이어 받는다.
 
@@ -2537,11 +2553,11 @@ export function StockCell({ productId, name }: { productId: number; name: string
          pages: old.pages.map((page) => ({ ...page, items: page.items.map((p) => (p.id === productId ? { ...p, stock } : p)) })),
 ```
 
-> 이 작업부터 다음 작업까지는 `e2e/upload.spec.ts`의 첫 테스트가 실패한다. 이미지를 올려도 서버가 캐시한 표가 그대로라 새 이미지가 보이지 않는다. 작업 3이 고친다. 푸시는 작업 3 뒤에 한다.
+> 이 작업부터 다음 작업까지는 이미지를 올려도 표가 바로 바뀌지 않는다. 업로더는 브라우저의 TanStack Query(`products.list`)만 지우는데, 표는 이제 서버 캐시(`getProducts`)로 그린다. 그래서 썸네일과 버튼 글자(`올리기`/`바꾸기`)가 옛 상태로 남는다. `revalidate`가 60초라, 1분이 지난 뒤 첫 요청은 여전히 옛 표를 받고 그다음 요청부터 새 이미지가 보인다. `e2e/upload.spec.ts`의 첫 테스트도 이 동안 실패한다. 작업 3이 Server Action의 `updateTag`로 고친다. 푸시는 작업 3 뒤에 한다.
 
 ### 실험 | connection()을 빼고 API 없이 빌드한다
 
-`ProductTable`의 `await connection()`을 주석 처리하고, API(1장 작업 2의 터미널 2)를 끈 채 빌드한다. 이미지 빌드(`16`)에는 API가 없다.
+`ProductTable`의 `await connection()`을 주석 처리하고, API가 없는 상태로 빌드한다. 이미지 빌드(`16`)에는 API가 없다. 떠 있는 API를 끄지 않고, 아무것도 듣지 않는 포트(4999)를 `API_URL`로 준다. 명령 앞의 환경 변수가 `.env.local`보다 먼저다.
 
 ```diff
 --- a/order-console-next/app/admin/products/page.tsx
@@ -2559,25 +2575,36 @@ export function StockCell({ productId, name }: { productId: number; name: string
 
 ```sh
 # order-console-next/에서
-npx next build
+API_URL=http://localhost:4999 npx next build
 ```
 
-<!-- 재측정 -->
 ```text
 # 출력(줄임)
 Error occurred prerendering page "/admin/products". Read more: https://nextjs.org/docs/messages/prerender-error
 [TypeError: fetch failed] {
-  [cause]: Error: connect ECONNREFUSED 127.0.0.1:4000
+  digest: '3227098399',
+  [cause]: AggregateError: 
+      at ignore-listed frames {
+    code: 'ECONNREFUSED',
+    [errors]: [
+      Error: connect ECONNREFUSED ::1:4999
+…
+      Error: connect ECONNREFUSED 127.0.0.1:4999
+…
 Export encountered an error on /admin/products/page: /admin/products, exiting the build.
 ```
 
-루트 레이아웃이 요청마다 그리게 했는데도 Next는 `"use cache"` 함수를 빌드 중에 실행해 결과를 미리 채워 두려 했다. 인자가 없어 빌드 때도 부를 수 있고, `cacheLife`의 `expire`(9분)가 5분보다 길어 미리 그릴 대상이기 때문이다. API를 켜고 빌드하면 빌드는 되고, 빌드 표에 그 흔적이 남는다.
+루트 레이아웃이 요청마다 그리게 했는데도 Next는 `"use cache"` 함수를 빌드 중에 실행해 결과를 미리 채워 두려 했다. 인자가 없어 빌드 때도 부를 수 있고, `cacheLife`의 `expire`(9분)가 5분보다 길어 미리 그릴 대상이기 때문이다. API가 있으면(`API_URL` 없이 그냥 `npx next build`) 빌드는 되고, 빌드 표에 그 흔적이 남는다.
 
-<!-- 재측정 -->
 ```text
-# 출력(API를 켜고 빌드했을 때, 줄임)
+# 출력(API가 있을 때, 줄임)
 Route (app)                  Revalidate  Expire
+┌ ƒ /
+├ ƒ /_not-found
 ├ ƒ /admin/products                  1m      9m
+├   /admin/products/[id]
+│ └ ◐ /admin/products/[id]
+…
 ```
 
 `cacheLife`의 1분과 9분이 찍혔다. 빌드 때 받은 결과를 들고 시작한다는 뜻이다. 배포 이미지라면 빌드한 시점의 상품 목록이다. 확인했으면 되돌린다.
@@ -2587,28 +2614,33 @@ Route (app)                  Revalidate  Expire
 git restore order-console-next/app/admin/products/page.tsx
 ```
 
-`connection()` 뒤의 코드는 요청이 왔을 때만 돈다. 되돌린 코드로 API를 끈 채 빌드하면 빌드가 되고, 빌드 표에서 `/admin/products`의 Revalidate·Expire 칸이 사라진다. 캐시는 첫 요청 때 채워지고 요청 사이에 남는다. 8장의 `getProduct`는 인자가 주소에서 오므로 빌드 때 부를 수 없다. 그래서 `connection()`이 필요 없었다.
+`connection()` 뒤의 코드는 요청이 왔을 때만 돈다. 되돌린 코드로 `API_URL=http://localhost:4999 npx next build`를 하면 빌드가 되고, 빌드 표에서 `/admin/products`의 Revalidate·Expire 칸이 사라진다. 캐시는 첫 요청 때 채워지고 요청 사이에 남는다. 8장의 `getProduct`는 인자가 주소에서 오므로 빌드 때 부를 수 없다. 그래서 `connection()`이 필요 없었다.
 
 ### 개념 | 안쪽 fetch도 캐시될 수 있다
 
-바탕이 된 예전 측정에서 이상한 일이 있었다. 안쪽 `fetch`에 `cache: "no-store"`를 주기 전, API를 켠 채로 빌드하고 서버를 띄웠을 때 관리자 목록 첫 화면이 API의 지금 가격이 아니라 처음 빌드한 시점의 가격이었다.
+안쪽 `fetch`에 `cache: "no-store"`가 없고 `getProducts`가 빌드 중에 돌면(위 실험처럼 `connection()`을 뺀 채 API가 있을 때 빌드), 빌드가 끝난 `.next`에 폴더가 하나 더 생긴다.
 
 ```sh
 # order-console-next/에서
 ls .next/cache/fetch-cache
 ```
 
-<!-- 재측정 -->
 ```text
-# 출력(no-store가 없을 때, 예전 측정)
+# 출력(no-store도 connection()도 없이 빌드했을 때)
 <요청을 해시한 64자 이름>
+# 출력(connection()만 없고 no-store는 있을 때)
+ls: .next/cache/fetch-cache: No such file or directory
 ```
 
-`getProducts` 안의 `fetch` 응답이 `"use cache"`와 별개로 `.next/cache/fetch-cache`에 디스크로 저장되어 있었다. 이 파일은 다시 빌드하고 서버를 다시 띄워도 남아서, 빈 메모리 캐시를 채우는 첫 호출에 옛 응답을 돌려줬다. 캐시 층이 하나 숨어 있었던 것이다. 그래서 안쪽 `fetch`에는 `cache: "no-store"`를 주고, 캐시는 바깥의 `"use cache"` 한 겹으로 둔다. 지금 코드로 빌드한 뒤 위의 `ls`가 `No such file or directory`면 숨은 층이 없다.
+`getProducts` 안의 `fetch` 응답이 `"use cache"`와 별개로 `.next/cache/fetch-cache`에 디스크로 저장된 것이다. 이 문서의 바탕이 된 예전 측정에서는 이 파일이 다시 빌드하고 서버를 다시 띄워도 남아서, 빈 메모리 캐시를 채우는 첫 호출에 빌드 때의 옛 가격을 돌려줬다. 캐시 층이 하나 숨어 있었던 것이다. 그래서 안쪽 `fetch`에는 `cache: "no-store"`를 주고, 캐시는 바깥의 `"use cache"` 한 겹으로 둔다. 지금 코드로 빌드한 뒤 위의 `ls`가 `No such file or directory`면 숨은 층이 없다.
 
 ### 작업 3. [커밋] 이미지를 바꾼 뒤에도 서버 캐시를 지운다
 
-이미지 주소는 목록(`getProducts`)과 상품(`getProduct`)의 캐시 양쪽에 들어 있다. 이미지 업로드가 끝나면 둘 다 지우는 Server Action을 부른다.
+이미지 주소는 목록(`getProducts`)과 상품(`getProduct`)의 캐시 양쪽에 들어 있다. 이미지를 바꾸면 둘 다 지워야 한다. 그런데 캐시를 지우는 일(`updateTag`)은 Next 서버의 Server Action 안에서만 할 수 있다.
+
+가장 먼저 떠오르는 모양은 "업로드가 끝나면 캐시만 지우는 액션"을 부르는 것이다. 그런데 Server Action은 브라우저에서 함수처럼 부르지만 실제로는 Next 서버의 공개 엔드포인트다. 주소와 액션 id만 알면 로그인하지 않은 누구나 부를 수 있다. 캐시만 지우는 액션은 데이터를 바꾸지는 않지만, 반복해서 부르면 지울 때마다 다음 요청이 API로 가서 부하가 된다. 그렇다고 액션 안에서 관리자인지 따로 확인하면, 권한 판단이 API와 Next 두 곳에 생긴다.
+
+그래서 캐시만 지우는 액션은 두지 않는다. 이미지를 상품에 붙이는 요청(`06`의 `confirm`) 자체를 액션이 API에 보내고, API가 관리자인지 확인해(`AdminGuard`) 실제로 바꾼 뒤에만 지운다. 관리자가 아니면 API가 401·403을 주므로 캐시에 닿지 못한다. 작업 4의 상품 수정도 같은 모양이다.
 
 ```ts
 // order-console-next/app/admin/products/actions.ts
@@ -2617,41 +2649,96 @@ ls .next/cache/fetch-cache
 import { updateTag } from "next/cache";
 import { PRODUCTS_TAG, productTag } from "@/lib/catalog";
 
-// Server Action: 브라우저에서 함수처럼 부르지만 Next 서버에서 돈다
-// 이미지를 바꾼 뒤 부른다. 이미지 주소는 목록(getProducts)과 상품(getProduct)의 캐시 양쪽에 들어 있다
-export async function refreshProduct(id: number): Promise<void> {
+export type ActionResult = { status: number; message: string };
+
+// Server Action: 브라우저에서 함수처럼 부르지만 Next 서버에서 돈다. 주소만 알면 누구나 부를 수 있는 공개 엔드포인트다
+// 그래서 "캐시만 지우는" 액션은 두지 않는다. 바꾸는 요청을 액션이 API에 보내고, API가 관리자인지 확인해 실제로 바꾼 뒤에만 지운다
+async function failure(res: Response): Promise<ActionResult> {
+  const body = (await res.json().catch(() => ({}))) as { message?: string | string[] };
+  return { status: res.status, message: Array.isArray(body.message) ? body.message.join(", ") : (body.message ?? res.statusText) };
+}
+
+// 올린 이미지를 상품에 붙인다(06의 confirm). 성공하면 null
+export async function confirmProductImage(token: string, id: number, key: string): Promise<ActionResult | null> {
+  const res = await fetch(`${process.env.API_URL}/products/${id}/image/confirm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ key }),
+  });
+  if (!res.ok) return failure(res); // 401·403(데모 관리자)·400(이미지가 아니다)이면 캐시를 건드리지 않는다
+  // 이미지 주소는 목록(getProducts)과 상품(getProduct)의 캐시 양쪽에 들어 있다
   // updateTag: 지우고, 다음 요청은 옛 값을 보지 않고 새 값을 받을 때까지 기다린다. Server Action에서만 부를 수 있다
   updateTag(PRODUCTS_TAG);
   updateTag(productTag(id));
+  return null;
 }
 ```
+
+업로더는 저장소에 올리기(`PUT`)까지는 지금처럼 브라우저가 하고, 확인만 액션으로 바꾼다. 액션은 Next 서버에서 돌아 브라우저 메모리의 토큰을 모르므로 인자로 넘긴다. 실패하면 API의 사유(`이미지 파일이 아니다` 등)로 에러를 던져, 지금처럼 `role="alert"`에 보이게 한다.
 
 ```diff
 --- a/order-console-next/app/admin/products/product-image-uploader.tsx
 +++ b/order-console-next/app/admin/products/product-image-uploader.tsx
 @@
+ "use client";
+ 
  import { useMutation, useQueryClient } from "@tanstack/react-query";
- import { authFetch } from "@/lib/api-client";
+-import { authFetch } from "@/lib/api-client";
++import { authFetch, refreshAccessToken } from "@/lib/api-client";
++import { useAuthStore } from "@/lib/auth-store";
  import { useTRPC } from "@/lib/trpc";
-+import { refreshProduct } from "./actions";
++import { confirmProductImage } from "./actions";
  import { useReadOnly } from "./admin-only";
  
  type UploadUrl = { key: string; uploadUrl: string; expiresIn: number };
 @@
-         body: JSON.stringify({ key }),
        });
+       const put = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+       if (!put.ok) throw new Error(`저장소 업로드 실패(${put.status})`);
+-      await authFetch(`/products/${productId}/image/confirm`, {
+-        method: "POST",
+-        headers: { "Content-Type": "application/json" },
+-        body: JSON.stringify({ key }),
+-      });
++      // 확인(confirm)은 Server Action이 API에 보낸다. 성공하면 같은 액션이 서버 캐시까지 지우고, 새로 그린 표를 응답에 실어 온다
++      // 메모리에 토큰이 없으면(새로고침 직후) refresh 쿠키로 받아 온다. 만료로 401이면 한 번만 새로 받아 다시 보낸다
++      let token = useAuthStore.getState().accessToken ?? (await refreshAccessToken());
++      if (!token) throw new Error("로그인이 필요합니다.");
++      let failed = await confirmProductImage(token, productId, key);
++      if (failed?.status === 401 && (token = await refreshAccessToken())) failed = await confirmProductImage(token, productId, key);
++      if (failed) throw new Error(failed.message); // 아래 role="alert"에 사유가 보인다(이미지 파일이 아니다 등)
      },
 -    onSuccess: () => void queryClient.invalidateQueries({ queryKey: trpc.products.list.pathKey() }),
-+    onSuccess: async () => {
-+      void queryClient.invalidateQueries({ queryKey: trpc.products.pathKey() }); // 이 탭의 상점 목록과 상세(byId)
-+      await refreshProduct(productId); // 이 표를 그린 서버 캐시도 지운다. 새로 그린 표가 Server Action의 응답에 실려 온다
-+    },
++    onSuccess: () => void queryClient.invalidateQueries({ queryKey: trpc.products.pathKey() }), // 이 탭의 상점 목록과 상세(byId)
    });
  
    return (
 ```
 
-`updateTag`는 그 태그가 붙은 캐시 칸을 지운다. Server Action 안에서 캐시를 지우면 Next는 지금 화면을 새로 그려 Server Action의 응답에 함께 실어 보낸다. 그래서 새로고침하지 않아도 새 이미지가 보인다(`e2e/upload.spec.ts`). TanStack Query 쪽은 `trpc.products.pathKey()`로 `products.` 아래 모든 쿼리(목록·`byId`)를 한 번에 지운다.
+`updateTag`는 그 태그가 붙은 캐시 칸을 지운다. Server Action 안에서 캐시를 지우면 Next는 지금 화면을 새로 그려 Server Action의 응답에 함께 실어 보낸다. 그래서 새로고침하지 않아도 새 이미지가 보인다. TanStack Query 쪽은 `trpc.products.pathKey()`로 `products.` 아래 모든 쿼리(목록·`byId`)를 한 번에 지운다.
+
+`confirm` 요청이 이제 브라우저가 아니라 Next 서버에서 나간다. `06`의 `e2e/upload.spec.ts`는 브라우저에서 `/image/confirm` 응답을 기다려 키를 읽었으므로 그대로 두면 그 응답을 끝없이 기다리다 시간 초과로 실패한다. 키는 브라우저가 저장소에 올린 주소에서 읽는다. 저장소 클라이언트가 path style(`forcePathStyle: true`)이라 주소가 `http://localhost:9000/product-images/<키>?…` 모양이다.
+
+```diff
+--- a/order-console-next/e2e/upload.spec.ts
++++ b/order-console-next/e2e/upload.spec.ts
+@@
+   await loginAsKim(page);
+   await page.getByRole("link", { name: "관리" }).click();
+   const storagePut = page.waitForResponse((r) => r.request().method() === "PUT" && r.url().startsWith("http://localhost:9000/"));
+-  const confirm = page.waitForResponse((r) => r.url().endsWith("/products/6/image/confirm"));
+   await page.getByTestId("image-input-6").setInputFiles(path.join(__dirname, "fixtures/pixel.png"));
+ 
+-  expect((await storagePut).status()).toBe(200);
+-  const { key } = (await (await confirm).json()) as { key: string };
++  const put = await storagePut;
++  expect(put.status()).toBe(200);
++  // confirm은 Next 서버의 Server Action이 보내므로 브라우저에는 보이지 않는다. 키는 저장소에 올린 주소(path style)에서 읽는다
++  const key = new URL(put.url()).pathname.replace(/^\/product-images\//, "");
+   const img = page.getByTestId("image-6").filter({ visible: true });
+   await expect(img).toHaveAttribute("src", new RegExp(`^http://localhost:9000/product-images/${key}\\?`));
+   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
+```
 
 ### 작업 4. [커밋] 상품 수정을 Server Action으로 만든다
 
@@ -2665,29 +2752,25 @@ export async function refreshProduct(id: number): Promise<void> {
 +import { redirect } from "next/navigation";
  import { PRODUCTS_TAG, productTag } from "@/lib/catalog";
  
-+export type SaveResult = { status: number; message: string };
+ export type ActionResult = { status: number; message: string };
 +export type ProductInput = { name: string; price: number; description: string };
-+
- // Server Action: 브라우저에서 함수처럼 부르지만 Next 서버에서 돈다
- // 이미지를 바꾼 뒤 부른다. 이미지 주소는 목록(getProducts)과 상품(getProduct)의 캐시 양쪽에 들어 있다
- export async function refreshProduct(id: number): Promise<void> {
+ 
+ // Server Action: 브라우저에서 함수처럼 부르지만 Next 서버에서 돈다. 주소만 알면 누구나 부를 수 있는 공개 엔드포인트다
+ // 그래서 "캐시만 지우는" 액션은 두지 않는다. 바꾸는 요청을 액션이 API에 보내고, API가 관리자인지 확인해 실제로 바꾼 뒤에만 지운다
 @@
-   updateTag(PRODUCTS_TAG);
    updateTag(productTag(id));
+   return null;
  }
 +
 +// 관리자의 상품 수정. 이 앱의 로그인은 브라우저 메모리의 액세스 토큰이라 Next 서버는 누가 관리자인지 모른다
 +// → 브라우저가 토큰을 인자로 넘기고, 권한 검사는 API의 AdminGuard가 한다(데모 관리자는 403)
-+export async function saveProduct(token: string, id: number, input: ProductInput): Promise<SaveResult> {
++export async function saveProduct(token: string, id: number, input: ProductInput): Promise<ActionResult> {
 +  const res = await fetch(`${process.env.API_URL}/products/${id}`, {
 +    method: "PATCH",
 +    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
 +    body: JSON.stringify(input),
 +  });
-+  if (!res.ok) {
-+    const body = (await res.json().catch(() => ({}))) as { message?: string | string[] };
-+    return { status: res.status, message: Array.isArray(body.message) ? body.message.join(", ") : (body.message ?? res.statusText) };
-+  }
++  if (!res.ok) return failure(res);
 +  // 여기까지 왔으면 API가 자기 Redis를 이미 지웠다 → 그다음에 Next 서버 캐시를 지운다(거꾸로 하면 Redis의 옛 값으로 다시 채운다)
 +  updateTag(PRODUCTS_TAG); // 관리자 목록
 +  updateTag(productTag(id)); // 이 상품의 상세·팝업·수정 화면. 다른 상품의 상세 캐시는 그대로 둔다
@@ -2695,7 +2778,7 @@ export async function refreshProduct(id: number): Promise<void> {
 +}
 ```
 
-Server Action은 브라우저에서 함수처럼 부르지만 Next 서버에서 돈다. Next 서버는 누가 관리자인지 모른다. 브라우저가 토큰을 인자로 넘기고, 권한 검사는 API의 `AdminGuard`가 한다. 데모 관리자의 토큰이면 API가 403(`데모 관리자는 볼 수만 있습니다`)을 주고, 그 문장이 폼에 그대로 보인다.
+작업 3의 `confirmProductImage`와 같은 모양이다. 실패 응답을 읽는 `failure`도 함께 쓴다. Next 서버는 누가 관리자인지 모른다. 브라우저가 토큰을 인자로 넘기고, 권한 검사는 API의 `AdminGuard`가 한다. 데모 관리자의 토큰이면 API가 403(`데모 관리자는 볼 수만 있습니다`)을 주고, 그 문장이 폼에 그대로 보인다.
 
 `redirect`는 예외를 던져 이동하므로 그 뒤의 코드는 돌지 않는다. 그래서 무효화가 먼저다.
 
@@ -2837,8 +2920,6 @@ API가 거절하면(400, 403) 입력값을 둔 채 사유를 `role="alert"`로 �
 
 ### 개념 | 목록 태그와 상품별 태그
 
-<!-- 검증 안 됨: 새로 쓴 절 -->
-
 상품 6의 가격을 고치면 지워야 할 Next 서버 캐시 칸은 둘이다. 목록 칸 하나(`getProducts()`)와 상품 6의 칸(`getProduct(6)`)이다. 상품 5의 칸은 그대로여야 한다. 태그를 어떻게 붙이느냐에 따라 지워지는 칸이 다르다.
 
 | 태그를 붙이는 법 | 상품 6을 고친 뒤 `updateTag(...)` | 지워지는 칸 | 문제 |
@@ -2884,7 +2965,6 @@ Redis는 반대로 해시 하나를 통째로 지운다(2장). Redis의 칸은 A
 
 웹을 다시 빌드해 띄운다. 관리자 목록을 한 번 열어(목록 칸을 30,000원으로 채운다) 작업 5처럼 마우스를 32,000원으로 저장하고 본다.
 
-<!-- 재측정 -->
 | 볼 곳 | 보이는 가격 | 왜 |
 |---|---|---|
 | 저장 직후 관리자 목록 | 30,000원(옛 값) | Next 서버의 목록 칸이 그대로다 |
@@ -2924,7 +3004,6 @@ Redis는 반대로 해시 하나를 통째로 지운다(2장). Redis의 칸은 A
 
 이 diff는 원본에서 바로 비교한 것이다. 앞 실험의 주석 처리 위에 `import`와 `revalidatePath` 한 줄을 더하면 이 모양이 된다. 웹을 다시 빌드해 띄우고(서버 메모리가 비어 모든 화면이 32,000원에서 시작한다), 상점에서 마우스 팝업을 한 번 열어 둔 뒤(상품 6의 칸을 채운다) 관리자 화면에서 33,000원으로 저장한다.
 
-<!-- 재측정 -->
 | 볼 곳 | 보이는 가격 | 왜 |
 |---|---|---|
 | 저장 직후 관리자 목록 | 33,000원 | `/admin/products`를 그릴 때 쓴 캐시(`getProducts`)가 지워졌다 |
@@ -2974,6 +3053,8 @@ git status --short
 
 - **감각으로 남겨야 할 것**:
 
+  - Server Action은 누구나 부를 수 있는 공개 엔드포인트다. 캐시만 지우는 액션을 두지 말고, 바꾸는 요청을 API에 보내 권한 확인과 변경이 성공한 뒤에만 지운다.
+
   - 지울 때는 화면(경로)이 아니라 데이터(태그)로 지운다. 목록에는 목록 전체의 태그를, 상세에는 상품별 태그를 단다. 둘을 나누지 않으면 너무 많이 지우거나 덜 지운다.
 
   - `"use cache"` 함수는 인자가 없으면 빌드 중에도 돈다. 요청이 와야 하는 일이면 그 앞에 `await connection()`을 둔다.
@@ -2984,7 +3065,7 @@ git status --short
 
 - **에러 신호**:
 
-  - `Error occurred prerendering page "/admin/products"`, `connect ECONNREFUSED 127.0.0.1:4000` → `getProducts()` 앞에 `await connection()`이 있는지
+  - `Error occurred prerendering page "/admin/products"`, `connect ECONNREFUSED`(API 주소) → `getProducts()` 앞에 `await connection()`이 있는지
 
   - 새로 띄운 웹 서버가 옛 값을 보여 준다 → `.next/cache/fetch-cache`가 있는지. 안쪽 `fetch`에 `cache: "no-store"`
 
@@ -2992,7 +3073,9 @@ git status --short
 
   - 관리자 목록은 새 값인데 상세·수정 화면이 옛 값 → `updateTag(productTag(id))`. `revalidatePath`로 목록 경로만 지우지 않았는지
 
-  - 이미지를 올렸는데 관리자 표의 이미지가 그대로다 → 업로더가 `refreshProduct`를 부르는지
+  - 이미지를 올렸는데 관리자 표의 이미지가 그대로다 → 업로더가 확인을 `confirmProductImage`(Server Action)로 보내는지
+
+  - `e2e/upload.spec.ts`가 `/image/confirm` 응답을 기다리다 시간 초과 → confirm은 Next 서버가 보낸다. 키를 저장소 `PUT` 주소에서 읽는다
 
   - 관리자 표의 재고가 비어 있다 → `StockCell`의 `products.byId`가 실패했다. API를 8장 작업 2의 코드로 다시 빌드했는지
 
@@ -3019,7 +3102,7 @@ git status --short
 | 쓰기 | Redis | Next 서버 목록·상품 | 브라우저 |
 |---|---|---|---|
 | 관리자 수정(9장) | API가 지운다 | Server Action이 둘 다 지운다 | 수정 폼이 지운다 |
-| 이미지 교체(`06`) | API가 지운다 | `refreshProduct`가 둘 다 지운다 | 업로더가 지운다 |
+| 이미지 교체(`06`) | API가 지운다 | `confirmProductImage`가 둘 다 지운다 | 업로더가 지운다 |
 | 재고 입고·조정(`22`), 결제(`02`), 미결제 취소(`14`) | 캐시에 없다 | 캐시에 없다 | 입고·조정만 `setQueryData`. 결제는 `staleTime`이 지나면 |
 | 시드·매일 초기화(`21`) | 시드가 지운다(2장 작업 4) | 지우지 않는다. `revalidate`(1분) 뒤 새로 받기 시작하고 `expire`(9분)면 버린다 | 다음 방문 때 |
 
@@ -3029,14 +3112,13 @@ git status --short
 
 ### 작업 1. [커밋] 수정 한 번을 e2e로 지킨다
 
-`e2e/admin-edit.spec.ts`가 이 표를 지킨다. 상점 목록과 상세 팝업을 먼저 열어 TanStack Query와 Next 서버의 상품 칸을 채워 둔다. 그다음 관리자 화면에서 가격과 설명을 저장하면, 목록·상점(페이지를 새로 받지 않는 링크 이동)·상세가 모두 새 값이어야 한다. 끝나면 시드 값으로 되돌린다(다른 e2e가 그 값을 전제한다).
+`e2e/admin-edit.spec.ts`가 이 표를 지킨다. 상점 목록과 상세 팝업을 먼저 열어 TanStack Query와 Next 서버의 상품 칸을 채워 둔다. 그다음 관리자 화면에서 가격과 설명을 저장하면, 목록·상점(페이지를 새로 받지 않는 링크 이동)·상세가 모두 새 값이어야 한다. 끝나면 시드 값으로 되돌린다(다른 e2e가 그 값을 전제한다). 되돌리기도 수정 폼으로 한다. API로 직접 되돌리면 위 표의 Redis만 지워지고 Next 서버의 상품 칸은 바꾼 값으로 남아, 다음에 도는 `e2e/product-detail.spec.ts`가 31,500원과 바꾼 설명을 받고 실패한다. 시드가 Next 서버 캐시를 지우지 못하는 것(위 표)과 같은 일이 테스트 정리 코드에서 일어난다.
 
 ```ts
 // order-console-next/e2e/admin-edit.spec.ts
 import { expect, test, type Page } from "@playwright/test";
 
 // 저장 한 번에 복사본이 있는 곳(API의 Redis, Next 서버의 목록·상품 캐시, 브라우저의 TanStack Query)이 모두 새 값이어야 한다
-const API = "http://localhost:4000";
 const MOUSE = { name: "마우스", price: 30000, description: "손에 맞는 크기의 유선 마우스입니다. 버튼 두 개와 휠 하나, 군더더기가 없습니다." };
 
 test.use({ serviceWorkers: "block" });
@@ -3049,10 +3131,19 @@ async function loginAsKim(page: Page) {
   await expect(page).toHaveURL(/\/shop$/);
 }
 
-// 다른 테스트가 마우스 30,000원(시드 값)을 전제한다 → 끝나면 API로 되돌린다
-test.afterAll(async ({ request }) => {
-  const { accessToken } = await (await request.post(`${API}/auth/login`, { data: { id: "kim", password: "1234" } })).json();
-  await request.patch(`${API}/products/6`, { headers: { Authorization: `Bearer ${accessToken}` }, data: MOUSE });
+// 다른 테스트가 마우스의 시드 값(30,000원, 설명)을 전제한다 → 끝나면 되돌린다
+// API(PATCH /products/6)로 되돌리면 Redis만 지워지고 Next 서버의 상품 캐시(product-6)는 바꾼 값으로 남는다
+// → 다음 테스트 파일의 상세 화면이 31,500원을 받는다. 되돌리기도 화면의 수정 폼(Server Action)으로 한다
+test.afterAll(async ({ browser }) => {
+  const page = await browser.newPage({ serviceWorkers: "block" });
+  await loginAsKim(page);
+  await page.goto("/admin/products/6");
+  await page.getByLabel("이름").fill(MOUSE.name);
+  await page.getByLabel("가격(원)").fill(String(MOUSE.price));
+  await page.getByLabel("설명").fill(MOUSE.description);
+  await page.getByRole("button", { name: "저장" }).click();
+  await expect(page).toHaveURL(/\/admin\/products$/);
+  await page.close();
 });
 
 test("가격과 설명을 저장하면 목록·상점·상세가 모두 새 값이다", async ({ page }) => {
@@ -3105,12 +3196,8 @@ API와 웹이 떠 있는 상태에서 돌린다. `playwright.config.ts`는 이�
 ```sh
 # order-console-next/에서
 npx playwright test e2e/admin-edit.spec.ts e2e/product-detail.spec.ts e2e/upload.spec.ts e2e/stock-adjust.spec.ts e2e/demo-login.spec.ts
-```
-
-<!-- 재측정 -->
-```text
 # 출력(줄임)
-  13 passed
+  13 passed (16.5s)
 ```
 
 > 이 표는 같은 탭 안의 이야기다. 다른 사용자의 브라우저에 있는 TanStack Query는 지울 수 없다. 그 브라우저는 `staleTime`이 지나거나 창을 다시 볼 때 새로 받는다. 서버에서 밀어 주려면 WebSocket(`04`의 알림 게이트웨이)으로 "상품이 바뀌었다"를 알려야 한다.
@@ -3126,6 +3213,8 @@ npx playwright test e2e/admin-edit.spec.ts e2e/product-detail.spec.ts e2e/upload
   - 지울 수 없는 곳(다른 사용자의 브라우저, Next 밖에서 도는 시드)은 수명(`staleTime`, `cacheLife`)이 정한다. 그 수명이 곧 "틀린 값을 얼마나 참을 수 있는가"다.
 
 - **에러 신호**:
+
+  - `admin-edit.spec.ts` 다음에 돈 테스트의 상세가 31,500원·바꾼 설명(`Expected substring: "유선 마우스"`) → 되돌리기를 API가 아니라 수정 폼(Server Action)으로 하는지
 
   - 관리자 화면은 새 가격인데 같은 탭의 상점은 옛 가격 → 수정 폼의 `invalidateQueries(trpc.products.pathKey())`
 
@@ -3163,7 +3252,7 @@ Redis가 떠 있는지 본다(`docker compose ps redis`). 캐시 연결 설정�
 
 Cache Components는 요청을 기다리는 코드가 `<Suspense>` 밖에 있으면 빌드를 멈춘다. 이 앱은 루트 레이아웃의 `instant = false`로 피한다. 그 줄이 빠졌는지 본다.
 
-### 진단 5. `next build`가 `ECONNREFUSED 127.0.0.1:4000`으로 멈춘다
+### 진단 5. `next build`가 `connect ECONNREFUSED`(API 주소)로 멈춘다
 
 인자 없는 `"use cache"` 함수가 빌드 중에 실행됐다. 부르는 컴포넌트에서 그보다 먼저 `await connection()`을 둔다.
 
@@ -3205,6 +3294,7 @@ compose의 `command`(`shared_preload_libraries`)를 더한 뒤에는 DB 컨테�
 | 품절인데 재고 1이 보이고 결제가 409 | 지운 직후 옛 재고가 다시 캐시에 들어갔다 | 재고를 캐시에서 빼고 DB에서 읽는다 | 3장 |
 | k6가 `browse.js`를 찾지 못한다(`no such file or directory`) | 다른 폴더에서 쳐서 빈 폴더가 붙었다 | `order-api-nest/`에서 쳤는지 | 3장 |
 | `Error: kim으로 로그인하지 못했다(401)` | 부하 시나리오의 준비(로그인)가 틀렸다 | 시드, API의 `DEMO_PASSWORD` | 3장 |
+| `Error: kim으로 로그인하지 못했다(0)` | k6 컨테이너가 API에 닿지 않았다 | `-e API=http://host.docker.internal:4000`, `--add-host` | 3장 |
 | `Error: 부하용 상품이 없다. loadtest/load-seed.sql을 넣었는지 본다` | 결제할 상품이 없어 재지 않고 멈췄다 | 1장 작업 2의 `load-seed.sql` | 3장 |
 | `thresholds on metrics 'checks' have been crossed`, `✗ 결제 201` | 요청은 나갔지만 결제가 실패했다. 이 결과는 표에 옮기지 않는다 | Stripe 시뮬레이터, `STRIPE_SIMULATOR_URL` | 3장 |
 | API는 새 가격을 저장했다는데 목록은 옛 가격 | 그 쓰기 경로가 Redis를 지우지 않았다 | `cache.invalidate()`, `redis-cli TTL catalog` | 4장 |
@@ -3212,19 +3302,21 @@ compose의 `command`(`shared_preload_libraries`)를 더한 뒤에는 DB 컨테�
 | `Error: Cannot find module '…/order-api-nest/scripts/cache-stampede.mjs'` | 스크립트가 그 자리에 없다 | 파일 위치(`order-api-nest/order-api-nest/`에 만들지 않았는지), 친 폴더 | 5장 |
 | Redis를 멈추자 `GET /products`가 30초 넘게 응답 없음(`000`) | ioredis가 명령을 쌓아 두고 다시 붙기를 기다린다 | 캐시 연결의 `enableOfflineQueue`·`maxRetriesPerRequest`·`commandTimeout`(진단 3) | 6장 |
 | `catalog_cache_requests_total{result="error"}`가 는다 | Redis에 닿지 않는다(목록은 DB로 돈다) | Redis가 떠 있는지 | 6장 |
-| `Error: Route "/cart": Next.js encountered uncached or runtime data during prerendering.` | 정적 셸 검사가 요청 시점 데이터를 만났다 | 루트 레이아웃의 `instant = false`(진단 4) | 7장 |
+| `Error: Route "/_not-found": Next.js encountered uncached or runtime data during prerendering.`(경로는 다를 수 있다) | 정적 셸 검사가 요청 시점 데이터를 만났다 | 루트 레이아웃의 `instant = false`(진단 4) | 7장 |
 | `Object literal may only specify known properties, and 'description' does not exist`, ``Unknown argument `description` `` | 마이그레이션은 했는데 Prisma Client가 옛 모양이다 | `npx prisma generate` | 8장 |
 | 팝업이 아니라 늘 전체 페이지로 간다 | 가로채는 라우트가 그려지지 않는다 | `app/shop/layout.tsx`의 `modal`, 폴더 이름 `@modal/(.)[id]` | 8장 |
 | 새로고침하면 404, `No default component was found for a parallel route rendered on this page.` | 슬롯의 상태를 모를 때 그릴 것이 없다 | `@modal/default.tsx` | 8장 |
 | `/shop`으로 링크 이동했는데 팝업이 남아 있다 | 링크 이동에서는 슬롯이 앞 상태를 유지한다 | `@modal/page.tsx` | 8장 |
 | 팝업의 마지막 버튼에서 Tab을 누르면 포커스가 주소창으로 나간다(e2e `Received: false`) | `showModal()`은 뒤쪽만 막고 포커스를 가두지 않는다 | `dialog`의 `onKeyDown={keepTabInside}` | 8장 |
 | Esc로 닫으면 두 화면 뒤로 간다 | 닫는 길 둘이 함께 `router.back()`을 불렀다 | 닫기 버튼이 `dialog.close()`를 부르지 않는지 | 8장 |
-| `Error occurred prerendering page "/admin/products"`, `connect ECONNREFUSED 127.0.0.1:4000` | 인자 없는 `"use cache"` 함수가 빌드 중에 API를 불렀다 | `getProducts()` 앞의 `await connection()`(진단 5) | 9장 |
+| `Error occurred prerendering page "/admin/products"`, `connect ECONNREFUSED`(API 주소) | 인자 없는 `"use cache"` 함수가 빌드 중에 API를 불렀다 | `getProducts()` 앞의 `await connection()`(진단 5) | 9장 |
 | 새로 띄운 웹 서버가 옛 값을 보여 준다 | `fetch` 응답이 디스크에 따로 캐시됐다 | `.next/cache/fetch-cache`, `cache: "no-store"`(진단 6) | 9장 |
 | 저장했는데 관리자 목록이 새로고침해도 옛 가격 | Next 서버의 목록 칸이 그대로다 | Server Action의 `updateTag(PRODUCTS_TAG)` | 9장 |
 | 관리자 목록은 새 값인데 상세·수정 화면이 옛 값 | 상품 칸이 그대로다 | `updateTag(productTag(id))`, `revalidatePath`로 바꾸지 않았는지 | 9장 |
-| 이미지를 올렸는데 관리자 표의 이미지가 그대로다 | 서버가 캐시한 표가 그대로다 | 업로더의 `refreshProduct` | 9장 |
+| 이미지를 올렸는데 관리자 표의 이미지가 그대로다 | 서버가 캐시한 표가 그대로다 | 업로더가 `confirmProductImage`를 쓰는지 | 9장 |
+| `upload.spec.ts`가 `/image/confirm` 응답을 기다리다 시간 초과 | confirm은 이제 Next 서버가 보내 브라우저에 보이지 않는다 | 키를 저장소 `PUT` 주소에서 읽는지 | 9장 |
 | 관리자 표의 재고가 비어 있다 | 재고 칸의 `products.byId`가 실패했다 | API를 8장 작업 2의 코드로 다시 빌드했는지 | 9장 |
+| `admin-edit.spec.ts` 다음에 돈 테스트의 상세가 바꾼 값(`Expected substring: "유선 마우스"`) | API로 되돌려 Next 서버의 상품 칸이 남았다 | `afterAll`이 수정 폼으로 되돌리는지 | 10장 |
 | 관리자 화면은 새 가격인데 같은 탭의 상점은 옛 가격 | 브라우저의 TanStack Query가 그대로다 | 수정 폼의 `invalidateQueries(trpc.products.pathKey())`(진단 7) | 10장 |
 | 초기화 뒤 상세에 옛 설명이 몇 분 보인다 | 시드는 Next 서버 캐시를 지우지 못한다 | `cacheLife`의 `revalidate`·`expire`를 기다리거나 웹 서버를 다시 띄운다 | 10장 |
 
@@ -3314,5 +3406,5 @@ node scripts/cache-stampede.mjs
 | 저장소 루트 | `npm ci`, `docker compose up -d`, `npm run lint`, `npm run typecheck`, `npm run test:api`, `npm run test:web` |
 | 저장소 루트 | `docker compose exec -T db psql -U order -d order_api -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements"` |
 | `order-api-nest/` | `npx prisma migrate deploy && npx prisma generate && npx prisma db seed`, `node scripts/stripe-sim.mjs`, `npm run build && STRIPE_SIMULATOR_URL=http://localhost:4100 node --env-file=.env dist/main.js` |
-| `order-api-nest/` | `node scripts/cache-stampede.mjs`, `docker run --rm -i --network host -v "$PWD/loadtest:/scripts" grafana/k6 run -e API=http://localhost:4000 -e BUYERS=20 /scripts/browse.js` |
+| `order-api-nest/` | `node scripts/cache-stampede.mjs`, `docker run --rm -i --add-host=host.docker.internal:host-gateway -v "$PWD/loadtest:/scripts" grafana/k6 run -e API=http://host.docker.internal:4000 -e BUYERS=20 /scripts/browse.js` |
 | `order-console-next/` | `npx next build`, `npx playwright test e2e/admin-edit.spec.ts e2e/product-detail.spec.ts` |
