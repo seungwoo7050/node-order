@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #fbfbfa;
+  --surface: #f4f4f2;
+  --fg: #2f2f2b;
+  --muted: #66665f;
+  --faint: #9a9a92;
+  --line: #e6e6e1;
+  --line-strong: #cfcfc8;
+  --ok: #4f6f53;
+  --wait: #8a6a32;
+  --danger: #9b3b2f;
+  --notice: #f1efe8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1b19;
+    --surface: #222220;
+    --fg: #e4e3dd;
+    --muted: #a3a29b;
+    --faint: #75746e;
+    --line: #2f2f2c;
+    --line-strong: #44443f;
+    --ok: #94b197;
+    --wait: #cfae74;
+    --danger: #e08c7e;
+    --notice: #262521;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ok: var(--ok);
+  --color-wait: var(--wait);
+  --color-danger: var(--danger);
+  --color-notice: var(--notice);
+  --font-sans: var(--font-body), "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-serif: var(--font-display), "AppleMyungjo", serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 15px;
+  line-height: 1.7;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+@layer base {
+  a { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+}
+@layer components {
+  .page { width: 100%; max-width: 880px; margin-inline: auto; padding-inline: 16px; }
+  @media (min-width: 640px) { .page { padding-inline: 32px; } }
+
+  .title { font-family: var(--font-serif); font-weight: 400; font-size: 1.5rem; line-height: 1.4; }
+  .subtitle { font-family: var(--font-serif); font-weight: 400; font-size: 1rem; }
+  .label { font-size: 0.75rem; letter-spacing: 0.06em; color: var(--muted); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  .btn { border: 1px solid var(--line-strong); padding: 7px 16px; font-size: 0.82rem; font-weight: 400; cursor: pointer; }
+  .btn:disabled, .btn[aria-disabled="true"] { color: var(--faint); border-color: var(--line); cursor: not-allowed; }
+  .btn-primary { background: var(--fg); color: var(--bg); border-color: var(--fg); padding: 12px 24px; letter-spacing: 0.06em; }
+  .btn-primary:disabled { background: var(--line); border-color: var(--line); color: var(--faint); }
+  .link-quiet { font-size: 0.8rem; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+  .status { display: inline-flex; align-items: baseline; gap: 6px; font-size: 0.8rem; color: var(--muted); }
+  .status::before { content: ""; width: 6px; height: 6px; border-radius: 9999px; background: var(--faint); transform: translateY(-1px); }
+  .status[data-state="paid"] { color: var(--ok); }
+  .status[data-state="paid"]::before { background: var(--ok); }
+  .status[data-state="pending"] { color: var(--wait); }
+  .status[data-state="pending"]::before { background: var(--wait); }
+
+  .alert { border-left: 2px solid var(--danger); padding: 8px 16px; font-size: 0.9rem; }
+  .note { border-left: 2px solid var(--line-strong); padding: 8px 16px; font-size: 0.9rem; }
+}
+
+:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

@@ -1,0 +1,31 @@
+{
+  "categories": [
+    { "id": 1, "name": "전자기기", "parentId": null },
+    { "id": 2, "name": "컴퓨터", "parentId": 1 },
+    { "id": 3, "name": "키보드", "parentId": 2 },
+    { "id": 4, "name": "마우스", "parentId": 2 },
+    { "id": 5, "name": "음향", "parentId": 1 },
+    { "id": 6, "name": "헤드폰", "parentId": 5 },
+    { "id": 7, "name": "생활", "parentId": null },
+    { "id": 8, "name": "주방", "parentId": 7 },
+    { "id": 9, "name": "만든 사람", "parentId": null }
+  ],
+  "products": [
+    { "id": 1, "name": "네임 카드", "price": 1000, "stock": 100, "category": "만든 사람", "photo": "maker-card.webp", "description": "안녕하세요. 열심히 일하겠습니다." },
+    { "id": 2, "name": "증명사진 20대", "price": 5000, "stock": 10, "category": "만든 사람", "photo": "maker-photo-1.webp", "description": "안녕하세요. 열심히 일하겠습니다." },
+    { "id": 3, "name": "증명사진 20대 중후반", "price": 5000, "stock": 10, "category": "만든 사람", "photo": "maker-photo-2.webp", "description": "안녕하세요. 열심히 일하겠습니다." },
+    { "id": 4, "name": "증명사진 30대 초", "price": 5000, "stock": 10, "category": "만든 사람", "photo": "maker-photo-3.webp", "description": "안녕하세요. 열심히 일하겠습니다." },
+    { "id": 5, "name": "한정판 키보드", "price": 150000, "stock": 10, "category": "키보드", "photo": "keyboard-limited.webp", "description": "한정판 기계식 키보드입니다." },
+    { "id": 6, "name": "마우스", "price": 30000, "stock": 100, "category": "마우스", "photo": "mouse.webp", "description": "손에 맞는 크기의 유선 마우스입니다. 버튼 두 개와 휠 하나, 군더더기가 없습니다." },
+    { "id": 7, "name": "무선 헤드폰", "price": 90000, "stock": 30, "category": "헤드폰", "photo": "headphones.webp", "description": "한 번 충전하면 하루 종일 쓰는 무선 헤드폰입니다. 접어서 가방에 넣을 수 있습니다." },
+    { "id": 8, "name": "전기 주전자", "price": 40000, "stock": 20, "category": "주방", "photo": "kettle.webp", "description": "1.7리터 전기 주전자입니다. 물이 끓으면 저절로 꺼집니다." },
+    { "id": 9, "name": "키캡 세트", "price": 45000, "stock": 40, "category": "키보드", "photo": "keycaps.webp", "description": "키보드 카테고리의 키캡 세트입니다. 대부분의 기계식 키보드에 맞습니다." },
+    { "id": 10, "name": "USB 허브", "price": 25000, "stock": 50, "category": "컴퓨터", "photo": "usb-hub.webp", "description": "포트 네 개짜리 USB 허브입니다. 노트북 옆에 두고 쓰기 좋은 크기입니다." },
+    { "id": 11, "name": "웹캠", "price": 60000, "stock": 25, "category": "컴퓨터", "photo": "webcam.webp", "description": "화상 회의용 웹캠입니다. 모니터 위에 걸어 둡니다." },
+    { "id": 12, "name": "트랙볼", "price": 55000, "stock": 15, "category": "마우스", "photo": "trackball.webp", "description": "엄지로 공을 굴리는 트랙볼입니다. 손목을 움직이지 않아도 됩니다." },
+    { "id": 13, "name": "유선 헤드폰", "price": 35000, "stock": 40, "category": "헤드폰", "photo": "headphones-wired.webp", "description": "선이 있는 헤드폰입니다. 충전할 필요가 없습니다." },
+    { "id": 14, "name": "휴대용 라디오", "price": 28000, "stock": 20, "category": "음향", "photo": "radio.webp", "description": "건전지로 도는 휴대용 라디오입니다. 정전 때 쓰려고 하나쯤 둡니다." },
+    { "id": 15, "name": "모카포트", "price": 32000, "stock": 30, "category": "주방", "photo": "moka-pot.webp", "description": "가스레인지에 올려 커피를 내리는 모카포트입니다. 3인분 크기입니다." },
+    { "id": 16, "name": "머그컵", "price": 12000, "stock": 60, "category": "주방", "photo": "mug.webp", "description": "350ml 머그컵입니다. 식기세척기에 넣어도 됩니다." }
+  ]
+}
