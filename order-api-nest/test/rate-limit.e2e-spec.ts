@@ -11,11 +11,12 @@ describe("요청 수 제한", () => {
   let app: NestExpressApplication;
   let baseUrl: string;
   const redis = new Redis(process.env.REDIS_URL!);
-  const before = { all: process.env.RATE_LIMIT_PER_MINUTE, auth: process.env.AUTH_RATE_LIMIT_PER_MINUTE };
+  const before = { all: process.env.RATE_LIMIT_PER_MINUTE, auth: process.env.AUTH_RATE_LIMIT_PER_MINUTE, allow: process.env.RATE_LIMIT_ALLOW_IPS };
 
   beforeAll(async () => {
     process.env.RATE_LIMIT_PER_MINUTE = "5";
     process.env.AUTH_RATE_LIMIT_PER_MINUTE = "2";
+    process.env.RATE_LIMIT_ALLOW_IPS = "203.0.113.50";
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication<NestExpressApplication>();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
@@ -33,6 +34,7 @@ describe("요청 수 제한", () => {
   afterAll(async () => {
     process.env.RATE_LIMIT_PER_MINUTE = before.all;
     process.env.AUTH_RATE_LIMIT_PER_MINUTE = before.auth;
+    process.env.RATE_LIMIT_ALLOW_IPS = before.allow;
     await app.close();
     await redis.quit();
   });
@@ -44,6 +46,15 @@ describe("요청 수 제한", () => {
       headers: { "Content-Type": "application/json", "X-Forwarded-For": ip },
       body: JSON.stringify({ id: "nobody", password: "wrong" }),
     });
+
+  it("허용 목록의 IP는 세지 않는다 — 한도 5에서 8번 보내도 200이고 RateLimit 머리글이 없다", async () => {
+    for (let i = 0; i < 8; i++) {
+      const res = await get("/products", "203.0.113.50");
+      expect(res.status).toBe(200);
+      expect(res.headers.get("ratelimit-limit")).toBeNull();
+    }
+    expect(await redis.keys("rate:*:203.0.113.50:*")).toEqual([]);
+  });
 
   it("한도를 넘은 요청은 429와 Retry-After를 받고, 다른 IP는 영향받지 않는다", async () => {
     const statuses: number[] = [];

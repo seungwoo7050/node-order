@@ -8,6 +8,7 @@ const AUTH_PATHS = new Set(["/auth/login", "/auth/demo", "/auth/exchange", "/aut
 const SKIP_PREFIXES = ["/health", "/metrics", "/payments/webhook"];
 
 const limitOf = (name: string) => Number(process.env[name] ?? 0) || 0;
+const ipsOf = (name: string) => new Set((process.env[name] ?? "").split(",").map((s) => s.trim()).filter(Boolean));
 
 @Injectable()
 export class RateLimitStore implements OnModuleDestroy {
@@ -32,12 +33,14 @@ export class RateLimitMiddleware implements NestMiddleware {
   private readonly logger = new Logger(RateLimitMiddleware.name);
   private readonly general = limitOf("RATE_LIMIT_PER_MINUTE");
   private readonly auth = limitOf("AUTH_RATE_LIMIT_PER_MINUTE");
+  private readonly allowed = ipsOf("RATE_LIMIT_ALLOW_IPS");
 
   constructor(private readonly store: RateLimitStore) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
     const path = req.originalUrl.split("?")[0];
     if (SKIP_PREFIXES.some((p) => path.startsWith(p))) return next();
+    if (req.ip && this.allowed.has(req.ip)) return next();
     const isAuth = req.method === "POST" && AUTH_PATHS.has(path);
     const bucket = isAuth ? "auth" : "all";
     const limit = isAuth ? this.auth : this.general;
