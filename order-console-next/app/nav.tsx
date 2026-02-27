@@ -31,7 +31,7 @@ export function Nav() {
 
   return (
     <header className="page flex flex-wrap items-baseline gap-x-6 gap-y-2 py-4 sm:py-6">
-      <Link href="/shop" className="mr-auto font-serif text-base no-underline">주문 콘솔</Link>
+      <Link href="/shop" className="mr-auto font-serif text-base no-underline">Brown Store.</Link>
       <nav aria-label="주요 메뉴" className="flex items-baseline gap-5">
         <NavLink href="/shop">상품</NavLink>
         <NavLink href="/me/orders">내 주문</NavLink>

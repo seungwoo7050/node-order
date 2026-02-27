@@ -13,7 +13,7 @@ const display = Noto_Serif_KR({ variable: "--font-display", weight: ["400"], pre
 export const instant = false;
 
 export const metadata: Metadata = {
-  title: "주문 콘솔",
+  title: "Brown Store.",
   description: "상품 주문·결제와 실시간 알림을 다루는 학습용 서비스",
 };
 
