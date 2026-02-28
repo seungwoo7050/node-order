@@ -1,9 +1,9 @@
-{$WEB_HOST} {
+{$PUBLIC_SCHEME:https}://{$WEB_HOST} {
 	encode zstd gzip
-	reverse_proxy web:3000
+	import /etc/caddy/live/web.caddy
 }
 
-{$API_HOST} {
+{$PUBLIC_SCHEME:https}://{$API_HOST} {
 	encode zstd gzip
-	reverse_proxy api:4000 # WebSocket(Upgrade)도 그대로 넘긴다
+	import /etc/caddy/live/api.caddy
 }
