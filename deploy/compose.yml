@@ -4,6 +4,51 @@ x-logging: &logging
   driver: json-file
   options: { max-size: "10m", max-file: "3" }
 
+x-api: &api
+  logging: *logging
+  restart: unless-stopped
+  init: true
+  stop_grace_period: 30s
+  environment:
+    PORT: "4000"
+    JWT_SECRET: ${JWT_SECRET:?}
+    DEMO_LOGIN: ${DEMO_LOGIN:-0}
+    RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-300}
+    RATE_LIMIT_ALLOW_IPS: ${RATE_LIMIT_ALLOW_IPS:-}
+    AUTH_RATE_LIMIT_PER_MINUTE: "20"
+    TRUST_PROXY: uniquelocal
+    FRONTEND_URL: https://${WEB_HOST}
+    ACCESS_TOKEN_TTL: 15m
+    DATABASE_URL: ${DATABASE_URL:?}
+    NODE_EXTRA_CA_CERTS: /certs/rds-ca.pem
+    REDIS_URL: redis://redis:6379
+    S3_ENDPOINT: ""
+    S3_REGION: ${AWS_REGION:?}
+    S3_BUCKET: ${S3_BUCKET:?}
+    LOG_LEVEL: info
+    GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+    GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+    STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+    STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+  volumes:
+    - ./rds-ca.pem:/certs/rds-ca.pem:ro
+  healthcheck:
+    test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health/ready').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+    interval: 5s
+    retries: 6
+    start_period: 20s
+
+x-web: &web
+  logging: *logging
+  restart: unless-stopped
+  init: true
+  stop_grace_period: 30s
+  healthcheck:
+    test: ["CMD", "node", "-e", "fetch('http://localhost:3000/login').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+    interval: 5s
+    retries: 6
+    start_period: 10s
+
 services:
   caddy:
     logging: *logging
@@ -17,8 +62,8 @@ services:
       API_HOST: ${API_HOST:?API_HOST를 .env에 적는다}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./live:/etc/caddy/live:ro
       - caddy_data:/data
-    depends_on: [web, api]
 
   redis:
     logging: *logging
@@ -28,66 +73,48 @@ services:
 
   migrate:
     logging: *logging
-    image: ghcr.io/seungwoo7050/node-order/order-api-migrate:${IMAGE_TAG:?}
+    image: ${IMAGE_PREFIX:-ghcr.io/seungwoo7050/node-order}/order-api-migrate:${RELEASE_TAG:-none}
     profiles: ["tools"]
     environment:
       DATABASE_URL: ${ADMIN_DATABASE_URL:?}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-}
       NODE_EXTRA_CA_CERTS: /certs/rds-ca.pem
-      S3_ENDPOINT: ""
-      S3_REGION: ${AWS_REGION:?}
-      S3_BUCKET: ${S3_BUCKET:?}
-    volumes:
-      - ./rds-ca.pem:/certs/rds-ca.pem:ro
-
-  api:
-    logging: *logging
-    image: ghcr.io/seungwoo7050/node-order/order-api:${IMAGE_TAG:?}
-    restart: unless-stopped
-    init: true
-    environment:
-      PORT: "4000"
-      JWT_SECRET: ${JWT_SECRET:?}
-      DEMO_LOGIN: ${DEMO_LOGIN:-0}
-      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-300}
-      RATE_LIMIT_ALLOW_IPS: ${RATE_LIMIT_ALLOW_IPS:-}
-      AUTH_RATE_LIMIT_PER_MINUTE: "20"
-      TRUST_PROXY: uniquelocal
-      FRONTEND_URL: https://${WEB_HOST}
-      ACCESS_TOKEN_TTL: 15m
-      DATABASE_URL: ${DATABASE_URL:?}
-      NODE_EXTRA_CA_CERTS: /certs/rds-ca.pem
       REDIS_URL: redis://redis:6379
       S3_ENDPOINT: ""
       S3_REGION: ${AWS_REGION:?}
       S3_BUCKET: ${S3_BUCKET:?}
-      LOG_LEVEL: info
-      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
-      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
     volumes:
       - ./rds-ca.pem:/certs/rds-ca.pem:ro
-    depends_on: [redis]
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health/ready').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
-      interval: 10s
-      retries: 6
-      start_period: 20s
 
-  web:
-    logging: *logging
-    image: ghcr.io/seungwoo7050/node-order/order-web:${IMAGE_TAG:?}
-    restart: unless-stopped
-    init: true
+  api-blue:
+    <<: *api
+    profiles: ["blue"]
+    image: ${IMAGE_PREFIX:-ghcr.io/seungwoo7050/node-order}/order-api:${BLUE_TAG:-none}
+  api-green:
+    <<: *api
+    profiles: ["green"]
+    image: ${IMAGE_PREFIX:-ghcr.io/seungwoo7050/node-order}/order-api:${GREEN_TAG:-none}
+
+  web-blue:
+    <<: *web
+    profiles: ["blue"]
+    image: ${IMAGE_PREFIX:-ghcr.io/seungwoo7050/node-order}/order-web:${BLUE_TAG:-none}
     environment:
-      API_URL: http://api:4000
+      API_URL: http://api-blue:4000
       AUTH_URL: https://${WEB_HOST}
       AUTH_SECRET: ${AUTH_SECRET:?}
       AUTH_GITHUB_ID: ${GITHUB_CLIENT_ID:-}
       AUTH_GITHUB_SECRET: ${GITHUB_CLIENT_SECRET:-}
-    depends_on:
-      api: { condition: service_healthy }
+  web-green:
+    <<: *web
+    profiles: ["green"]
+    image: ${IMAGE_PREFIX:-ghcr.io/seungwoo7050/node-order}/order-web:${GREEN_TAG:-none}
+    environment:
+      API_URL: http://api-green:4000
+      AUTH_URL: https://${WEB_HOST}
+      AUTH_SECRET: ${AUTH_SECRET:?}
+      AUTH_GITHUB_ID: ${GITHUB_CLIENT_ID:-}
+      AUTH_GITHUB_SECRET: ${GITHUB_CLIENT_SECRET:-}
 
 volumes:
   caddy_data:
