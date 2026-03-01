@@ -1,0 +1,55 @@
+name: node-order-rehearsal
+
+services:
+  caddy:
+    ports: !override
+      - "8080:8080"
+      - "8081:8081"
+    environment:
+      PUBLIC_SCHEME: http
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: order_owner
+      POSTGRES_PASSWORD: owner-rehearsal
+      POSTGRES_DB: order_api
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "order_owner", "-d", "order_api"]
+      interval: 2s
+      retries: 15
+
+  storage:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_ACCESS_KEY: localaccess
+      RUSTFS_SECRET_KEY: localsecret123
+    ports:
+      - "9100:9000"
+
+  migrate:
+    environment: &local-storage
+      NODE_EXTRA_CA_CERTS: ""
+      S3_ENDPOINT: http://storage:9000
+      S3_ACCESS_KEY: localaccess
+      S3_SECRET_KEY: localsecret123
+    volumes: !reset []
+
+  api-blue:
+    environment: &local-api
+      <<: *local-storage
+      S3_PUBLIC_ENDPOINT: http://localhost:9100
+      FRONTEND_URL: http://${WEB_HOST}
+    volumes: !reset []
+  api-green:
+    environment: *local-api
+    volumes: !reset []
+
+  web-blue:
+    environment:
+      AUTH_URL: http://${WEB_HOST}
+  web-green:
+    environment:
+      AUTH_URL: http://${WEB_HOST}
