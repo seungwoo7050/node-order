@@ -18,7 +18,8 @@ rand() { openssl rand -"$1" "$2"; }
 step "공개 값과 주소"
 IP=$(aws ec2 describe-addresses --allocation-ids "$(eip_alloc)" --query 'Addresses[0].PublicIp' --output text)
 ENDPOINT=$(aws rds describe-db-instances --db-instance-identifier "$NAME-db" --query 'DBInstances[0].Endpoint.Address' --output text)
-grep -q '^IMAGE_TAG=' "$ENV_FILE" 2>/dev/null || set_kv IMAGE_TAG ""
+SERVER_KEYS=(ACTIVE BLUE_TAG GREEN_TAG RATE_LIMIT_ALLOW_IPS)
+for k in "${SERVER_KEYS[@]}"; do grep -q "^$k=" "$ENV_FILE" 2>/dev/null || set_kv "$k" ""; done
 set_kv WEB_HOST "shop.${IP//./-}.sslip.io"
 set_kv API_HOST "api.${IP//./-}.sslip.io"
 set_kv AWS_REGION "$AWS_REGION"
@@ -43,12 +44,14 @@ done
 step "확인 - 값은 가리고 채워졌는지만 본다"
 awk -F= '{ k = $1; v = substr($0, length(k) + 2)
   if (v == "") print k "=(비어 있음)"
-  else if (k ~ /^(WEB_HOST|API_HOST|AWS_REGION|S3_BUCKET|IMAGE_TAG)$/) print k "=" v
+  else if (k ~ /^(WEB_HOST|API_HOST|AWS_REGION|S3_BUCKET|ACTIVE|BLUE_TAG|GREEN_TAG)$/) print k "=" v
   else print k "=(채워짐)" }' "$ENV_FILE" | sed -E 's/[0-9]{12}/************/'
 
-step "서버로 올린다(권한 600 - 서버의 ubuntu 사용자만 읽는다). IMAGE_TAG는 서버의 값을 지킨다"
+step "서버로 올린다(권한 600 - 서버의 ubuntu 사용자만 읽는다). 블루그린 세 줄과 허용 목록은 서버의 값을 지킨다"
 SSH=(ssh -i "$LOCAL/admin_ed25519" -o UserKnownHostsFile="$LOCAL/known_hosts" -o StrictHostKeyChecking=accept-new "ubuntu@$IP")
-SERVER_TAG=$("${SSH[@]}" "sed -n 's/^IMAGE_TAG=//p' /opt/node-order/.env 2>/dev/null" || true)
-[ -n "$SERVER_TAG" ] && set_kv IMAGE_TAG "$SERVER_TAG"
+for k in "${SERVER_KEYS[@]}"; do
+  v=$("${SSH[@]}" "sed -n 's/^$k=//p' /opt/node-order/.env 2>/dev/null" || true)
+  [ -n "$v" ] && set_kv "$k" "$v"
+done
 "${SSH[@]}" 'umask 077 && cat > /opt/node-order/.env' < "$ENV_FILE"
 "${SSH[@]}" 'stat -c "%a %U %n" /opt/node-order/.env'
