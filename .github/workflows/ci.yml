@@ -201,8 +201,37 @@ jobs:
           echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
       - name: 설정 파일 올리기
         run: scp -rp deploy/compose.yml deploy/Caddyfile deploy/release.sh deploy/rollback.sh deploy/ops ubuntu@${{ vars.DEPLOY_HOST }}:/opt/node-order/
-      - name: 블루그린으로 바꾸기
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | ssh ubuntu@${{ vars.DEPLOY_HOST }} bash /opt/node-order/release.sh "${{ github.sha }}"
+      - name: 쉬는 벌에 새 버전 띄우기
+        run: |
+          TOKEN=$(openssl rand -hex 16)
+          echo "::add-mask::$TOKEN"
+          echo "DEPLOY_SLOT_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          echo "${{ secrets.GITHUB_TOKEN }}" | ssh ubuntu@${{ vars.DEPLOY_HOST }} bash /opt/node-order/release.sh up "${{ github.sha }}" "$TOKEN"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: 스모크 테스트(쉬는 벌)
+        id: smoke
+        working-directory: order-console-next
+        env:
+          SMOKE_URL: https://${{ vars.WEB_HOST }}
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:smoke
+      - name: 트래픽 넘기기
+        run: ssh ubuntu@${{ vars.DEPLOY_HOST }} bash /opt/node-order/release.sh switch
+      - name: 스모크가 실패하면 쉬는 벌을 내린다
+        if: failure() && steps.smoke.outcome == 'failure'
+        run: ssh ubuntu@${{ vars.DEPLOY_HOST }} bash /opt/node-order/release.sh abort
+      - name: 실패하면 스모크 결과를 남긴다
+        if: failure() && steps.smoke.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-results
+          path: order-console-next/test-results/
+          retention-days: 7
       - name: 공개 주소로 확인
         run: |
           for i in $(seq 1 12); do curl -fsS https://${{ vars.API_HOST }}/health/ready && break; echo " ($i) 다시 시도"; sleep 5; done
