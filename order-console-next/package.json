@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:e2e": "playwright test",
+    "test:smoke": "playwright test -c playwright.smoke.config.ts",
     "test": "vitest run"
   },
   "dependencies": {
