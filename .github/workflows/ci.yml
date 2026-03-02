@@ -200,9 +200,9 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
       - name: 설정 파일 올리기
-        run: scp -rp deploy/compose.yml deploy/Caddyfile deploy/deploy.sh deploy/ops ubuntu@${{ vars.DEPLOY_HOST }}:/opt/node-order/
-      - name: 새 이미지로 바꾸기
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | ssh ubuntu@${{ vars.DEPLOY_HOST }} bash /opt/node-order/deploy.sh "${{ github.sha }}"
+        run: scp -rp deploy/compose.yml deploy/Caddyfile deploy/release.sh deploy/rollback.sh deploy/ops ubuntu@${{ vars.DEPLOY_HOST }}:/opt/node-order/
+      - name: 블루그린으로 바꾸기
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | ssh ubuntu@${{ vars.DEPLOY_HOST }} bash /opt/node-order/release.sh "${{ github.sha }}"
       - name: 공개 주소로 확인
         run: |
           for i in $(seq 1 12); do curl -fsS https://${{ vars.API_HOST }}/health/ready && break; echo " ($i) 다시 시도"; sleep 5; done

@@ -10,5 +10,6 @@ if [ "$(cat .last-backup-ok 2>/dev/null)" != "$(TZ=Asia/Seoul date +%F)" ] && [ 
   exit 1
 fi
 log "데모 데이터 초기화 시작"
-docker compose run --rm -T migrate npx prisma db seed 2>&1 | tail -1
+[ -n "$ACTIVE_TAG" ] || { log "트래픽을 받는 벌(ACTIVE)이 없다 — 블루그린으로 성공한 배포가 아직 없다"; exit 1; }
+RELEASE_TAG=$ACTIVE_TAG docker compose run --rm -T migrate npx prisma db seed 2>&1 | tail -1
 log "데모 데이터 초기화 끝"
