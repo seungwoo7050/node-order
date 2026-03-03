@@ -81,8 +81,9 @@ await prisma.order.deleteMany({ where: { userId: { in: seedUserIds } } });
 const priceOf = new Map(catalog.products.map((p) => [p.id, p.price]));
 for (const o of seedOrders) {
   const items = o.items.map(([productId, quantity]) => ({ productId, quantity, unitPrice: priceOf.get(productId)! }));
+  const total = items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
   await prisma.order.create({
-    data: { userId: o.userId, paid: o.paid, price: items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0), items: { create: items } },
+    data: { userId: o.userId, paid: o.paid, price: total, totalAmount: total, items: { create: items } },
   });
 }
 

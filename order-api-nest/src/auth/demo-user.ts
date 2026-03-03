@@ -27,10 +27,12 @@ async function createSampleOrders(tx: Prisma.TransactionClient, userId: string):
   const groups = [picked.slice(0, 2), picked.slice(2)].filter((g) => g.length > 0);
   for (const [i, group] of groups.entries()) {
     const items = group.map((p) => ({ productId: p.id, quantity: 1 + Math.floor(Math.random() * 2), unitPrice: p.price }));
+    const total = items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
     await tx.order.create({
       data: {
         userId,
-        price: items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0),
+        price: total,
+        totalAmount: total,
         paid: i === 0,
         canceledAt: i === 0 ? null : new Date(),
         createdAt: new Date(Date.now() - (groups.length - i) * DAY_MS),
