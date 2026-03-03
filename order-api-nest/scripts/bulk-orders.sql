@@ -1,6 +1,7 @@
 WITH inserted AS (
-  INSERT INTO orders (user_id, price, paid, created_at)
+  INSERT INTO orders (user_id, price, total_amount, paid, created_at)
   SELECT (ARRAY['kim', 'lee', 'park', 'choi'])[1 + i % 4],
+         (ARRAY[150000, 30000, 90000, 40000])[1 + i % 4],
          (ARRAY[150000, 30000, 90000, 40000])[1 + i % 4],
          i % 10 <> 0,
          now() - interval '2 years' + i * interval '210 seconds'
