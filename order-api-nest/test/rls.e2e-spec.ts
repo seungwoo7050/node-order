@@ -18,7 +18,7 @@ describe("RLS - 회귀 테스트", () => {
   beforeEach(async () => {
     await adminDb.$executeRaw`TRUNCATE categories, refresh_tokens, outbox_events, idempotency_keys, order_items, orders, products, users RESTART IDENTITY CASCADE`;
     await adminDb.user.createMany({ data: [{ id: "kim", name: "김" }, { id: "lee", name: "이" }] });
-    await adminDb.order.createMany({ data: [{ userId: "kim", price: 1000, paid: true }, { userId: "lee", price: 2000, paid: true }] });
+    await adminDb.order.createMany({ data: [{ userId: "kim", totalAmount: 1000, paid: true }, { userId: "lee", totalAmount: 2000, paid: true }] });
   });
 
   afterAll(async () => {
@@ -36,7 +36,7 @@ describe("RLS - 회귀 테스트", () => {
   });
 
   it("kim으로 설정한 채 lee 명의의 주문을 넣으면 DB가 거부한다", async () => {
-    await expect(prisma.asUser("kim", (tx) => tx.order.create({ data: { userId: "lee", price: 1, paid: true } })))
+    await expect(prisma.asUser("kim", (tx) => tx.order.create({ data: { userId: "lee", totalAmount: 1, paid: true } })))
       .rejects.toMatchObject({ meta: { driverAdapterError: { cause: { originalCode: "42501" } } } });
   });
 

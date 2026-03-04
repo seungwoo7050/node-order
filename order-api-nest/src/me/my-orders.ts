@@ -1,6 +1,6 @@
 import type { Prisma } from "../generated/prisma/client.js";
 import { afterOrder, encodeOrderCursor, orderListOrder, toPage } from "../pagination/cursor.js";
-import { orderSelect } from "./order-select.js";
+import { orderSelect, withPrice } from "./order-select.js";
 
 export async function listMyOrders(tx: Prisma.TransactionClient, userId: string, page: { limit: number; cursor?: string | null }) {
   const rows = await tx.order.findMany({
@@ -9,5 +9,6 @@ export async function listMyOrders(tx: Prisma.TransactionClient, userId: string,
     orderBy: [...orderListOrder],
     take: page.limit + 1,
   });
-  return toPage(rows, page.limit, encodeOrderCursor);
+  const { items, nextCursor } = toPage(rows, page.limit, encodeOrderCursor);
+  return { items: items.map(withPrice), nextCursor };
 }

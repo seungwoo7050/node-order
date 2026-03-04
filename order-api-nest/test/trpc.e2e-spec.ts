@@ -32,7 +32,7 @@ describe("tRPC - 회귀 테스트", () => {
   beforeEach(async () => {
     await adminDb.$executeRaw`TRUNCATE categories, refresh_tokens, outbox_events, idempotency_keys, order_items, orders, products, users RESTART IDENTITY CASCADE`;
     await adminDb.user.createMany({ data: [{ id: "kim", name: "김", role: "admin" }, { id: "lee", name: "이" }] });
-    await adminDb.order.createMany({ data: [{ userId: "kim", price: 1000, paid: true }, { userId: "lee", price: 2000, paid: true }] });
+    await adminDb.order.createMany({ data: [{ userId: "kim", totalAmount: 1000, paid: true }, { userId: "lee", totalAmount: 2000, paid: true }] });
     await adminDb.category.create({ data: { name: "주변기기" } });
   });
 
@@ -82,8 +82,8 @@ describe("tRPC - 회귀 테스트", () => {
   it("주문 상세에는 산 상품이 붙고, 목록은 최신 주문이 위로 온다", async () => {
     await adminDb.product.createMany({ data: [{ name: "키보드", price: 150000, stock: 5 }, { name: "마우스", price: 30000, stock: 5 }] });
     await adminDb.order.create({
-      data: { userId: "kim", price: 210000, paid: false, items: { create: [{ productId: 2, quantity: 2, unitPrice: 30000 }, { productId: 1, quantity: 1, unitPrice: 150000 }] } },
-    }); // id 3
+      data: { userId: "kim", totalAmount: 210000, paid: false, items: { create: [{ productId: 2, quantity: 2, unitPrice: 30000 }, { productId: 1, quantity: 1, unitPrice: 150000 }] } },
+    });
     const kim = callerAs("kim");
     expect((await kim.me.orders()).items.map((o) => o.id)).toEqual([3, 1]);
     const detail = await kim.me.order({ id: 3 });

@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { listMyOrders } from "../me/my-orders.js";
-import { orderDetailSelect } from "../me/order-select.js";
+import { orderDetailSelect, withPrice } from "../me/order-select.js";
 import { DEFAULT_LIMIT, MAX_LIMIT } from "../pagination/cursor.js";
 import { getProduct, listProducts } from "../products/product-list.js";
 import { protectedProcedure, publicProcedure, router } from "./trpc.js";
@@ -36,7 +36,7 @@ export const appRouter = router({
         tx.order.findFirst({ where: { id: input.id, userId: ctx.userId }, select: orderDetailSelect }),
       );
       if (!order) throw new TRPCError({ code: "NOT_FOUND", message: `order ${input.id} not found` });
-      return order;
+      return withPrice(order);
     }),
   }),
 });

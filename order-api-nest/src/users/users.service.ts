@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { CreateUserDto } from "./dto/create-user.dto.js";
 import { hashPassword } from "../auth/password.js";
+import { withPrice } from "../me/order-select.js";
 
 @Injectable()
 export class UsersService {
@@ -14,10 +15,11 @@ export class UsersService {
     });
   }
 
-  listWithOrders() {
-    return this.prisma.asAdmin((tx) => tx.user.findMany({
-      select: { id: true, name: true, orders: { select: { id: true, price: true, paid: true }, orderBy: { id: "asc" } } },
+  async listWithOrders() {
+    const users = await this.prisma.asAdmin((tx) => tx.user.findMany({
+      select: { id: true, name: true, orders: { select: { id: true, totalAmount: true, paid: true }, orderBy: { id: "asc" } } },
       orderBy: { id: "asc" },
     }));
+    return users.map((u) => ({ ...u, orders: u.orders.map(withPrice) }));
   }
 }

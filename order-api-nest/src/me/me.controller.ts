@@ -6,7 +6,7 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import { PageQueryDto } from "../pagination/page-query.dto.js";
 import { PAGE_QUERY } from "../pagination/page-query.pipe.js";
 import { listMyOrders } from "./my-orders.js";
-import { orderDetailSelect } from "./order-select.js";
+import { orderDetailSelect, withPrice } from "./order-select.js";
 
 @ApiTags("me")
 @ApiBearerAuth()
@@ -26,6 +26,6 @@ export class MeController {
     const userId = (req.user as { userId: string }).userId;
     const order = await this.prisma.asUser(userId, (tx) => tx.order.findFirst({ where: { id, userId }, select: orderDetailSelect }));
     if (!order) throw new NotFoundException(`order ${id} not found`);
-    return order;
+    return withPrice(order);
   }
 }
