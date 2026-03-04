@@ -47,9 +47,9 @@ export class OrdersService {
   }
 
   async create(input: Omit<Order, "id">, creatorId: string): Promise<Order> {
-    const { user, ...rest } = input;
+    const { user, price, ...rest } = input; // 입력 이름은 price 그대로, DB에는 total_amount에만 쓴다
     const order = await this.prisma.asAdmin(async (tx) => {
-      const created = toOrder(await tx.order.create({ data: { ...rest, totalAmount: rest.price, userId: user }, select: orderSelect }));
+      const created = toOrder(await tx.order.create({ data: { ...rest, totalAmount: price, userId: user }, select: orderSelect }));
       await tx.outboxEvent.create({ data: { type: "order.created", userId: creatorId, payload: created } });
       return created;
     });
@@ -131,7 +131,7 @@ export class OrdersService {
     }
     const order = await tx.order.create({
       data: {
-        userId, price: total, totalAmount: total, paid: false,
+        userId, totalAmount: total, paid: false,
         items: { create: items.map((i) => ({
           productId: i.productId, quantity: i.quantity, unitPrice: products.find((p) => p.id === i.productId)!.price,
         })) },
