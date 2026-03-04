@@ -83,7 +83,7 @@ for (const o of seedOrders) {
   const items = o.items.map(([productId, quantity]) => ({ productId, quantity, unitPrice: priceOf.get(productId)! }));
   const total = items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
   await prisma.order.create({
-    data: { userId: o.userId, paid: o.paid, price: total, totalAmount: total, items: { create: items } },
+    data: { userId: o.userId, paid: o.paid, totalAmount: total, items: { create: items } },
   });
 }
 

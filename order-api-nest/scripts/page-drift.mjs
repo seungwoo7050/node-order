@@ -19,7 +19,7 @@ await db.connect();
 console.log("① 1쪽을 읽은 뒤 새 주문 2건이 들어온다");
 const p1 = await get({});
 console.log(`   1쪽              : ${ids(p1)}`);
-const { rows: added } = await db.query(`INSERT INTO orders (user_id, price, total_amount, paid) VALUES ('lee', 1000, 1000, true), ('lee', 1000, 1000, true) RETURNING id`);
+const { rows: added } = await db.query(`INSERT INTO orders (user_id, total_amount, paid) VALUES ('lee', 1000, true), ('lee', 1000, true) RETURNING id`);
 console.log(`   offset=5로 2쪽   : ${ids(await get({ offset: "5" }))}`);
 console.log(`   cursor로 2쪽     : ${ids(await get({ cursor: p1.nextCursor }))}`);
 await db.query(`DELETE FROM orders WHERE id = ANY($1)`, [added.map((r) => r.id)]);

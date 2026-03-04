@@ -31,7 +31,6 @@ async function createSampleOrders(tx: Prisma.TransactionClient, userId: string):
     await tx.order.create({
       data: {
         userId,
-        price: total,
         totalAmount: total,
         paid: i === 0,
         canceledAt: i === 0 ? null : new Date(),
