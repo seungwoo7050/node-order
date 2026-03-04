@@ -24,12 +24,12 @@ describe("페이지네이션 - 회귀 테스트", () => {
     const same = new Date("2026-01-31T00:00:00Z");
     await adminDb.order.createMany({
       data: [
-        { userId: "kim", price: 1, paid: true, createdAt: new Date("2026-01-30T00:00:00Z") },
-        { userId: "kim", price: 2, paid: true, createdAt: same },
-        { userId: "kim", price: 3, paid: true, createdAt: same },
-        { userId: "kim", price: 4, paid: false, createdAt: same },
-        { userId: "kim", price: 5, paid: true, createdAt: new Date("2026-02-01T00:00:00Z") },
-        { userId: "lee", price: 6, paid: true, createdAt: new Date("2026-02-02T00:00:00Z") },
+        { userId: "kim", totalAmount: 1, paid: true, createdAt: new Date("2026-01-30T00:00:00Z") },
+        { userId: "kim", totalAmount: 2, paid: true, createdAt: same },
+        { userId: "kim", totalAmount: 3, paid: true, createdAt: same },
+        { userId: "kim", totalAmount: 4, paid: false, createdAt: same },
+        { userId: "kim", totalAmount: 5, paid: true, createdAt: new Date("2026-02-01T00:00:00Z") },
+        { userId: "lee", totalAmount: 6, paid: true, createdAt: new Date("2026-02-02T00:00:00Z") },
       ],
     });
   });

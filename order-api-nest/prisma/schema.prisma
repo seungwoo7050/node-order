@@ -32,8 +32,8 @@ model Order {
   id                Int         @id @default(autoincrement())
   userId            String      @map("user_id")
   user              User        @relation(fields: [userId], references: [id])
-  price             Int
-  totalAmount       Int?        @map("total_amount")
+  price             Int?
+  totalAmount       Int         @map("total_amount")
   paid              Boolean
   createdAt         DateTime    @default(now()) @map("created_at")
   stripeSessionId   String?     @unique @map("stripe_session_id")

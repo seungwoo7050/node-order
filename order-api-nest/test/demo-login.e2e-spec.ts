@@ -77,7 +77,7 @@ describe("데모 로그인", () => {
   it("만료된 임시 사용자는 정리 작업이 주문·토큰과 함께 지우고, 결제 대기 주문의 재고는 돌려준다", async () => {
     process.env.DEMO_LOGIN = "1";
     const { sub } = await roleOf(await demo("user"));
-    await adminDb.order.create({ data: { userId: sub, price: 2000, paid: false, items: { create: [{ productId: 1, quantity: 2, unitPrice: 1000 }] } } });
+    await adminDb.order.create({ data: { userId: sub, totalAmount: 2000, paid: false, items: { create: [{ productId: 1, quantity: 2, unitPrice: 1000 }] } } });
     await adminDb.product.update({ where: { id: 1 }, data: { stock: { decrement: 2 } } });
     await adminDb.user.update({ where: { id: sub }, data: { expiresAt: new Date(Date.now() - 1000) } });
 

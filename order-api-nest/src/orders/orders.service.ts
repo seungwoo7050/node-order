@@ -12,10 +12,10 @@ export type Order = { id: number; user: string; price: number; paid: boolean; }
 export type CheckoutResult = Order & { items: { productId: number; quantity: number; unitPrice: number }[] };
 export type CheckoutResponse = CheckoutResult & { checkoutUrl: string };
 
-const orderSelect = { id: true, userId: true, price: true, paid: true } as const;
+const orderSelect = { id: true, userId: true, totalAmount: true, paid: true } as const;
 const listSelect = { ...orderSelect, createdAt: true } as const; // 다음 cursor를 만들려면 정렬 키도 읽어야 한다
-const toOrder = (row: { id: number; userId: string; price: number; paid: boolean }): Order =>(
-  { id: row.id,user: row.userId, price: row.price, paid: row.paid }
+const toOrder = (row: { id: number; userId: string; totalAmount: number; paid: boolean }): Order =>(
+  { id: row.id,user: row.userId, price: row.totalAmount, paid: row.paid }
 );
 
 @Injectable()
@@ -59,9 +59,9 @@ export class OrdersService {
 
   async totals(): Promise<Record<string, number>> {
     const rows = await this.prisma.asAdmin((tx) => tx.order.groupBy({
-      by: ["userId"], where: { paid: true }, _sum: { price: true }, orderBy: { userId: "asc" },
+      by: ["userId"], where: { paid: true }, _sum: { totalAmount: true }, orderBy: { userId: "asc" },
     }));
-    return Object.fromEntries(rows.map((r) => [r.userId, r._sum.price ?? 0]));
+    return Object.fromEntries(rows.map((r) => [r.userId, r._sum.totalAmount ?? 0]));
   }
 
   async checkout(userId: string, items: CheckoutItemDto[], idempotencyKey?: string): Promise<CheckoutResponse> {
