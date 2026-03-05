@@ -1,7 +1,7 @@
 set -euo pipefail
 
 : "${AWS_PROFILE:=node-order}"
-: "${AWS_REGION:=ap-southeast-2}"
+: "${AWS_REGION:=ap-northeast-2}"
 export AWS_PROFILE AWS_REGION AWS_PAGER=""
 
 NAME=node-order
@@ -17,6 +17,6 @@ instance_id() {
 }
 eip_alloc() { aws ec2 describe-addresses --filters "Name=tag:Name,Values=$NAME" --query 'Addresses[0].AllocationId' --output text; }
 account_id() { aws sts get-caller-identity --query Account --output text; }
-bucket_name() { echo "$NAME-images-$(account_id)"; }
+bucket_name() { echo "$NAME-images-$(account_id)-$AWS_REGION"; }
 unquote() { local v=$1; v=${v#[\"\']}; v=${v%[\"\']}; printf '%s' "$v"; }
 step() { printf '\n== %s\n' "$*"; }
