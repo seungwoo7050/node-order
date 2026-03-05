@@ -62,8 +62,8 @@ up() {
     abort
     exit 1
   fi
-  if [ -n "$TOKEN" ] && [ -n "$ACTIVE" ]; then
-    route "$ACTIVE" "$IDLE" "$TOKEN"
+  if [ -n "$TOKEN" ]; then
+    route "${ACTIVE:-$IDLE}" "$IDLE" "$TOKEN"
     say "미리보기: deploy_slot 쿠키를 든 요청만 $IDLE"
   fi
 }
