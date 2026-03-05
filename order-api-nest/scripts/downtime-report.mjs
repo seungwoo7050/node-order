@@ -15,6 +15,7 @@ if (reqs.length === 0) throw new Error("시나리오 요청이 없다. k6가 set
 const fail = reqs.filter((r) => !r.ok);
 const start = reqs[0].t;
 const clock = (t) => new Date(t).toISOString().slice(11, 23);
+console.log(`측정 구간: ${clock(start)} ~ ${clock(reqs.at(-1).t)} (UTC)`);
 console.log(`요청 ${reqs.length}개, 실패 ${fail.length}개 (${((fail.length / reqs.length) * 100).toFixed(2)}%)`);
 if (fail.length === 0) process.exit(0);
 

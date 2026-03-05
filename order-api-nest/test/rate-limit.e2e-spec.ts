@@ -47,7 +47,7 @@ describe("요청 수 제한", () => {
       body: JSON.stringify({ id: "nobody", password: "wrong" }),
     });
 
-  it("허용 목록의 IP는 세지 않는다 — 한도 5에서 8번 보내도 200이고 RateLimit 머리글이 없다", async () => {
+  it("허용 목록의 IP는 세지 않는다 - 한도 5에서 8번 보내도 200이고 RateLimit 머리글이 없다", async () => {
     for (let i = 0; i < 8; i++) {
       const res = await get("/products", "203.0.113.50");
       expect(res.status).toBe(200);
@@ -84,7 +84,7 @@ describe("요청 수 제한", () => {
     }
   });
 
-  it("WebSocket 연결은 세지 않는다 — 한도 5에서 8번 붙어도 HTTP 한도는 그대로다", async () => {
+  it("WebSocket 연결은 세지 않는다 - 한도 5에서 8번 붙어도 HTTP 한도는 그대로다", async () => {
     const token = app.get(JwtService, { strict: false }).sign({ sub: "kim" });
     for (let i = 0; i < 8; i++) {
       const socket = io(baseUrl, { transports: ["websocket"], auth: { token }, extraHeaders: { "X-Forwarded-For": "192.0.2.12" }, reconnection: false, forceNew: true });

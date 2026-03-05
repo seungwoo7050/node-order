@@ -201,7 +201,7 @@ jobs:
           echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
       - name: 설정 파일 올리기
         run: scp -rp deploy/compose.yml deploy/Caddyfile deploy/release.sh deploy/rollback.sh deploy/ops ubuntu@${{ vars.DEPLOY_HOST }}:/opt/node-order/
-      - name: 쉬는 벌에 새 버전 띄우기
+      - name: 대기 환경에 새 버전 띄우기
         run: |
           TOKEN=$(openssl rand -hex 16)
           echo "::add-mask::$TOKEN"
@@ -212,7 +212,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: 스모크 테스트(쉬는 벌)
+      - name: 스모크 테스트(대기 환경)
         id: smoke
         working-directory: order-console-next
         env:
@@ -222,7 +222,7 @@ jobs:
           npm run test:smoke
       - name: 트래픽 넘기기
         run: ssh ubuntu@${{ vars.DEPLOY_HOST }} bash /opt/node-order/release.sh switch
-      - name: 스모크가 실패하면 쉬는 벌을 내린다
+      - name: 스모크가 실패하면 대기 환경을 내린다
         if: failure() && steps.smoke.outcome == 'failure'
         run: ssh ubuntu@${{ vars.DEPLOY_HOST }} bash /opt/node-order/release.sh abort
       - name: 실패하면 스모크 결과를 남긴다

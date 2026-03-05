@@ -31,6 +31,7 @@ test("가격과 설명을 저장하면 목록·상점·상세가 모두 새 값�
   await page.getByRole("link", { name: "마우스", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "마우스" })).toContainText("유선 마우스");
   await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/\/shop$/);
 
   await page.goto("/admin/products");
   await expect(page.getByTestId("price-6")).toHaveText("30,000원");
