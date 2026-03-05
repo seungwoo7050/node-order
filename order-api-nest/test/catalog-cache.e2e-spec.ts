@@ -1,10 +1,12 @@
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Test } from "@nestjs/testing";
+import { Redis } from "ioredis";
 import request from "supertest";
 import { AppModule } from "../src/app.module.js";
 import { CatalogCache } from "../src/cache/catalog-cache.js";
 import { catalogLoads } from "../src/metrics/metrics.js";
+import { DEFAULT_LIMIT } from "../src/pagination/cursor.js";
 import { adminDb } from "./admin-db.js";
 
 describe("카탈로그 캐시 - 회귀 테스트", () => {
@@ -36,7 +38,11 @@ describe("카탈로그 캐시 - 회귀 테스트", () => {
   });
 
   it("두 번째 목록은 캐시에서 온다. DB의 가격을 직접 바꿔도 그대로다. 카테고리 경로가 붙는다", async () => {
-    expect((await list()).body.items[0]).toMatchObject({ price: 1000, categoryPath: ["전자기기", "키보드"] });
+    expect((await list()).body.items[0]).toMatchObject({
+      price: 1000,
+      categoryPath: ["전자기기", "키보드"],
+      categories: [expect.objectContaining({ name: "전자기기" }), expect.objectContaining({ name: "키보드" })],
+    });
     await adminDb.product.update({ where: { id: 1 }, data: { price: 9999 } });
     expect((await list()).body.items[0].price).toBe(1000);
   });
@@ -59,6 +65,15 @@ describe("카탈로그 캐시 - 회귀 테스트", () => {
     await request(app.getHttpServer()).patch("/products/1").set("Authorization", `Bearer ${tokenOf("admin")}`).send({ description: "새 설명" }).expect(200);
     expect((await request(app.getHttpServer()).get("/products/1").expect(200)).body.description).toBe("새 설명");
     await request(app.getHttpServer()).get("/products/999").expect(404);
+  });
+
+  it("형식이 다른 키(옛 버전의 catalog)의 값은 읽지 않는다. 지울 때는 그 키도 지운다", async () => {
+    const redis = new Redis(process.env.REDIS_URL!);
+    await redis.hset("test:catalog", `list:0:${DEFAULT_LIMIT}`, JSON.stringify({ items: [{ id: 1, name: "옛 모양", price: 1, imageKey: null, categoryPath: [] }], nextCursor: null }));
+    expect((await list()).body.items[0].name).toBe("키보드");
+    await app.get(CatalogCache).invalidate();
+    expect(await redis.exists("test:catalog", "test:catalog:v2")).toBe(0);
+    await redis.quit();
   });
 
   it("REST와 tRPC가 같은 캐시를 본다", async () => {

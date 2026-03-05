@@ -5,7 +5,7 @@ import { PrismaClient } from "../src/generated/prisma/client.js";
 import { hashPassword } from "../src/auth/password.js";
 import { deleteUsers } from "../src/auth/demo-user.js";
 import { StorageService } from "../src/storage/storage.service.js";
-import { CATALOG_KEY } from "../src/cache/catalog-key.js";
+import { CATALOG_KEYS_TO_CLEAR } from "../src/cache/catalog-key.js";
 
 type Catalog = {
   categories: { id: number; name: string; parentId: number | null }[];
@@ -93,7 +93,7 @@ if (process.env.REDIS_URL) {
   const redis = new Redis(process.env.REDIS_URL, { lazyConnect: true, enableOfflineQueue: false, maxRetriesPerRequest: 0, connectTimeout: 2000 });
   try {
     await redis.connect();
-    await redis.del(CATALOG_KEY);
+    await redis.del(...CATALOG_KEYS_TO_CLEAR);
     cacheCleared = "지움";
   } catch (err) {
     cacheCleared = `못 지움(${(err as Error).message}, TTL이 지나면 사라진다)`;

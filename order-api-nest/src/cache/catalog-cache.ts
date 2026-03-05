@@ -1,7 +1,7 @@
 import { Global, Injectable, Logger, Module, OnModuleDestroy } from "@nestjs/common";
 import { Redis } from "ioredis";
 import { catalogCacheRequests, catalogLoads } from "../metrics/metrics.js";
-import { CATALOG_KEY } from "./catalog-key.js";
+import { CATALOG_KEY, CATALOG_KEYS_TO_CLEAR } from "./catalog-key.js";
 
 const TTL_SECONDS = Number(process.env.CATALOG_TTL_SECONDS ?? 60);
 const MISS = Symbol("miss");
@@ -38,7 +38,7 @@ export class CatalogCache implements OnModuleDestroy {
 
   async invalidate(): Promise<void> {
     try {
-      await this.redis.del(CATALOG_KEY);
+      await this.redis.del(...CATALOG_KEYS_TO_CLEAR);
     } catch (err) {
     }
   }
