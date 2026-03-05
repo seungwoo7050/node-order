@@ -37,6 +37,11 @@ up() {
     trap 'docker logout ghcr.io > /dev/null' EXIT
     RELEASE_TAG=$NEW "${DC[@]}" pull --quiet migrate
     env "$(upper "$IDLE")_TAG=$NEW" "${DC[@]}" pull --quiet "api-$IDLE" "web-$IDLE"
+  else
+    for img in order-api order-api-migrate order-web; do
+      docker image inspect "rehearsal/$img:$NEW" > /dev/null 2>&1 \
+        || { echo "rehearsal/$img:${NEW} 이미지가 없다. 저장소 루트에서 deploy/rehearsal-build.sh ${NEW}부터 친다"; exit 1; }
+    done
   fi
 
   mkdir -p live
@@ -91,7 +96,7 @@ abort() {
   "${DC[@]}" stop "api-$IDLE" "web-$IDLE" > /dev/null
   [ -f live/prev-idle-tag ] && set_env "$(upper "$IDLE")_TAG" "$(cat live/prev-idle-tag)" && rm live/prev-idle-tag
   [ -n "$ACTIVE" ] && route "$ACTIVE"
-  say "$IDLE 내림 — 트래픽은 ${ACTIVE:-(없음)}에 그대로다"
+  say "$IDLE 내림 - 트래픽은 ${ACTIVE:-(없음)}에 그대로다"
 }
 
 case "${1:?<태그> | up <태그> [토큰] | switch | abort}" in

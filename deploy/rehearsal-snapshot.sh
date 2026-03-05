@@ -12,4 +12,4 @@ esac
 "${DC[@]}" exec -T redis redis-cli FLUSHALL > /dev/null # 캐시도 그 시점으로(빈 채로)
 ACTIVE=$(sed -n 's/^ACTIVE=//p' .env)
 [ -n "$ACTIVE" ] && "${DC[@]}" up -d --no-deps --wait "api-$ACTIVE" "web-$ACTIVE"
-echo "$1 $SNAP 끝 — ${ACTIVE:-(없음)} 벌을 다시 띄웠다"
+echo "$1 $SNAP 끝 - ${ACTIVE:-(없음)} 환경을 다시 띄웠다"

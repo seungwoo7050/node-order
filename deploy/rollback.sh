@@ -6,7 +6,7 @@ env_of() { sed -n "s/^$1=//p" .env; }
 say() { printf '%s %s\n' "$(date +%T)" "$*"; }
 
 ACTIVE=$(env_of ACTIVE)
-case "$ACTIVE" in blue) BACK=green ;; green) BACK=blue ;; *) echo "되돌릴 벌이 없다(ACTIVE=$ACTIVE)"; exit 1 ;; esac
+case "$ACTIVE" in blue) BACK=green ;; green) BACK=blue ;; *) echo "되돌릴 환경이 없다(ACTIVE=$ACTIVE)"; exit 1 ;; esac
 BACK_TAG=$(env_of "$(echo "$BACK" | tr a-z A-Z)_TAG")
 [ -n "$BACK_TAG" ] || { echo "${BACK}에 버전이 없다"; exit 1; }
 say "== $ACTIVE → $BACK($BACK_TAG)"
