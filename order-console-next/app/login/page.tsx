@@ -2,9 +2,10 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { ApiError, demoEnabled, demoLogin, login } from "@/lib/api-client";
 import { signInWithGithub } from "./actions";
+import { OAuthError } from "./oauth-error";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -65,6 +66,10 @@ export default function LoginPage() {
         {error && <p id="login-error" role="alert" className="text-[0.82rem] text-danger">{error}</p>}
           <button type="submit" className="btn btn-primary w-full">로그인</button>
         </form>
+        {/* useSearchParams는 Suspense 안에서 읽어야 정적 프리렌더가 막히지 않는다 */}
+        <Suspense fallback={null}>
+          <OAuthError />
+        </Suspense>
         <form action={signInWithGithub}>
           <button type="submit" className="btn w-full">GitHub로 로그인</button>
         </form>
