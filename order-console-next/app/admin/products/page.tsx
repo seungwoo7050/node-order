@@ -2,6 +2,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { getProducts } from "@/lib/catalog";
+import { LoadError } from "../../load-error";
 import { AdminOnly } from "./admin-only";
 import { ProductImageUploader } from "./product-image-uploader";
 import { StockCell } from "./stock-cell";
@@ -55,9 +56,11 @@ export default function AdminProductsPage() {
     <main className="page flex-1 pb-12 pt-2">
       <h1 className="title mb-8">상품 관리</h1>
       <AdminOnly>
-        <Suspense fallback={<p role="status" className="text-sm text-muted">상품을 불러오는 중입니다.</p>}>
-          <ProductTable />
-        </Suspense>
+        <LoadError what="상품 목록">
+          <Suspense fallback={<p role="status" className="text-sm text-muted">상품을 불러오는 중입니다.</p>}>
+            <ProductTable />
+          </Suspense>
+        </LoadError>
       </AdminOnly>
     </main>
   );
