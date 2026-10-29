@@ -47,7 +47,7 @@ run() { # run <단계> <명령...>
     summary+=("$step ✗$(count "$log" "$step")")
     failed+=("$step")
     printf '  ✗ %s (%ss) - 로그: %s\n' "$step" "$took" "${log#"$root"/}"
-    tail -n 25 "$log" | sed 's/^/    /'
+    grep -vE "^(> |$)" "$log" | tail -n 25 | sed 's/^/    /'
   fi
   return $status
 }
