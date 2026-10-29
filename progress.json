@@ -35,6 +35,7 @@
     "Bash 가드 우회: sh -c \"git push\", 변수로 감싼 git, cp/mv/dd로 .env 쓰기, echo>/sed -i로 기존 마이그레이션 수정이 통과한다",
     "SubagentStop 훅이 없다. 서브에이전트 구현이 끝날 때 verify:fast를 강제하지 않는다(지금은 메인이 verify로 확인)",
     "과잉 차단: 저장소 밖 임시 디렉터리 rm -rf도 막는다. 기존 경고가 있는 파일을 고치면 PostToolUse가 exit 2를 낸다",
-    "훅은 세션을 연 체크아웃의 .claude/settings.json을 따른다. 원본 체크아웃이 main(24)에 있으면 훅이 꺼진 채로 세션이 열린다"
+    "훅은 세션을 연 체크아웃의 .claude/settings.json을 따른다. 원본 체크아웃이 main(24)에 있으면 훅이 꺼진 채로 세션이 열린다",
+    "verify의 포트 점유 검사에 가드 테스트가 없다(ORCHESTRATION 6절). 26 구현 때 같이 더한다"
   ]
 }
