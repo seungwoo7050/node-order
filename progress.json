@@ -1,0 +1,27 @@
+{
+  "updated": "2026-10-29",
+  "start_point": {
+    "branch": "24-zero-downtime-release",
+    "commit": "4d509a1"
+  },
+  "baseline": null,
+  "current": {
+    "branch": "25-harness",
+    "stage": "brief",
+    "note": "브리프 초안이 있다. 세션 시작 루틴의 baseline부터 한다."
+  },
+  "branches": {
+    "25-harness": "brief-draft",
+    "26-search": "todo",
+    "27-rag": "todo",
+    "28-pg-adapter": "todo",
+    "29-catalog-shipping": "todo",
+    "30-fulfillment": "todo",
+    "31-store-settings": "todo",
+    "32-admin-dashboard": "todo",
+    "33-installer": "todo",
+    "34-themes": "todo"
+  },
+  "blocked": [],
+  "push_policy": "로컬 커밋만. 원격 푸시는 사람에게 묻는다."
+}
