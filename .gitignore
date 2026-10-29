@@ -206,3 +206,12 @@ dist
 .svelte-kit
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,node,nextjs
+# 하네스 검사 로그
+.harness/
+
+# Claude Code: 저장소에는 공용 설정(settings.json)만 둔다
+.claude/*
+!.claude/settings.json
+
+# 하네스 린트 테스트의 탐침 파일
+harness-probe-*
