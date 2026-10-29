@@ -10,8 +10,14 @@
     "dev:web": "npm run dev -w order-console-next",
     "lint": "npm run lint -w order-api-nest && npm run lint -w order-console-next",
     "typecheck": "npm exec -w order-api-nest -- tsc --noEmit && cd order-console-next && npx next typegen && npx tsc --noEmit",
-    "test:api": "npm run test -w order-api-nest && npm run test:e2e -w order-api-nest",
-    "test:web": "npm run test -w order-console-next && npm run test:e2e -w order-console-next",
-    "test:rules": "docker run --rm -v \"$PWD/monitoring:/m\" --entrypoint promtool prom/prometheus:latest test rules /m/alert-rules.test.yml"
+    "test:unit": "npm run test -w order-api-nest && npm run test -w order-console-next",
+    "test:api": "npm run test -w order-api-nest && npm run test:e2e:api",
+    "test:e2e:api": "npm run test:e2e -w order-api-nest",
+    "test:web": "npm run test -w order-console-next && npm run test:e2e:web",
+    "test:e2e:web": "bash scripts/harness/with-api.sh npm run test:e2e -w order-console-next",
+    "test:rules": "docker run --rm -v \"$PWD/monitoring:/m\" --entrypoint promtool prom/prometheus:latest test rules /m/alert-rules.test.yml",
+    "test:harness": "bash scripts/harness/test.sh",
+    "verify:fast": "bash scripts/harness/verify.sh fast",
+    "verify": "bash scripts/harness/verify.sh full"
   }
 }
