@@ -18,7 +18,7 @@ env:
 
 jobs:
   check:
-    name: 린트/타입 검사
+    name: 빠른 검사(verify:fast)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,10 +27,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx prisma generate
-        working-directory: order-api-nest
-      - run: npm run lint
-      - run: npm run typecheck
+      # 로컬 Stop 훅과 같은 스크립트: prisma generate, lint, typecheck, test:unit, test:harness
+      - run: npm run verify:fast
 
   test-api:
     name: 백엔드 테스트
@@ -61,7 +59,8 @@ jobs:
           npx prisma generate
           PGPASSWORD=order psql -h localhost -p 5433 -U order -d order_api -c "CREATE DATABASE order_api_test"
           ADMIN_DATABASE_URL=postgresql://order:order@localhost:5433/order_api_test npx prisma migrate deploy
-      - run: npm run test:api
+      # 단위 테스트는 check 잡의 verify:fast가 돌린다
+      - run: npm run test:e2e:api
 
   test-web:
     name: 프론트 e2e
@@ -110,7 +109,8 @@ jobs:
           } >> .env.local
       - run: npx playwright install --with-deps chromium
         working-directory: order-console-next
-      - run: npm run test:web
+      # with-api.sh가 위에서 띄운 API(4000)를 그대로 쓴다
+      - run: npm run test:e2e:web
       - name: 실패하면 API 로그와 Playwright 결과를 남긴다
         if: failure()
         uses: actions/upload-artifact@v4
