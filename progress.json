@@ -1,27 +1,34 @@
 {
-  "updated": "2026-10-29",
+  "updated": "2026-10-30",
   "start_point": {
     "branch": "24-zero-downtime-release",
     "commit": "4d509a1"
   },
-  "baseline": null,
+  "baseline": {
+    "commit": "4d509a1",
+    "lint": "pass (경고 1)",
+    "typecheck": "pass",
+    "test:api": "unit 3/3, e2e 76/76",
+    "test:web": "unit 4/4, e2e 30 passed + 2 skipped",
+    "note": "Next 16.4.0 빌드가 보안 업그레이드 안내로 불규칙하게 실패한다(재시도하면 통과). 25 첫 커밋에서 16.4.3으로 올린다"
+  },
   "current": {
     "branch": "25-harness",
-    "stage": "brief",
-    "note": "브리프 초안이 있다. 세션 시작 루틴의 baseline부터 한다."
+    "stage": "implement",
+    "note": "로드맵을 25~31로 다시 짰고 25 브리프를 확정했다. 구현 서브에이전트 차례"
   },
   "branches": {
-    "25-harness": "brief-draft",
+    "25-harness": "brief-confirmed",
     "26-search": "todo",
-    "27-rag": "todo",
-    "28-pg-adapter": "todo",
-    "29-catalog-shipping": "todo",
-    "30-fulfillment": "todo",
-    "31-store-settings": "todo",
-    "32-admin-dashboard": "todo",
-    "33-installer": "todo",
-    "34-themes": "todo"
+    "27-fulfillment": "todo",
+    "28-toss-payments": "todo",
+    "29-admin": "todo",
+    "30-ai-mcp": "todo",
+    "31-observability": "todo"
   },
   "blocked": [],
-  "push_policy": "로컬 커밋만. 원격 푸시는 사람에게 묻는다."
+  "push_policy": "로컬 커밋만. 원격 푸시는 사람에게 묻는다.",
+  "needs_human": [
+    "운영 서버의 웹 이미지가 Next 16.4.0이다(critical 권고). 패치는 25에 들어가지만 운영 배포는 사람이 정한다"
+  ]
 }
