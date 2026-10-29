@@ -15,11 +15,11 @@
   "current": {
     "branch": "25-harness",
     "stage": "guide",
-    "note": "구현·평가·확인 통과. 가이드 파이프라인(2-2) 다음, 그 뒤 26-search 브리프"
+    "note": "25 가이드 파이프라인 진행 중. 26-search 브리프 확정됨(포트 충돌을 피하려고 가이드가 끝난 뒤 구현 시작)"
   },
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 남음)",
-    "26-search": "todo",
+    "26-search": "brief-confirmed",
     "27-fulfillment": "todo",
     "28-toss-payments": "todo",
     "29-admin": "todo",
