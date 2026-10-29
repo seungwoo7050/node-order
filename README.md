@@ -103,11 +103,11 @@ bash rollback.sh
 ## 테스트
 
 ```sh
-npm run lint
-npm run typecheck
-npm run test:api
-npm run test:web
+npm run verify:fast   # lint + typecheck + 단위 테스트 + 하네스 테스트
+npm run verify        # 위 + API e2e + 웹 e2e + 경보 규칙(웹 e2e는 4000에 API가 없으면 스스로 띄운다)
 ```
+
+에이전트 규칙과 훅(`.claude/settings.json`, `scripts/harness/`)은 [`AGENTS.md`](AGENTS.md)에 있습니다.
 
 - API e2e 추가분: 허용 목록 IP는 세지 않음(`rate-limit.e2e-spec.ts`), 옛 형식 키를 읽지 않고 무효화 때 함께 지움(`catalog-cache.e2e-spec.ts`)
 - 스모크(데모 사용자로 들어가 목록과 상세)는 대기 환경에 띄운 뒤 그 주소로 돌립니다.
