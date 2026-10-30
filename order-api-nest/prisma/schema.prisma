@@ -49,6 +49,9 @@ model Order {
   address1          String?
   address2          String?
   deliveryMemo      String?     @map("delivery_memo")
+  // 0033: 결제할 때 손님이 동의한 개인정보처리방침 버전과 시각(옛 주문은 비어 있다)
+  privacyConsentVersion Int?      @map("privacy_consent_version")
+  privacyConsentedAt    DateTime? @map("privacy_consented_at")
   items             OrderItem[]
   payment           Payment?
   history           OrderStatusHistory[]
@@ -332,4 +335,91 @@ model RefreshToken {
   @@index([userId])
   @@index([familyId])
   @@map("refresh_tokens")
+}
+
+// 상점 설정(0033). 한 행(id = 1, CHECK는 SQL에만). 저장은 version이 같을 때만(낙관적 잠금, If-Match)
+// 비밀값(PG 키 등)은 여기 두지 않는다: 환경변수에만 있고 화면은 GET /features로 연결 여부만 본다
+model StoreSettings {
+  id                    Int      @id @default(1)
+  storeName             String   @map("store_name")
+  representative        String
+  businessNumber        String   @map("business_number") // 숫자 10자리(체크섬 검증은 앱)
+  mailOrderNumber       String   @map("mail_order_number") // 통신판매업 신고번호
+  address               String
+  phone                 String
+  email                 String
+  privacyOfficer        String   @map("privacy_officer")
+  shippingFee           Int      @map("shipping_fee")
+  freeShippingThreshold Int      @map("free_shipping_threshold")
+  returnShippingFee     Int      @map("return_shipping_fee")
+  lowStockThreshold     Int      @map("low_stock_threshold")
+  version               Int      @default(1)
+  updatedAt             DateTime @default(now()) @map("updated_at")
+
+  @@map("store_settings")
+}
+
+enum LegalKind {
+  terms
+  privacy
+  refund
+}
+
+// 약관·개인정보처리방침·청약철회 안내(0033). 고치면 새 버전 행이 생기고 지난 버전은 그대로 남는다
+model LegalDocument {
+  id          Int       @id @default(autoincrement())
+  kind        LegalKind
+  version     Int
+  title       String
+  body        String
+  effectiveAt DateTime  @map("effective_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([kind, version])
+  @@map("legal_documents")
+}
+
+enum ReconciliationIssueKind {
+  amount_mismatch
+  status_mismatch
+  missing_in_db
+  missing_in_pg
+  refund_mismatch
+}
+
+// PG 대사 실행(0033). provider 하나에 한 행. 실패해도 남는다(error)
+model ReconciliationRun {
+  id          Int             @id @default(autoincrement())
+  provider    PaymentProvider
+  periodStart DateTime        @map("period_start")
+  periodEnd   DateTime        @map("period_end")
+  startedAt   DateTime        @default(now()) @map("started_at")
+  finishedAt  DateTime?       @map("finished_at")
+  pgCount     Int             @default(0) @map("pg_count") // PG가 알려 준 결제 수
+  dbCount     Int             @default(0) @map("db_count") // 우리 쪽에서 맞춰 본 결제 수
+  issueCount  Int             @default(0) @map("issue_count")
+  error       String?
+
+  @@index([periodStart, provider])
+  @@map("reconciliation_runs")
+}
+
+// PG 대사 불일치(0033). (provider, 종류, PG 결제 키)가 자연 키라 다시 돌려도 같은 행을 고친다
+model ReconciliationIssue {
+  id             Int                     @id @default(autoincrement())
+  provider       PaymentProvider
+  businessDate   DateTime                @map("business_date") @db.Date // 처음 발견한 대사 기준일(Asia/Seoul)
+  kind           ReconciliationIssueKind
+  paymentKey     String                  @map("payment_key")
+  orderId        Int?                    @map("order_id")
+  ourValue       Json?                   @map("our_value")
+  pgValue        Json?                   @map("pg_value")
+  firstSeenAt    DateTime                @default(now()) @map("first_seen_at")
+  lastSeenAt     DateTime                @default(now()) @map("last_seen_at")
+  resolvedAt     DateTime?               @map("resolved_at")
+  resolutionNote String?                 @map("resolution_note")
+
+  @@unique([provider, kind, paymentKey])
+  @@index([resolvedAt])
+  @@map("reconciliation_issues")
 }
