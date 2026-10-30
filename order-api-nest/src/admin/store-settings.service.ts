@@ -40,8 +40,14 @@ export class StoreSettingsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(StoreSettingsService.name);
   private cached?: { value: SettingsView; at: number };
   private loading?: Promise<SettingsView>;
-  private readonly pub = new Redis(process.env.REDIS_URL!, { enableOfflineQueue: false, maxRetriesPerRequest: 0, commandTimeout: 200 });
-  private readonly sub = new Redis(process.env.REDIS_URL!, { maxRetriesPerRequest: null });
+  // 캐시 경합 막기: 저장 전에 시작한 읽기가 무효화 뒤에 끝나 옛 값을 다시 캐시하면 TTL 동안 옛 값을 보인다.
+  //   generation: 무효화할 때마다 오른다. 그 전에 시작한 읽기의 결과는 캐시에 넣지 않는다(이 인스턴스의 경합)
+  //   minVersion: 무효화 때 받은 version(저장한 판, pub/sub 메시지). 이보다 낮은 값은 넣지 않는다(다른 인스턴스와의 경합)
+  private generation = 0;
+  private minVersion = 0;
+  // lazyConnect: 연결은 onModuleInit에서 연다(서비스만 만드는 단위 테스트가 Redis에 붙지 않게)
+  private readonly pub = new Redis(process.env.REDIS_URL ?? "", { enableOfflineQueue: false, maxRetriesPerRequest: 0, commandTimeout: 200, lazyConnect: true });
+  private readonly sub = new Redis(process.env.REDIS_URL ?? "", { maxRetriesPerRequest: null, lazyConnect: true });
 
   constructor(private readonly prisma: PrismaService) {
     this.pub.on("error", () => {});
@@ -49,9 +55,10 @@ export class StoreSettingsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
-    this.sub.on("message", (channel) => {
-      if (channel === SETTINGS_CHANNEL) this.invalidate();
+    this.sub.on("message", (channel, message) => {
+      if (channel === SETTINGS_CHANNEL) this.invalidate(Number(message) || undefined);
     });
+    this.pub.connect().catch((err: Error) => this.logger.warn(`설정 변경 알림용 Redis에 붙지 못했다: ${err.message}`));
     // 기다리지 않는다: Redis가 없어도 앱은 뜬다(연결되면 구독하고, 그 전에는 TTL이 지나야 다른 인스턴스가 새 값을 본다)
     this.sub.subscribe(SETTINGS_CHANNEL).catch((err: Error) => this.logger.warn(`설정 변경 알림을 구독하지 못했다: ${err.message}`));
   }
@@ -65,22 +72,31 @@ export class StoreSettingsService implements OnModuleInit, OnModuleDestroy {
     await Promise.all([this.pub.quit().catch(() => {}), this.sub.quit().catch(() => {})]);
   }
 
-  invalidate() {
+  // version: 이 판 이상만 캐시에 넣는다(저장한 판, 다른 인스턴스가 알린 판)
+  invalidate(version?: number) {
     this.cached = undefined;
+    this.loading = undefined; // 무효화 전에 시작한 읽기를 다음 get()이 이어받지 않게
+    this.generation++;
+    if (version !== undefined && version > this.minVersion) this.minVersion = version;
   }
 
   async get(): Promise<SettingsView> {
     if (this.cached && Date.now() - this.cached.at < CACHE_TTL_MS) return this.cached.value;
-    this.loading ??= (async () => {
-      try {
-        const { id: _id, ...value } = await this.prisma.storeSettings.findUniqueOrThrow({ where: { id: 1 } });
-        this.cached = { value, at: Date.now() };
-        return value;
-      } finally {
-        this.loading = undefined;
-      }
-    })();
+    this.loading ??= this.load();
     return this.loading;
+  }
+
+  private async load(): Promise<SettingsView> {
+    const generation = this.generation;
+    try {
+      const { id: _id, ...value } = await this.prisma.storeSettings.findUniqueOrThrow({ where: { id: 1 } });
+      // 읽는 동안 무효화됐거나 알려진 판보다 낮으면 돌려주기만 하고 캐시에 넣지 않는다
+      if (generation === this.generation && value.version >= this.minVersion) this.cached = { value, at: Date.now() };
+      return value;
+    } finally {
+      // 무효화가 loading을 이미 비웠으면(그 뒤 새 읽기가 들어왔을 수 있다) 건드리지 않는다
+      if (generation === this.generation) this.loading = undefined;
+    }
   }
 
   async publicView(): Promise<PublicStoreSettings> {
@@ -99,7 +115,7 @@ export class StoreSettingsService implements OnModuleInit, OnModuleDestroy {
       where: { id: 1, version: expectedVersion },
       data: { ...input, version: { increment: 1 }, updatedAt: new Date() },
     });
-    this.invalidate();
+    this.invalidate(count > 0 ? expectedVersion + 1 : undefined);
     if (count === 0) {
       const current = await this.get();
       throw new ConflictException({
