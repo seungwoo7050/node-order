@@ -1,5 +1,5 @@
 // Stripe 시뮬레이터(테스트 대역). stripe SDK가 protocol/host/port로 이 서버를 부른다(STRIPE_SIMULATOR_URL).
-//   Checkout: POST·GET /v1/checkout/sessions, 결제창 /c/pay/{id}(완료하면 서명한 checkout.session.completed 웹훅)
+//   Checkout: POST /v1/checkout/sessions, GET /v1/checkout/sessions/{id}(payment_intent 조회), 결제창 /c/pay/{id}(완료하면 서명한 checkout.session.completed 웹훅)
 //   결제·환불: GET /v1/payment_intents/{id}, POST /v1/refunds, GET /v1/refunds?payment_intent=
 //   제어(테스트용, /__sim): faults(실패 주입: refund의 timeout·unavailable), calls(호출 수), reset
 // 실행: SIM_PORT=4100 SIM_API_URL=http://localhost:4000 node scripts/stripe-sim.mjs  (SIM_PORT=0이면 빈 포트)
@@ -17,7 +17,7 @@ const intents = new Map();
 const refunds = new Map();
 const idempotent = new Map();
 let faults = [];
-let calls = { refund: 0, fetch: 0 };
+let calls = { refund: 0, fetch: 0, session: 0 };
 let seq = 0;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -111,6 +111,7 @@ const server = createServer(async (req, res) => {
   }
   let m = url.pathname.match(/^\/v1\/checkout\/sessions\/(\w+)$/);
   if (req.method === "GET" && m) {
+    calls.session++; // 결제 키 지연 채움(세션 → payment_intent)이 몇 번 묻는지 테스트가 본다
     const s = sessions.get(m[1]);
     return s ? json(res, 200, sessionView(s)) : json(res, 404, { error: { type: "invalid_request_error", code: "resource_missing", message: `No such checkout.session: '${m[1]}'` } });
   }
@@ -151,7 +152,7 @@ const server = createServer(async (req, res) => {
   if (req.method === "POST" && url.pathname === "/__sim/reset") {
     sessions.clear(); intents.clear(); refunds.clear(); idempotent.clear();
     faults = [];
-    calls = { refund: 0, fetch: 0 };
+    calls = { refund: 0, fetch: 0, session: 0 };
     return json(res, 200, { ok: true });
   }
 

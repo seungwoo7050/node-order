@@ -78,6 +78,19 @@ export class StripeGateway implements PaymentGateway {
     return { ...(await this.fetchPayment(intent)), providerOrderId: session.id };
   }
 
+  // 0030 백필은 Stripe 세션 id만 옮겼다. 세션의 payment_intent가 결제 키다
+  async findPaymentKey(sessionId: string): Promise<string | null> {
+    let session: Stripe.Checkout.Session;
+    try {
+      session = await call(() => this.stripe.checkout.sessions.retrieve(sessionId));
+    } catch (err) {
+      if (err instanceof PgError && err.status === 404) return null;
+      throw err;
+    }
+    const intent = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
+    return session.payment_status === "paid" && intent ? intent : null;
+  }
+
   async fetchPayment(paymentKey: string): Promise<PgPayment> {
     const [intent, refunds] = await call(() =>
       Promise.all([this.stripe.paymentIntents.retrieve(paymentKey), this.stripe.refunds.list({ payment_intent: paymentKey, limit: 100 })]),

@@ -80,6 +80,16 @@ export class TossGateway implements PaymentGateway {
     return toPgPayment(await this.request<TossPayment>("POST", "/v1/payments/confirm", body, idempotencyKey));
   }
 
+  async findPaymentKey(providerOrderId: string): Promise<string | null> {
+    try {
+      const p = await this.request<TossPayment>("GET", `/v1/payments/orders/${encodeURIComponent(providerOrderId)}`);
+      return p.approvedAt ? p.paymentKey : null;
+    } catch (err) {
+      if (err instanceof PgError && err.status === 404) return null;
+      throw err;
+    }
+  }
+
   async fetchPayment(paymentKey: string): Promise<PgPayment> {
     return toPgPayment(await this.request<TossPayment>("GET", `/v1/payments/${encodeURIComponent(paymentKey)}`));
   }
