@@ -1,11 +1,11 @@
 import type { INestApplication } from "@nestjs/common";
-import { SHIPPING, client, seedPaymentData, startPaymentApp } from "./payment-app.js";
+import { CONSENT, SHIPPING, client, seedPaymentData, startPaymentApp } from "./payment-app.js";
 
 // 키가 있는 결제 수단만 켠다. 키는 환경변수에서만 읽는다(요청마다 다시 본다)
 describe("GET /features - 결제 수단", () => {
   let app: INestApplication;
   let baseUrl: string;
-  const keys = ["TOSS_CLIENT_KEY", "TOSS_SECRET_KEY", "TOSS_SIMULATOR_URL", "STRIPE_SECRET_KEY", "STRIPE_SIMULATOR_URL"] as const;
+  const keys = ["TOSS_CLIENT_KEY", "TOSS_SECRET_KEY", "TOSS_SIMULATOR_URL", "STRIPE_SECRET_KEY", "STRIPE_SIMULATOR_URL", "SENTRY_DSN", "LLM_API_KEY"] as const;
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
 
   beforeAll(async () => {
@@ -18,23 +18,32 @@ describe("GET /features - 결제 수단", () => {
   });
 
   const features = async () => (await fetch(`${baseUrl}/features`)).json();
+  const none = { toss: false, stripe: false, errorTracking: false, llm: false };
 
   it("토스 키만 있으면 토스만, 위젯 클라이언트 키와 공식 SDK 주소를 준다(시크릿 키는 주지 않는다)", async () => {
     process.env.TOSS_CLIENT_KEY = "ck-example";
     process.env.TOSS_SECRET_KEY = "sk-example-secret";
     const body = await features();
-    expect(body).toEqual({ payments: ["toss"], toss: { clientKey: "ck-example", sdkUrl: "https://js.tosspayments.com/v2/standard" } });
+    expect(body).toEqual({ payments: ["toss"], integrations: { ...none, toss: true }, toss: { clientKey: "ck-example", sdkUrl: "https://js.tosspayments.com/v2/standard" } });
     expect(JSON.stringify(body)).not.toContain("sk-example-secret");
+  });
+
+  it("오류 추적 DSN·LLM 키는 연결됨·없음(참·거짓)만 알리고 값은 싣지 않는다", async () => {
+    process.env.SENTRY_DSN = "https://dsn-secret-value@errors.example.com/1";
+    process.env.LLM_API_KEY = "llm-secret-value";
+    const body = await features();
+    expect(body.integrations).toEqual({ ...none, errorTracking: true, llm: true });
+    expect(JSON.stringify(body)).not.toMatch(/dsn-secret-value|llm-secret-value/);
   });
 
   it("토스 키가 하나만 있으면 끈다", async () => {
     process.env.TOSS_CLIENT_KEY = "ck-example";
-    expect(await features()).toEqual({ payments: [] });
+    expect(await features()).toEqual({ payments: [], integrations: none });
   });
 
   it("Stripe 키만 있으면 Stripe만", async () => {
     process.env.STRIPE_SECRET_KEY = "stripe-example";
-    expect(await features()).toEqual({ payments: ["stripe"] });
+    expect(await features()).toEqual({ payments: ["stripe"], integrations: { ...none, stripe: true } });
   });
 
   it("둘 다 있으면 둘 다(토스 먼저)", async () => {
@@ -44,12 +53,12 @@ describe("GET /features - 결제 수단", () => {
   });
 
   it("둘 다 없으면 빈 목록이고, 결제를 시작하면 주문을 만들기 전에 400", async () => {
-    expect(await features()).toEqual({ payments: [] });
+    expect(await features()).toEqual({ payments: [], integrations: none });
     const { user } = await seedPaymentData(baseUrl);
-    const res = await client(baseUrl, user).post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }], shipping: SHIPPING });
+    const res = await client(baseUrl, user).post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }], shipping: SHIPPING, ...CONSENT });
     expect(res.status).toBe(400);
     expect(res.body.message).toBe("켜진 결제 수단이 없습니다");
-    const toss = await client(baseUrl, user).post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }], shipping: SHIPPING, provider: "toss" });
+    const toss = await client(baseUrl, user).post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }], shipping: SHIPPING, ...CONSENT, provider: "toss" });
     expect(toss.status).toBe(400);
     expect((await client(baseUrl, user).get("/me/orders")).body.items).toEqual([]);
   });
