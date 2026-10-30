@@ -22,8 +22,8 @@
     "26-search": "implemented @ bfb0840 (devlog 완료, 가이드 대기)",
     "27-toss-payments": "implemented @ 2558cde (verify 통과, devlog 완료, 가이드 대기)",
     "28-fulfillment": "implemented @ 90d0278 (verify 통과, devlog 완료, 가이드 대기)",
-    "29-admin": "implementing",
-    "30-ai-mcp": "todo",
+    "29-admin": "implemented @ d2b2720 (28 결함 4건+e2e 약관 누적 후속 수정 중)",
+    "30-ai-mcp": "brief-confirmed",
     "31-observability": "todo"
   },
   "blocked": [
