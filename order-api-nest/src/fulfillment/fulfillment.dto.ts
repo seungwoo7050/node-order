@@ -9,6 +9,8 @@ import type { ReturnReason } from "./policy.js";
 
 export class AdminFulfillmentQueryDto extends PageQueryDto {
   @IsOptional() @IsIn(ORDER_STATUSES) status?: OrderStatus;
+  // 대시보드의 "반품 요청" 타일: 처리하지 않은 반품·교환 요청이 있는 주문만
+  @IsOptional() @IsIn(["requested"]) returns?: "requested";
 }
 
 // 목록에 없는 택배사 코드는 400
