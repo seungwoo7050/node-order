@@ -3,6 +3,7 @@
 #   check-monitoring.sh runbook <규칙 파일> <저장소 루트>   경보마다 runbook annotation이 있고, 그 파일·절(#앵커)이 있다
 #   check-monitoring.sh tests <규칙 파일> <테스트 파일>     경보마다 promtool 테스트가 있다
 #   check-monitoring.sh compose <compose.yml>               prometheus 보존 7일, prometheus·alertmanager 메모리 상한
+#   check-monitoring.sh windows <규칙 파일> <prometheus 설정>  rate·increase 창이 스크레이프 간격의 4배 이상
 # 문제가 있으면 한 줄씩 찍고 exit 1
 set -uo pipefail
 
@@ -51,6 +52,18 @@ check_tests() {
   return ${fail}
 }
 
+# 규칙의 범위 벡터 창([30s], [2m] …)이 스크레이프 간격(초)의 4배 이상인지(rate·increase가 표본 2개로 흔들리지 않게)
+check_windows() {
+  local rules=$1 interval=$2 fail=0 w n unit sec
+  while read -r w; do
+    n=${w//[!0-9]/}
+    unit=${w//[0-9]/}
+    case ${unit} in s) sec=${n} ;; m) sec=$((n * 60)) ;; h) sec=$((n * 3600)) ;; d) sec=$((n * 86400)) ;; *) continue ;; esac
+    if ((sec < interval * 4)); then echo "창 [${w}]이 스크레이프 간격 ${interval}s의 4배(${interval}s×4)보다 짧다"; fail=1; fi
+  done < <(grep -oE '\[[0-9]+[smhd]\]' "$rules" | tr -d '[]' | sort -u)
+  return ${fail}
+}
+
 # compose.yml에서 서비스 하나의 블록(다음 2칸 들여쓴 이름 전까지)
 service_block() { awk -v s="  $2:" '$0 == s { on = 1; next } on && (/^  [a-zA-Z0-9_-]+:/ || /^[a-zA-Z]/) { on = 0 } on' "$1"; }
 
@@ -70,5 +83,6 @@ case "${1:-}" in
   runbook) check_runbook "$2" "$3" ;;
   tests) check_tests "$2" "$3" ;;
   compose) check_compose "$2" ;;
+  windows) check_windows "$2" "$(sed -nE 's/^[[:space:]]*scrape_interval:[[:space:]]*([0-9]+)s.*/\1/p' "$3" | head -1)" ;;
   *) echo "쓰는 법: check-monitoring.sh runbook|tests|compose ..."; exit 2 ;;
 esac

@@ -14,16 +14,28 @@ groups:
           description: "{{ $labels.instance }}의 /metrics를 30초 넘게 가져오지 못했다"
           runbook: docs/runbook.md#apidown
 
+      # ApiDown은 대상이 있어야 울린다. 대상 파일(live/targets.json)이 []이거나 틀리면 up 시계열이 없어 아무것도 울리지 않으므로 따로 본다
+      - alert: ApiTargetMissing
+        expr: absent(up{job="order-api"})
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus가 긁을 order-api가 없다"
+          description: "order-api 대상이 2분 넘게 없다(live/targets.json이 비었거나 틀렸다)"
+          runbook: docs/runbook.md#apitargetmissing
+
+      # 창은 운영 스크레이프 간격(15s)의 8배(2분, 최소 4표본을 넘게). 한 번 튄 오류로 울리지 않게 2분 이어질 때만
       - alert: HighErrorRate
         expr: |
-          sum(rate(http_request_duration_seconds_count{status_code=~"5.."}[30s]))
-            / sum(rate(http_request_duration_seconds_count[30s])) > 0.05
-        for: 1m
+          sum(rate(http_request_duration_seconds_count{status_code=~"5.."}[2m]))
+            / sum(rate(http_request_duration_seconds_count[2m])) > 0.05
+        for: 2m
         labels:
           severity: warning
         annotations:
           summary: "5xx 응답 비율이 높다"
-          description: "최근 30초 5xx 비율 {{ $value | humanizePercentage }}"
+          description: "최근 2분 5xx 비율 {{ $value | humanizePercentage }}"
           runbook: docs/runbook.md#higherrorrate
 
       - alert: OutboxBacklog
@@ -36,11 +48,25 @@ groups:
           description: "발행되지 않은 이벤트 {{ $value }}건"
           runbook: docs/runbook.md#outboxbacklog
 
+  # 업무 게이지는 리더가 바뀌는 동안(옛 리더가 내려가고 새 리더가 첫 계산을 할 때까지) 0으로 보인다.
+  # keep_firing_for로 그 틈에 풀렸다 다시 울리지 않게 한다
   - name: business
     rules:
+      # 업무 게이지 계산이 멈췄다(DB 오류면 게이지가 NaN이라 아래 경보들이 울리지 않는다). 리더가 아닌 인스턴스는 0을 낸다
+      - alert: BusinessMetricsStale
+        expr: time() - max(business_metrics_last_success_timestamp_seconds) > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "업무 지표를 계산하지 못하고 있다"
+          description: "마지막 성공 뒤 {{ $value | humanizeDuration }} 지났다(업무 경보들이 꺼져 있을 수 있다)"
+          runbook: docs/runbook.md#businessmetricsstale
+
       - alert: ReconciliationMismatch
         expr: max(reconciliation_open_issues) > 0
         for: 1m
+        keep_firing_for: 5m
         labels:
           severity: warning
         annotations:
@@ -51,6 +77,7 @@ groups:
       - alert: RefundOutcomeUnknown
         expr: max(refunds_unresolved_oldest_seconds) > 3600
         for: 1m
+        keep_firing_for: 5m
         labels:
           severity: critical
         annotations:
@@ -99,6 +126,7 @@ groups:
       - alert: SearchIndexLag
         expr: max(search_index_lag_seconds) > 600
         for: 1m
+        keep_firing_for: 5m
         labels:
           severity: warning
         annotations:
@@ -106,18 +134,26 @@ groups:
           description: "가장 오래 기다린 상품이 {{ $value | humanizeDuration }}째 색인되지 않았다"
           runbook: docs/runbook.md#searchindexlag
 
+      # 30분 동안 끝난 메일 job 중 10% 넘게, 3건 이상 실패한 상태가 10분 이어질 때(많이 보내는 중 한두 건으로는 울리지 않게)
       - alert: MailJobsFailing
-        expr: sum(increase(mail_jobs_failed_total[30m])) > 0
+        expr: |
+          (
+            sum(increase(mail_jobs_failed_total[30m]))
+              / (sum(increase(mail_jobs_failed_total[30m])) + sum(increase(mail_jobs_completed_total[30m])))
+          ) > 0.1
+          and sum(increase(mail_jobs_failed_total[30m])) >= 3
+        for: 10m
         labels:
           severity: warning
         annotations:
-          summary: "메일 발송이 재시도 끝에 실패했다"
-          description: "최근 30분 실패로 끝난 메일 job {{ $value | humanize }}건"
+          summary: "메일 발송이 재시도 끝에 실패하고 있다"
+          description: "최근 30분 메일 job 실패율 {{ $value | humanizePercentage }}"
           runbook: docs/runbook.md#mailjobsfailing
 
       - alert: FulfillmentOverdue
         expr: max(fulfillment_overdue_orders) > 0
         for: 30m
+        keep_firing_for: 5m
         labels:
           severity: warning
         annotations:

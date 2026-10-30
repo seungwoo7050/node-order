@@ -23,9 +23,18 @@
   - 새 배포 직후라면 `bash rollback.sh`
 - **PG 화면**: 보지 않는다. 다만 API가 오래 죽어 있었다면 그동안 온 결제 웹훅은 PG가 다시 보낸다(토스·Stripe 모두 재시도). 복구 뒤 [ReconciliationMismatch](#reconciliationmismatch)가 울리는지 지켜본다
 
+## ApiTargetMissing
+
+- **무엇을 보나**: Prometheus에 긁을 order-api 대상이 2분 넘게 없다(`up{job="order-api"}` 시계열이 없음). 대상이 없으면 [ApiDown](#apidown)도 울리지 않으므로 이 경보가 대신 알린다. 대개 `live/targets.json`이 `[]`(첫 배포 뒤 `switch`가 안 돌았음)이거나 지워졌다
+- **명령**
+  - `cat live/targets.json`, `sed -n 's/^ACTIVE=//p' .env`
+  - 활성 슬롯이 떠 있으면 `bash release.sh switch` 대신 대상만 고친다: `printf '[{"targets":["api-%s:4000"],"labels":{"slot":"%s"}}]\n' blue blue > live/targets.json`(blue 자리에 활성 슬롯)
+  - `docker compose logs --tail 20 prometheus | grep -i file_sd`
+- **PG 화면**: 보지 않는다
+
 ## HighErrorRate
 
-- **무엇을 보나**: 최근 30초 응답 중 5xx가 5%를 넘는 상태가 1분 이어졌다
+- **무엇을 보나**: 최근 2분 응답 중 5xx가 5%를 넘는 상태가 2분 이어졌다(창은 스크레이프 간격 15초의 8배)
 - **명령**
   - 오류 추적에서 같은 시각의 이벤트를 release별로 묶어 본다(어느 라우트, 어느 태그)
   - 지표: `sum by (route) (rate(http_request_duration_seconds_count{status_code=~"5.."}[5m]))`로 라우트를 좁힌다
@@ -41,6 +50,15 @@
   - `docker compose exec redis redis-cli ping`
   - 가장 오래된 미발행 이벤트의 나이는 지표 `outbox_oldest_unpublished_seconds`
 - **PG 화면**: 보지 않는다
+
+## BusinessMetricsStale
+
+- **무엇을 보나**: 리더의 업무 지표 계산(`BusinessMetricsJob`)이 5분 넘게 성공하지 못한 상태가 5분 이어졌다. 계산이 실패하면 업무 게이지가 NaN이라 대사·환불·색인·처리 지연 경보가 울리지 않는다. 실패 수는 `business_metrics_failures_total`
+- **명령**
+  - `docker compose logs --since 30m api-<ACTIVE> | grep "업무 지표"`
+  - 리더가 있는지: `bash ops/psql.sh -c "select pid, granted from pg_locks where locktype = 'advisory' and objid = 726001"`
+  - DB 연결: `bash ops/psql.sh -c "select 1"`. 업무 경보가 꺼져 있는 동안은 관리자 화면(`/admin`)의 대시보드로 대사·처리 대기를 직접 본다
+- **PG 화면**: 오래 이어지면 [ReconciliationMismatch](#reconciliationmismatch)를 대신해 관리자 화면 `/admin/reconciliation`을 본다
 
 ## ReconciliationMismatch
 
@@ -97,7 +115,7 @@
 
 ## MailJobsFailing
 
-- **무엇을 보나**: 주문 메일 job이 재시도(4번)를 다 쓰고 실패로 끝났다
+- **무엇을 보나**: 최근 30분 끝난 메일 job 중 10% 넘게, 3건 이상이 재시도(4번)를 다 쓰고 실패한 상태가 10분 이어졌다(`mail_jobs_failed_total` / (실패 + `mail_jobs_completed_total`))
 - **명령**
   - `docker compose logs --since 1h api-<ACTIVE> | grep "메일 job"`
   - `docker compose exec redis redis-cli zcard bull:mail:failed`
