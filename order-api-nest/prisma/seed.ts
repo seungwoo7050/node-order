@@ -4,6 +4,7 @@ import { Redis } from "ioredis";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 import { hashPassword } from "../src/auth/password.js";
 import { deleteUsers } from "../src/auth/demo-user.js";
+import { deleteOrdersKeepingPgPayments } from "../src/orders/delete-orders.js";
 import { StorageService } from "../src/storage/storage.service.js";
 import { CATALOG_KEYS_TO_CLEAR } from "../src/cache/catalog-key.js";
 
@@ -76,8 +77,8 @@ const seedOrders: { userId: string; paid: boolean; items: [productId: number, qu
   { userId: "park", paid: true, items: [[15, 1], [16, 1]] },
 ];
 const seedUserIds = seedUsers.map((u) => u.id);
-await prisma.orderItem.deleteMany({ where: { order: { userId: { in: seedUserIds } } } });
-await prisma.order.deleteMany({ where: { userId: { in: seedUserIds } } });
+// 견본 주문을 다시 만든다. PG(stripe·toss) 결제 기록이 있는 주문은 지우지 않고 남긴다(0031)
+const { kept: keptPgOrders } = await prisma.$transaction((tx) => deleteOrdersKeepingPgPayments(tx, seedUserIds));
 const priceOf = new Map(catalog.products.map((p) => [p.id, p.price]));
 for (const o of seedOrders) {
   const items = o.items.map(([productId, quantity]) => ({ productId, quantity, unitPrice: priceOf.get(productId)! }));
@@ -106,6 +107,6 @@ if (process.env.REDIS_URL) {
 
 console.log(
   `seed 완료: 상품 ${catalog.products.length}개(사진 새로 올림 ${uploaded}장, 사진 없음 ${noPhoto.size}개), 임시 사용자 ${deletedTemp}명 삭제,`,
-  `사용자 ${await prisma.user.count()}명, 주문 ${await prisma.order.count()}건, 카탈로그 캐시 ${cacheCleared}`,
+  `사용자 ${await prisma.user.count()}명, 주문 ${await prisma.order.count()}건(PG 결제가 있어 남긴 견본 사용자 주문 ${keptPgOrders}건), 카탈로그 캐시 ${cacheCleared}`,
 );
 await prisma.$disconnect();
