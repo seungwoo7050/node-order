@@ -14,8 +14,8 @@
   },
   "current": {
     "branch": "31-observability",
-    "stage": "evaluate",
-    "note": "사용량 한도로 세션이 멈췄다. 다음 세션: 31 평가를 다시 돌린다(worktree .claude/worktrees/agent-a40636d4756f2fac4) → 메인 verify → 31 devlog → 26~31 가이드를 차례로(guide 스킬 D 모드, 포트 때문에 하나씩). 구현 브랜치 worktree: 26 agent-af1c949a50b89cb0b, 27 agent-a7e75e8caa3fa102e, 28 agent-abcc926257e2d9af3, 29 agent-a994bdf37a7c3832e, 30 agent-a2e30e581e1aab432, 31 agent-a40636d4756f2fac4"
+    "stage": "confirm",
+    "note": "31 메인 verify → 31 devlog → 가이드 26·27·28·30을 하나씩"
   },
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
@@ -24,7 +24,7 @@
     "28-fulfillment": "implemented @ 90d0278 (verify 통과, devlog 완료, 가이드 대기)",
     "29-admin": "implemented @ f4a23ee (verify 통과, devlog 완료, 가이드 대기)",
     "30-ai-mcp": "implemented @ b1584e0 (verify 통과, 실제 Claude Code 연결 확인, devlog 완료, 가이드 대기)",
-    "31-observability": "implemented @ 18d64ef (30 결함 5건 수정 포함, 평가 시작함 - 결과 미확인)"
+    "31-observability": "implemented @ 1c25daf (평가 통과 + 운영 전 수정 6건, 메인 verify 차례)"
   },
   "blocked": [
     {
@@ -78,5 +78,14 @@
     "seed가 견본 사용자의 PG 결제 주문을 남겨 e2e를 돌릴 때마다 주문이 늘어난다",
     "0034 트리거는 옛 칸(paid, canceled_at)을 쓸 때마다 같은 행을 다시 UPDATE하고, status_changed_at에 트리거 시각을 적는다. contract 마이그레이션 때 지운다",
     "MCP 결과에 손님이 쓴 글이 실려 write 토큰을 쥔 클라이언트 모델에 간다. 서버는 untrusted 칸 표시와 이스케이프까지 하고, 마지막 방어는 클라이언트의 확인 절차다"
-  ]
+  ],
+  "guides": {
+    "25-harness": "done",
+    "26-search": "todo",
+    "27-toss-payments": "todo",
+    "28-fulfillment": "todo",
+    "29-admin": "skip (집계·CRUD·폼 위주, 대사 멱등성은 devlog로)",
+    "30-ai-mcp": "todo",
+    "31-observability": "skip (설정 파일 위주)"
+  }
 }
