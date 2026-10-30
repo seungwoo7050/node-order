@@ -36,6 +36,7 @@ export function Nav() {
         <NavLink href="/shop">상품</NavLink>
         <NavLink href="/me/orders">내 주문</NavLink>
         {canSeeAdmin && <NavLink href="/admin/products">관리</NavLink>}
+        {canSeeAdmin && <NavLink href="/admin/orders">주문 처리</NavLink>}
         <NavLink href="/cart" testId="cart-count">장바구니 <span className="num">{cartCount}</span></NavLink>
         {loggedIn ? (
           <button type="button" className="text-sm text-muted cursor-pointer" onClick={async () => {

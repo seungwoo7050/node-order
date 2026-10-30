@@ -8,7 +8,11 @@ import { useTRPC } from "@/lib/trpc";
 const ReadOnly = createContext(false);
 export const useReadOnly = () => useContext(ReadOnly);
 
-export function AdminOnly({ children }: { children: ReactNode }) {
+const PRODUCT_READ_ONLY = "데모 관리자는 볼 수만 있습니다. 사진 올리기·바꾸기, 재고 조정, 상품 수정은 진짜 관리자만 할 수 있어 입력을 꺼 두었습니다.";
+const PRODUCT_NOTE = "이미지는 PNG·JPEG·WebP, 2MB까지 올릴 수 있습니다. 올린 이미지는 상품 화면에 바로 보입니다.";
+
+// 화면마다 안내 문구만 다르다(상품 관리, 주문 관리)
+export function AdminOnly({ children, readOnlyNote = PRODUCT_READ_ONLY, note = PRODUCT_NOTE }: { children: ReactNode; readOnlyNote?: string; note?: string | null }) {
   const trpc = useTRPC();
   const { data: profile, isPending, error } = useQuery({ ...trpc.me.profile.queryOptions(), retry: false });
   if (isPending) return <p role="status" className="text-sm text-muted">확인하는 중입니다.</p>;
@@ -19,11 +23,9 @@ export function AdminOnly({ children }: { children: ReactNode }) {
   return (
     <ReadOnly value={readOnly}>
       {readOnly ? (
-        <p id="read-only-note" className="note mb-8" data-testid="read-only-note">
-          데모 관리자는 볼 수만 있습니다. 사진 올리기·바꾸기, 재고 조정, 상품 수정은 진짜 관리자만 할 수 있어 입력을 꺼 두었습니다.
-        </p>
+        <p id="read-only-note" className="note mb-8" data-testid="read-only-note">{readOnlyNote}</p>
       ) : (
-        <p className="note mb-8">이미지는 PNG·JPEG·WebP, 2MB까지 올릴 수 있습니다. 올린 이미지는 상품 화면에 바로 보입니다.</p>
+        note && <p className="note mb-8">{note}</p>
       )}
       {children}
     </ReadOnly>
