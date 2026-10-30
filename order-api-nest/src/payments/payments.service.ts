@@ -4,7 +4,7 @@ import { Prisma } from "../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { cancelUnpaidOrder } from "./cancel-unpaid-order.js";
 import { markPaid } from "./payment-state.js";
-import { webhookEvents } from "../metrics/metrics.js";
+import { paymentConfirmAttempts, paymentConfirmFailed, webhookEvents } from "../metrics/metrics.js";
 
 export type WebhookResult = "processed" | "duplicate" | "ignored";
 
@@ -54,8 +54,10 @@ export class PaymentsService {
 
         if (event.type === "checkout.session.completed") {
           if (session.payment_status !== "paid") return "ignored";
+          paymentConfirmAttempts.inc({ provider: "stripe" });
           if (session.amount_total != null && session.amount_total !== payment.amount) {
             this.logger.error(`Stripe 결제 금액 불일치: 세션 ${session.id} ${session.amount_total}원 ≠ 주문 #${payment.orderId} ${payment.amount}원`);
+            paymentConfirmFailed.inc({ provider: "stripe", reason: "amount_mismatch" });
             return "ignored";
           }
           const intent = typeof session.payment_intent === "string" ? session.payment_intent : (session.payment_intent?.id ?? null);

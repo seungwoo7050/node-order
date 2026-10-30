@@ -5,6 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { Request, Response } from "express";
 import { DashboardService } from "../admin/dashboard.service.js";
+import { mcpToolCalls } from "../metrics/metrics.js";
 import { StoreSettingsService } from "../admin/store-settings.service.js";
 import { FulfillmentService } from "../fulfillment/fulfillment.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -14,7 +15,9 @@ import { SearchStats } from "../search/search-stats.js";
 import { AccessTokensService, type McpPrincipal } from "./access-tokens.js";
 import { maskArgs, maskText } from "./mask-args.js";
 import { McpRateLimiter } from "./mcp-rate-limit.js";
-import { registerSellerTools, type McpDeps } from "./mcp-tools.js";
+import { registerSellerTools, SELLER_TOOL_NAMES, type McpDeps } from "./mcp-tools.js";
+
+const TOOL_NAMES = new Set<string>(SELLER_TOOL_NAMES);
 
 type ToolCall = { tool: string; args: unknown };
 
@@ -130,6 +133,7 @@ export class McpController {
       if (call && ("result" in msg || "error" in msg)) {
         calls.delete(id!);
         const { ok, error } = outcome(msg);
+        mcpToolCalls.inc({ tool: TOOL_NAMES.has(call.tool) ? call.tool : "unknown", result: ok ? "ok" : "error" });
         await this.tokens.audit({ tokenId: principal.tokenId, tool: call.tool, args: maskArgs(call.args), ok, error })
           .catch((err: Error) => this.logger.error(`MCP 감사 로그를 남기지 못했다: ${err.message}`));
       }

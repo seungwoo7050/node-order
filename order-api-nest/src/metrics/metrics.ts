@@ -76,6 +76,58 @@ export const llmRequests = new Counter({
   registers: [registry],
 });
 
+// MCP 도구 호출 결과(ok, error). tool 라벨은 등록된 도구 이름만(없는 이름은 unknown - 손님이 정하는 값을 라벨에 넣지 않는다)
+export const mcpToolCalls = new Counter({
+  name: "mcp_tool_calls_total",
+  help: "MCP 도구 호출 결과 수(ok, error)",
+  labelNames: ["tool", "result"] as const,
+  registers: [registry],
+});
+
+// ── 업무 지표(31) ───────────────────────────────────────────────
+// 라벨에 손님 정보나 주문 id를 넣지 않는다(카디널리티와 개인정보). 라벨은 provider·reason 같은 작은 고정 집합만
+
+// 결제 승인 시도와 실패. 실패율 경보는 failed / attempts
+export const paymentConfirmAttempts = new Counter({
+  name: "payments_confirm_attempts_total",
+  help: "결제 승인 시도 수(토스 승인 요청, Stripe 결제 완료 웹훅)",
+  labelNames: ["provider"] as const,
+  registers: [registry],
+});
+
+export const paymentConfirmFailed = new Counter({
+  name: "payments_confirm_failed_total",
+  help: "결제 승인 실패 수(reason: amount_mismatch, rejected, unknown_outcome, pg_mismatch, not_paid, canceled_meanwhile)",
+  labelNames: ["provider", "reason"] as const,
+  registers: [registry],
+});
+
+// 재시도를 다 쓰고 failed로 옮겨진 메일 job
+export const mailJobsFailed = new Counter({
+  name: "mail_jobs_failed_total",
+  help: "재시도를 소진해 실패로 끝난 메일 job 수",
+  registers: [registry],
+});
+
+// 아래 게이지는 리더 인스턴스의 BusinessMetricsJob이 주기적으로 계산한다(다른 인스턴스는 값이 없다).
+// 계산이 실패하면 NaN(경보 비교가 거짓이 되고, 대시보드에 빈칸으로 보인다)
+const gauge = (name: string, help: string) => new Gauge({ name, help, registers: [registry] });
+export const businessGauges = {
+  reconciliationOpenIssues: gauge("reconciliation_open_issues", "해결되지 않은 PG 대사 불일치 수"),
+  refundsUnresolvedOldest: gauge("refunds_unresolved_oldest_seconds", "결과 미상(requested) 환불 중 가장 오래된 것의 나이(초). 없으면 0"),
+  searchIndexLag: gauge("search_index_lag_seconds", "검색 색인을 기다리는 가장 오래된 search_dirty 행의 나이(초). 없으면 0"),
+  outboxOldestUnpublished: gauge("outbox_oldest_unpublished_seconds", "발행되지 않은 가장 오래된 outbox 이벤트의 나이(초). 없으면 0"),
+  fulfillmentOverdue: gauge("fulfillment_overdue_orders", "결제 완료(paid) 뒤 FULFILLMENT_OVERDUE_DAYS일 넘게 배송 준비를 시작하지 않은 주문 수"),
+};
+
+// 하루 LLM 토큰 상한(LLM_DAILY_TOKEN_BUDGET, 입력+출력). 경보가 sum(increase(llm_tokens_total[1d]))와 비교한다
+export const llmDailyTokenBudget = new Gauge({
+  name: "llm_daily_token_budget",
+  help: "하루 LLM 토큰(입력+출력) 상한. 넘으면 LlmDailyTokenBudgetExceeded 경보",
+  registers: [registry],
+});
+llmDailyTokenBudget.set(Number(process.env.LLM_DAILY_TOKEN_BUDGET ?? 200_000));
+
 function routeOf(req: Request): string {
   const path = req.route?.path as string | undefined;
   if (!path || path === "{/*splat}") return "unmatched";

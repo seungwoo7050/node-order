@@ -7,7 +7,7 @@ import { cancelUnpaidOrder } from "./cancel-unpaid-order.js";
 import { PgError, type PgPayment } from "./payment-gateway.js";
 import { markPaid } from "./payment-state.js";
 import { TossGateway } from "./toss.gateway.js";
-import { tossEvents } from "../metrics/metrics.js";
+import { paymentConfirmAttempts, paymentConfirmFailed, tossEvents } from "../metrics/metrics.js";
 
 export type TossWebhookResult = "processed" | "duplicate" | "ignored";
 type ReadyPayment = { id: number; orderId: number; providerOrderId: string; amount: number };
@@ -51,21 +51,39 @@ export class TossPaymentsService {
       if (payment.providerPaymentKey === input.paymentKey) return { orderId: payment.orderId, status: payment.status }; // 같은 승인을 다시 보냈다
       throw new ConflictException(`이미 끝난 결제입니다(${payment.status})`);
     }
+    paymentConfirmAttempts.inc({ provider: "toss" });
+    const failed = (reason: string) => paymentConfirmFailed.inc({ provider: "toss", reason });
     if (input.amount !== payment.amount) {
       this.logger.warn(`토스 승인 금액 위조 의심: 주문 #${payment.orderId} ${payment.amount}원 ≠ 요청 ${input.amount}원`);
       tossEvents.inc({ kind: "confirm", result: "amount_mismatch" });
+      failed("amount_mismatch");
       throw new BadRequestException("결제 금액이 주문 금액과 다릅니다");
     }
 
-    const pg = await this.approve(payment, input.paymentKey);
-    this.verify(pg, payment);
-    if (pg.status !== "paid") throw new ConflictException(`승인되지 않은 결제입니다(${pg.status})`);
+    let pg: PgPayment;
+    try {
+      pg = await this.approve(payment, input.paymentKey);
+    } catch (err) {
+      failed(err instanceof ServiceUnavailableException ? "unknown_outcome" : "rejected");
+      throw err;
+    }
+    try {
+      this.verify(pg, payment);
+    } catch (err) {
+      failed("pg_mismatch");
+      throw err;
+    }
+    if (pg.status !== "paid") {
+      failed("not_paid");
+      throw new ConflictException(`승인되지 않은 결제입니다(${pg.status})`);
+    }
     const changed = await this.prisma.asAdmin((tx) => markPaid(tx, payment.id, pg));
     if (!changed) {
       const now = await this.prisma.asAdmin((tx) => tx.payment.findUniqueOrThrow({ where: { id: payment.id }, select: { status: true } }));
       if (now.status === "canceled") {
         // 승인 사이에 주문이 취소됐다(결제 기한 등). 돈은 PG에서 나갔으므로 관리자가 환불해야 한다
         this.logger.error(`토스 승인됐지만 주문 #${payment.orderId}은 이미 취소됨 - 환불이 필요하다 (paymentKey ${pg.paymentKey})`);
+        failed("canceled_meanwhile");
         throw new ConflictException("주문이 이미 취소되어 결제를 반영하지 못했습니다");
       }
     }
