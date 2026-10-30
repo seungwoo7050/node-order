@@ -21,8 +21,8 @@
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
     "26-search": "implemented @ bfb0840 (devlog 완료, 가이드 대기)",
     "27-toss-payments": "implemented @ 2558cde (verify 통과, devlog 완료, 가이드 대기)",
-    "28-fulfillment": "implementing",
-    "29-admin": "todo",
+    "28-fulfillment": "implemented @ 90d0278 (평가 중)",
+    "29-admin": "brief-confirmed",
     "30-ai-mcp": "todo",
     "31-observability": "todo"
   },
