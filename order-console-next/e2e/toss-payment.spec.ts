@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { fillShipping } from "./shipping";
 
 // 토스 키가 없으면 API가 토스 시뮬레이터(order-api-nest/scripts/toss-sim.mjs)를 쓰고, 위젯 SDK도 시뮬레이터의 가짜 SDK다.
 // 실제 키가 있으면 진짜 결제위젯이라 자동으로 돌 수 없어 건너뛴다
@@ -22,6 +23,7 @@ async function startTossCheckout(page: Page) {
     .getByRole("button", { name: "담기" })
     .click();
   await page.getByTestId("cart-count").click();
+  await fillShipping(page);
   await page.getByRole("radio", { name: "토스페이먼츠" }).check();
   await Promise.all([
     page.waitForURL(/\/checkout\/toss\/\d+$/),
@@ -51,11 +53,11 @@ test.describe("토스 결제(시뮬레이터)", () => {
 
     await startTossCheckout(page);
     const orderId = page.url().match(/\/checkout\/toss\/(\d+)$/)![1];
-    await expect(page.getByTestId("toss-checkout")).toContainText("30,000원");
+    await expect(page.getByTestId("toss-checkout")).toContainText("33,000원"); // 상품 30,000원 + 배송비 3,000원
 
     await Promise.all([
       page.waitForURL(/localhost:\d+\/widget\/pay\?/),
-      page.getByRole("button", { name: "30,000원 결제하기" }).click(),
+      page.getByRole("button", { name: "33,000원 결제하기" }).click(),
     ]);
     await Promise.all([
       page.waitForURL(new RegExp(`/me/orders/${orderId}\\?checkout=success$`)),

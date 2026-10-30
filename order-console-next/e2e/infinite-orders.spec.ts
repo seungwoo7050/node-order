@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { fillShipping } from "./shipping";
 
 const API = "http://localhost:4000";
 
@@ -54,6 +55,7 @@ test("결제가 확인되면 아래 목록의 그 주문도 '결제 완료'로 �
   await loginAsKim(page);
   await page.getByRole("listitem").filter({ hasText: "마우스" }).getByRole("button", { name: "담기" }).click();
   await page.getByTestId("cart-count").click();
+  await fillShipping(page);
   await Promise.all([page.waitForURL(/localhost:4100\/c\/pay\/cs_/), page.getByRole("button", { name: "결제" }).click()]);
 
   const listRequests: string[] = [];
