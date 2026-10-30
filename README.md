@@ -132,6 +132,66 @@ node order-api-nest/scripts/downtime-report.mjs order-api-nest/loadtest/out/run.
 
 CI는 검사·테스트 작업이 `23`과 같고, 배포 작업이 위 "CI 배포 작업"대로 바뀌었습니다.
 
+## 상품 검색(26)
+
+- API: `GET /products/search?q=&page=`(20개씩 최대 5쪽), `GET /products/suggest?q=`(이름 최대 8개), `GET /search/popular`(최근 7일 상위 10개)
+- 엔진 경계 `SearchEngine`(`order-api-nest/src/search/`)과 PostgreSQL 구현. 계약 테스트는 `test/search-engine.contract.ts`
+- 색인: 상품·카테고리 트리거가 `search_dirty`에 기록하고, 리더 인스턴스의 `SearchIndexJob`이 `SEARCH_INDEX_INTERVAL_MS`(기본 2초)마다 반영
+- 재색인 `npm run search:reindex`, 측정 `npm run search:bench -w order-api-nest`(테스트 DB에만 상품 1만 개를 넣고 끝나면 지움)
+- 화면: 상점 머리글의 검색 상자(자동완성), `/shop/search?q=` 결과 페이지
+
+### 측정
+
+이 PC(Apple M1, 16GB, Docker의 Postgres 17)에서 `npm run search:bench`로 잰 값입니다. 실제 트래픽이 아니라, 테스트 DB에 넣은 합성 상품 1만 개(수식어 20 × 품목 25 × 색 8 조합)에 같은 연결로 200번씩 보낸 왕복 시간입니다. LIKE는 `products`의 이름·설명에 `LIKE '%검색어%'`(LIMIT 100), 새 검색은 `PgSearchEngine.search`(첫 쪽 20개, 오타 보충 포함)입니다.
+
+| 검색어 | 경우 | LIKE 결과 | LIKE p50 / p95 (ms) | 새 검색 결과 | 새 검색 p50 / p95 (ms) | 새 검색 1위 |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| 가방 | 2-gram 1개, 흔한 품목 | 100 | 1.38 / 1.93 | 100 | 2.41 / 2.86 | 무선 가방 블랙 0 |
+| 블루투스 이어폰 | 두 단어(토큰 5개 AND) | 20 | 2.67 / 3.30 | 20 | 0.68 / 0.99 | 블루투스 이어폰 레드 30 |
+| 여행가방 | 띄어쓰기 없음(2-gram 결과 0 → 오타 보충) | 0 | 2.58 / 3.22 | 100 | 7.53 / 8.72 | 여행용 가방 네이비 3 |
+| 블르투스 이어폰 | 오타(2-gram 결과 0 → 오타 보충) | 0 | 2.57 / 2.90 | 100 | 7.94 / 10.42 | 블루투스 이어폰 레드 30 |
+
+- LIKE는 늘 순차 스캔(`Seq Scan on products`, 1만 행 중 9,980행을 버림)이라 상품 수에 비례해 느려지고, 띄어쓰기·오타가 다르면 0건입니다.
+- 2-gram 일치는 `Bitmap Index Scan on product_search_tokens_idx`(GIN)로 맞는 행만 읽습니다(`블루투스 이어폰` 실행 0.16ms, 버퍼 31). 맞는 행이 많은 `가방`(400건)은 모두 순위를 매겨 정렬하므로 LIMIT에서 일찍 멈추는 LIKE보다 느립니다.
+- 오타 보충은 `Bitmap Index Scan on product_search_name_trgm_idx`(GIN trgm)이고 실행 5ms입니다. 왕복이 7~10ms인 것은 2-gram 쿼리 뒤에 임계값(`set_config`)을 정하는 트랜잭션을 한 번 더 열기 때문입니다.
+- 바꿀 신호(브리프): 상품 1만 개 초과, 또는 검색 p95가 이 표의 3배를 넘으면 다른 엔진 구현을 같은 계약 테스트로 더합니다.
+
+<details>
+<summary>EXPLAIN (ANALYZE, BUFFERS)</summary>
+
+```text
+-- LIKE '%블루투스 이어폰%'
+Limit  (actual time=2.490..2.492 rows=20 loops=1)
+  ->  Sort  (Sort Key: id)
+        ->  Seq Scan on products  (actual time=0.026..2.481 rows=20 loops=1)
+              Filter: ((name ~~ '%블루투스 이어폰%'::text) OR (description ~~ '%블루투스 이어폰%'::text))
+              Rows Removed by Filter: 9980
+              Buffers: shared hit=164
+Execution Time: 2.499 ms
+
+-- 2-gram 일치 '블루투스 이어폰'
+Limit  (actual time=0.153..0.156 rows=20 loops=1)
+  ->  Sort  (Sort Key: ts_rank(...) * 1 + word_similarity(...) * 0.5 DESC, product_id)
+        ->  Bitmap Heap Scan on product_search s  (actual time=0.050..0.149 rows=20 loops=1)
+              Recheck Cond: (tokens @@ '''블루'' & ''루투'' & ''투스'' & ''이어'' & ''어폰'''::tsquery)
+              Buffers: shared hit=31
+              ->  Bitmap Index Scan on product_search_tokens_idx  (actual time=0.038..0.038 rows=20 loops=1)
+                    Index Cond: (tokens @@ '''블루'' & ''루투'' & ''투스'' & ''이어'' & ''어폰'''::tsquery)
+Execution Time: 0.163 ms
+
+-- 오타 보충 '블르투스 이어폰' (word_similarity_threshold 0.3)
+Limit  (actual time=5.062..5.072 rows=100 loops=1)
+  ->  Sort  (Sort Key: word_similarity(...) DESC, similarity(...) DESC, product_id)
+        ->  Bitmap Heap Scan on product_search  (actual time=0.076..4.928 rows=400 loops=1)
+              Filter: ('블르투스 이어폰'::text <% name)
+              Buffers: shared hit=61
+              ->  Bitmap Index Scan on product_search_name_trgm_idx  (actual time=0.059..0.059 rows=400 loops=1)
+                    Index Cond: (name %> '블르투스 이어폰'::text)
+Execution Time: 5.082 ms
+```
+
+</details>
+
 ## 정리
 
 ```sh
