@@ -131,7 +131,7 @@ export class StripeGateway implements PaymentGateway {
       after = page.has_more ? page.data.at(-1)?.id : undefined;
     } while (after);
     // 결제마다 다시 읽는다: 한 번에 PG_READ_CONCURRENCY개까지, 429·5xx는 Retry-After·지수 백오프로 다시
-    const payments = await mapLimit([...ids], PG_READ_CONCURRENCY, (id) => withPgRetry(() => this.fetchPayment(id)));
+    const payments = await mapLimit([...ids], PG_READ_CONCURRENCY, (id, signal) => withPgRetry(() => (signal.throwIfAborted(), this.fetchPayment(id))));
     return payments.filter((p) => p.approvedAt); // 결제되지 않고 취소된 PaymentIntent는 빼고
   }
 

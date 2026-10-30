@@ -35,14 +35,21 @@ export async function withPgRetry<T>(fn: () => Promise<T>, opts: { attempts: num
   }
 }
 
-// 순서를 지키며 한 번에 limit개까지만 돌린다. 하나가 실패하면 그 오류로 끝난다(이미 시작한 것은 끝까지 간다)
-export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+// 순서를 지키며 한 번에 limit개까지만 돌린다. 하나가 실패하면 남은 항목은 보내지 않고, 진행 중인 것에는 signal로 취소를 알린 뒤
+// 그 오류로 끝난다(실패한 대사에 쓸 결과를 더 모으느라 PG 요청 한도를 쓰지 않게)
+export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T, signal: AbortSignal) => Promise<R>): Promise<R[]> {
   const results: R[] = [];
+  const abort = new AbortController();
   let next = 0;
   const worker = async () => {
-    while (next < items.length) {
+    while (next < items.length && !abort.signal.aborted) {
       const i = next++;
-      results[i] = await fn(items[i]!);
+      try {
+        results[i] = await fn(items[i]!, abort.signal);
+      } catch (err) {
+        abort.abort(err);
+        throw err;
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
