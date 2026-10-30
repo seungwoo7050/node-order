@@ -19,12 +19,12 @@ class DescriptionDraftDto {
 
 const LIMIT_PER_MINUTE = () => Number(process.env.LLM_RATE_LIMIT_PER_MINUTE ?? 5) || 5;
 
-// LLM 키가 없으면(공급자가 없으면) 인증보다 먼저 404: 기능 자체가 없는 것처럼 보인다
+// LLM 키가 없으면(공급자가 꺼져 있으면) 인증보다 먼저 404: 기능 자체가 없는 것처럼 보인다
 @Injectable()
 class LlmEnabledGuard implements CanActivate {
   constructor(@Optional() @Inject(LLM_PROVIDER) private readonly provider: LlmProvider | null) {}
   canActivate(): boolean {
-    if (!this.provider) throw new NotFoundException("Cannot POST description-draft");
+    if (!this.provider?.enabled) throw new NotFoundException("Cannot POST description-draft");
     return true;
   }
 }
