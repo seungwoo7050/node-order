@@ -13,14 +13,14 @@
     "note": "Next 16.4.0 빌드가 보안 업그레이드 안내로 불규칙하게 실패한다(재시도하면 통과). 25 첫 커밋에서 16.4.3으로 올린다"
   },
   "current": {
-    "branch": "26-search",
+    "branch": "27-toss-payments",
     "stage": "implement",
-    "note": "26 구현 서브에이전트 실행 중. 25 devlog는 병행 작성 중"
+    "note": "27 구현과 26 devlog를 같이 돌린다. 26 가이드는 포트가 겹쳐서 27 구현이 끝난 뒤 한다"
   },
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
-    "26-search": "implemented (평가 중)",
-    "27-toss-payments": "brief-confirmed",
+    "26-search": "implemented @ bfb0840 (verify 통과, devlog 진행·가이드 대기)",
+    "27-toss-payments": "implementing",
     "28-fulfillment": "todo",
     "29-admin": "todo",
     "30-ai-mcp": "todo",
