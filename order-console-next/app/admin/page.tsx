@@ -87,6 +87,7 @@ export default function AdminDashboardPage() {
           <Link href="/admin/settings">상점 설정</Link>
           <Link href="/admin/legal">약관·방침</Link>
           <Link href="/admin/reconciliation">PG 대사</Link>
+          <Link href="/admin/mcp">AI 도우미 연결(MCP)</Link>
         </nav>
       </AdminOnly>
     </main>
