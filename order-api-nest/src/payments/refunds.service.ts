@@ -31,6 +31,8 @@ export class RefundsService {
     if (!idempotencyKey) throw new BadRequestException("Idempotency-Key 헤더가 필요합니다");
     if (idempotencyKey.length > 200) throw new BadRequestException("Idempotency-Key는 200자 이하입니다");
 
+    await this.fillPaymentKey(orderId);
+
     const prepared = await this.prisma.asAdmin(async (tx) => {
       // 같은 결제의 환불 요청은 여기서 줄을 선다. 누적 환불액 확인과 requested 기록이 한 덩어리가 된다
       const [payment] = await tx.$queryRaw<LockedPayment[]>`
@@ -47,7 +49,8 @@ export class RefundsService {
       }
 
       if (payment.status !== "paid" && payment.status !== "partial_refunded") throw new ConflictException(`환불할 수 없는 결제 상태입니다(${payment.status})`);
-      if (payment.provider === "manual" || !payment.provider_payment_key) throw new ConflictException("PG를 거치지 않은 결제는 환불할 수 없습니다");
+      if (payment.provider === "manual") throw new ConflictException(MANUAL_REFUND_MESSAGE);
+      if (!payment.provider_payment_key) throw new ConflictException("PG에서 이 결제의 결제 키를 찾지 못해 환불할 수 없습니다. PG 관리 화면에서 결제를 확인해 주세요");
       const remaining = payment.amount - (await reservedAmount(tx, payment.id));
       if (input.amount > remaining) throw new ConflictException(`환불할 수 있는 금액은 ${remaining.toLocaleString("ko-KR")}원입니다`);
 
@@ -85,6 +88,23 @@ export class RefundsService {
     return { httpStatus: 201, refund: await this.view(refund.id) };
   }
 
+  // 결제 키가 비어 있는 옛 결제(0030 백필의 Stripe 주문)는 PG 주문번호로 결제 키를 찾아 저장한다(한 번 채우면 다시 묻지 않는다).
+  // PG 호출이라 결제 행을 잠그기 전에, 트랜잭션 밖에서 한다
+  private async fillPaymentKey(orderId: number): Promise<void> {
+    const payment = await this.prisma.asAdmin((tx) => tx.payment.findUnique({
+      where: { orderId }, select: { id: true, provider: true, providerOrderId: true, providerPaymentKey: true, status: true },
+    }));
+    if (!payment || payment.provider === "manual" || payment.providerPaymentKey) return;
+    if (payment.status !== "paid" && payment.status !== "partial_refunded") return;
+    const key = await this.gateways.get(payment.provider).findPaymentKey(payment.providerOrderId).catch((err: unknown) => {
+      this.logger.warn(`결제 키 찾기 실패: 주문 #${orderId} ${payment.provider} ${payment.providerOrderId} - ${(err as Error).message}`);
+      return null;
+    });
+    if (!key) return;
+    await this.prisma.asAdmin((tx) => tx.payment.updateMany({ where: { id: payment.id, providerPaymentKey: null }, data: { providerPaymentKey: key } }));
+    this.logger.log(`결제 키 지연 채움: 주문 #${orderId} ${payment.provider} ${payment.providerOrderId} → ${key}`);
+  }
+
   async list(orderId: number): Promise<RefundView[]> {
     const refunds = await this.prisma.asAdmin((tx) => tx.refund.findMany({ where: { payment: { orderId } }, select: { id: true }, orderBy: { id: "asc" } }));
     return Promise.all(refunds.map((r) => this.view(r.id)));
@@ -116,6 +136,8 @@ export class RefundsService {
     });
   }
 }
+
+export const MANUAL_REFUND_MESSAGE = "관리자·seed·데모가 결제 완료로 만든 주문(manual)은 PG를 거치지 않아 PG 환불 대상이 아닙니다";
 
 // 이미 나갔거나(succeeded) 나갔을 수 있는(requested) 환불액. 결과를 모르는 환불도 남은 금액에서 뺀다(이중 환불 방지)
 async function reservedAmount(tx: Prisma.TransactionClient, paymentId: number): Promise<number> {

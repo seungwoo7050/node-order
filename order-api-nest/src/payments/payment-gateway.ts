@@ -33,6 +33,9 @@ export interface PaymentGateway {
   startCheckout(order: CheckoutOrder, attemptKey?: string): Promise<StartedCheckout>;
   // 구매자 인증이 끝난 결제를 승인(또는 확인)한다. 금액은 호출하는 쪽이 DB의 주문 금액과 먼저 비교한다
   confirm(input: { providerOrderId: string; amount: number; paymentKey?: string }, idempotencyKey: string): Promise<PgPayment>;
+  // PG 주문번호(Stripe 세션 id, 토스 orderId)로 결제 키를 찾는다. 결제 키 없이 옮겨 온 옛 결제(0030 백필)의 지연 채움에 쓴다
+  // 결제가 끝나지 않았거나 PG에 없으면 null
+  findPaymentKey(providerOrderId: string): Promise<string | null>;
   // PG에 다시 묻는다. 웹훅 본문이나 리다이렉트 쿼리 대신 이 결과를 믿는다
   fetchPayment(paymentKey: string): Promise<PgPayment>;
   // 환불(부분 환불 포함). 같은 멱등 키로 다시 부르면 PG가 첫 결과를 돌려준다
