@@ -225,21 +225,45 @@ describe("상품 검색 API", () => {
   });
 
   describe("인기 검색어", () => {
+    const popular = async () => ((await (await fetch(`${baseUrl}/search/popular`)).json()) as { items: { query: string; count: number }[] }).items;
+
     it("같은 IP가 같은 검색어를 10번 검색해도 1로 세고, 다른 IP 3곳이면 3이다", async () => {
       for (let i = 0; i < 10; i++) await search("블루투스", "198.51.100.1");
-      expect(await stats.popular()).toEqual([{ query: "블루투스", count: 1 }]);
+      expect(await stats.counts("popular")).toEqual([{ query: "블루투스", count: 1 }]);
       await search("블루투스", "198.51.100.2");
       await search(" 블루투스 ", "198.51.100.3"); // 정규화해서 같은 검색어
-      const res = await fetch(`${baseUrl}/search/popular`);
-      expect(await res.json()).toEqual({ items: [{ query: "블루투스", count: 3 }] });
+      expect(await stats.counts("popular")).toEqual([{ query: "블루투스", count: 3 }]);
     });
 
-    it("결과가 0건인 검색어는 인기 검색어가 아니라 따로 쌓인다", async () => {
-      await search("냉장고", "198.51.100.1");
-      await search("냉장고", "198.51.100.2");
-      await search("가방", "198.51.100.1");
-      expect(await stats.zeroResults()).toEqual([{ query: "냉장고", count: 2 }]);
-      expect(await stats.popular()).toEqual([{ query: "가방", count: 1 }]);
+    it("공개 API는 서로 다른 IP가 3곳 이상인 검색어만 낸다(한 IP가 여러 시간 찾아도 1곳)", async () => {
+      await search("블루투스", "198.51.100.1");
+      await search("블루투스", "198.51.100.2");
+      await redis.del(`test:search:seen:198.51.100.1:블루투스`); // 1시간이 지나 같은 IP가 또 센 것과 같다
+      await search("블루투스", "198.51.100.1");
+      expect(await stats.counts("popular")).toEqual([{ query: "블루투스", count: 3 }]);
+      expect(await popular()).toEqual([]);
+      await search("블루투스", "198.51.100.3");
+      expect(await popular()).toEqual([{ query: "블루투스", count: 4 }]);
+    });
+
+    it("길이·문자 제한을 통과하지 못한 검색어는 결과가 있어도 공개하지 않는다", async () => {
+      await adminDb.product.create({ data: { name: "가 https://spam.example 가방", price: 1, stock: 1 } });
+      await job.indexOnce();
+      for (const ip of ["198.51.100.1", "198.51.100.2", "198.51.100.3"]) {
+        await search("가", ip); // 1글자(이름 접두 일치로 결과는 있다)
+        await search("https://spam.example", ip);
+        await search("가방", ip);
+      }
+      expect((await search("https://spam.example")).body.items.length).toBeGreaterThan(0);
+      expect(await popular()).toEqual([{ query: "가방", count: 3 }]);
+    });
+
+    it("결과가 0건인 검색어는 공개하지 않고 관리자용으로 따로 쌓인다(거르지 않는다)", async () => {
+      for (const ip of ["198.51.100.1", "198.51.100.2", "198.51.100.3"]) await search("냉장고", ip);
+      await search("<x>", "198.51.100.1");
+      expect(await stats.zeroResults()).toEqual([{ query: "냉장고", count: 3 }, { query: "<x>", count: 1 }]);
+      expect(await stats.counts("popular")).toEqual([]);
+      expect(await popular()).toEqual([]);
     });
   });
 });

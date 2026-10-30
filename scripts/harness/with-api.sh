@@ -48,7 +48,8 @@ else
     (cd "$root/order-api-nest" && SIM_PORT=$sim_port exec node scripts/stripe-sim.mjs) >"$logs/stripe-sim.log" 2>&1 &
     sim_pid=$!
   fi
-  (cd "$root/order-api-nest" && exec node --env-file=.env dist/main.js) >"$logs/api.log" 2>&1 &
+  # TRUST_PROXY=loopback: 웹 e2e가 X-Forwarded-For로 서로 다른 IP를 흉내 낸다(인기 검색어는 IP 3곳 이상만 공개)
+  (cd "$root/order-api-nest" && TRUST_PROXY=${TRUST_PROXY:-loopback} exec node --env-file=.env dist/main.js) >"$logs/api.log" 2>&1 &
   pid=$!
   trap 'kill $pid $sim_pid 2>/dev/null; wait $pid $sim_pid 2>/dev/null' EXIT
   for _ in $(seq 1 60); do
