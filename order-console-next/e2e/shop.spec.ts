@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { fillShipping } from "./shipping";
 
 const API = "http://localhost:4000";
 
@@ -43,6 +44,7 @@ test("결제를 누르면 재고를 예약하고 Stripe 결제 화면으로 간�
 
   await page.getByRole("listitem").filter({ hasText: "마우스" }).getByRole("button", { name: "담기" }).click();
   await page.getByTestId("cart-count").click();
+  await fillShipping(page);
   await Promise.all([
     page.waitForURL(/\/c\/pay\/cs_/),
     page.getByRole("button", { name: "결제" }).click(),
@@ -96,6 +98,7 @@ test("결제 응답이 중간에 사라져 다시 눌러도 주문은 하나만 
 
   await page.getByRole("listitem").filter({ hasText: "마우스" }).getByRole("button", { name: "담기" }).click();
   await page.getByTestId("cart-count").click();
+  await fillShipping(page);
   await page.getByRole("button", { name: "결제" }).click();
   await expect(page.getByText(/결제를 시작하지 못했습니다/)).toBeVisible();
   await Promise.all([

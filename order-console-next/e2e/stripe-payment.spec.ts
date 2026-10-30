@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { fillShipping } from "./shipping";
 
 test.skip(!process.env.STRIPE_E2E, "STRIPE_E2E=1 일 때만 실제 Stripe로 결제한다");
 test.use({ locale: "ko-KR" });
@@ -13,6 +14,7 @@ test("테스트 카드로 결제하면 웹훅이 주문을 결제 완료로 바�
 
   await page.getByRole("listitem").filter({ hasText: "마우스" }).getByRole("button", { name: "담기" }).click();
   await page.getByTestId("cart-count").click();
+  await fillShipping(page);
   await Promise.all([page.waitForURL(/^https:\/\/checkout\.stripe\.com\//), page.getByRole("button", { name: "결제" }).click()]);
 
   await page.locator("#email").fill("test@example.com");
