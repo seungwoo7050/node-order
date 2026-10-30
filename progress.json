@@ -13,9 +13,9 @@
     "note": "Next 16.4.0 빌드가 보안 업그레이드 안내로 불규칙하게 실패한다(재시도하면 통과). 25 첫 커밋에서 16.4.3으로 올린다"
   },
   "current": {
-    "branch": "31-observability",
-    "stage": "confirm",
-    "note": "31 메인 verify → 31 devlog → 가이드 26·27·28·30을 하나씩"
+    "branch": "guides",
+    "stage": "guide",
+    "note": "구현 25~31 끝. 남은 일: 27·28·30 가이드(포트 때문에 하나씩), 31 devlog에 마지막 커밋 3개 보충"
   },
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
@@ -24,7 +24,7 @@
     "28-fulfillment": "implemented @ 90d0278 (verify 통과, devlog 완료, 가이드 대기)",
     "29-admin": "implemented @ f4a23ee (verify 통과, devlog 완료, 가이드 대기)",
     "30-ai-mcp": "implemented @ b1584e0 (verify 통과, 실제 Claude Code 연결 확인, devlog 완료, 가이드 대기)",
-    "31-observability": "implemented @ 1c25daf (verify 통과, devlog 완료, 마지막 수정 2건 대기)"
+    "31-observability": "implemented @ f6b2a2f (verify 통과, devlog 보충 중). 구현 끝"
   },
   "blocked": [
     {
@@ -89,10 +89,5 @@
     "30-ai-mcp": "todo",
     "31-observability": "skip (설정 파일 위주)"
   },
-  "scope_decision": "2026-10-30 사람: 구현은 31에서 마무리. 실제 메일·실결제 확인·디자인 재정립·테마는 하지 않고 '판매 전 남은 것'으로 기록한다",
-  "todo_after_devlog": "26 가이드 검증이 끝나면(포트) 31에 위 수정 2건과 README '판매 전 남은 것' 절(남은 결함 3건 포함: 리더가 대기 슬롯일 때 업무 게이지 0, 0036 기본값과 finishAudit 실패 시 pending, 런북 targets.json 명령·메모리 여유 0)을 더한다",
-  "queued_fixes": [
-    "(31 회귀) 로그인한 손님이 장바구니를 새로고침하면 자기 배송지가 빈 칸으로 보이고, 한 칸을 고치면 저장된 배송지를 잃는다(토큰이 메모리에만 있고 화면을 열 때 갱신하지 않음)",
-    "(개인정보) Sentry scrubEvent가 x-forwarded-for·forwarded·x-real-ip의 손님 IP와 시·구 없이 쓴 주소를 남긴다"
-  ]
+  "scope_decision": "2026-10-30 사람: 구현은 31에서 마무리. 실제 메일·실결제 확인·디자인 재정립·테마는 하지 않고 '판매 전 남은 것'으로 기록한다"
 }
