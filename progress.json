@@ -87,5 +87,7 @@
     "29-admin": "skip (집계·CRUD·폼 위주, 대사 멱등성은 devlog로)",
     "30-ai-mcp": "todo",
     "31-observability": "skip (설정 파일 위주)"
-  }
+  },
+  "scope_decision": "2026-10-30 사람: 구현은 31에서 마무리. 실제 메일·실결제 확인·디자인 재정립·테마는 하지 않고 '판매 전 남은 것'으로 기록한다",
+  "todo_after_devlog": "31 devlog가 끝나면 31 브랜치 README에 '판매 전 남은 것' 절을 docs 커밋으로 더한다"
 }
