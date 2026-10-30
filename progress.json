@@ -18,7 +18,7 @@
     "note": "26 구현 서브에이전트 실행 중. 25 devlog는 병행 작성 중"
   },
   "branches": {
-    "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 작성 중)",
+    "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
     "26-search": "implementing",
     "27-fulfillment": "todo",
     "28-toss-payments": "todo",
