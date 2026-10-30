@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { Injectable } from "@nestjs/common";
+import { PG_READ_CONCURRENCY, mapLimit, parseRetryAfter, withPgRetry } from "./pg-retry.js";
 import { PAYMENT_TIMEOUT_MS, PgError, type CheckoutOrder, type PaymentGateway, type PgPayment, type PgPaymentStatus, type PgRefund, type StartedCheckout } from "./payment-gateway.js";
 
 // 토스페이먼츠 코어 API(https://docs.tosspayments.com/reference)
@@ -111,14 +112,13 @@ export class TossGateway implements PaymentGateway {
     let startingAfter: string | undefined;
     for (;;) {
       const q = new URLSearchParams({ ...base, ...(startingAfter ? { startingAfter } : {}) });
-      const page = await this.request<TossTransaction[]>("GET", `/v1/transactions?${q}`);
+      const page = await withPgRetry(() => this.request<TossTransaction[]>("GET", `/v1/transactions?${q}`));
       for (const t of page) keys.add(t.paymentKey);
       if (page.length < TRANSACTIONS_PAGE) break;
       startingAfter = page.at(-1)!.transactionKey;
     }
-    const payments: PgPayment[] = [];
-    for (const key of keys) payments.push(await this.fetchPayment(key));
-    return payments;
+    // 결제마다 다시 읽는다: 한 번에 PG_READ_CONCURRENCY개까지, 429·5xx는 Retry-After·지수 백오프로 다시
+    return mapLimit([...keys], PG_READ_CONCURRENCY, (key) => withPgRetry(() => this.fetchPayment(key)));
   }
 
   async refund(paymentKey: string, input: { amount: number; reason: string }, idempotencyKey: string): Promise<PgRefund> {
@@ -151,6 +151,6 @@ export class TossGateway implements PaymentGateway {
     if (res.ok) return json as T;
     // 5xx와 409 IDEMPOTENT_REQUEST_PROCESSING(같은 멱등 키 요청이 처리 중)은 결과를 아직 모른다
     const unknown = res.status >= 500 || json.code === "IDEMPOTENT_REQUEST_PROCESSING";
-    throw new PgError(unknown ? "network" : "rejected", json.message ?? `토스 ${res.status}`, json.code, res.status);
+    throw new PgError(unknown ? "network" : "rejected", json.message ?? `토스 ${res.status}`, json.code, res.status, parseRetryAfter(res.headers.get("retry-after")));
   }
 }

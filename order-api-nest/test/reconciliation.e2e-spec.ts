@@ -164,11 +164,11 @@ describe("PG 대사", () => {
     expect(await adminDb.reconciliationIssue.count()).toBe(0);
   });
 
-  it("토스의 거래 조회가 500이어도 Stripe는 대사되고, run에 실패가 남고, 명령의 종료 코드가 0이 아니다", async () => {
+  it("토스의 거래 조회가 계속 500이어도(재시도 상한을 넘어도) Stripe는 대사되고, run에 실패가 남고, 명령의 종료 코드가 0이 아니다", async () => {
     await paidToss();
     const s = await paidStripe();
     await stripe.post(`/__sim/intents/${s.paymentKey}/patch`, { amount: 11_000 });
-    await toss.fault("transactions", "internal");
+    await toss.fault("transactions", "internal", { times: 4 }); // 다시 보내도(상한 4번) 모두 500
 
     const result = await service.run(today);
     expect(result.failed).toBe(true);
@@ -182,7 +182,7 @@ describe("PG 대사", () => {
 
     // 명령: 실패한 provider가 있으면 종료 코드 1, 없으면 0 (같은 시뮬레이터·테스트 DB를 쓴다)
     const env = { ...process.env, TOSS_SIMULATOR_URL: toss.url, STRIPE_SIMULATOR_URL: stripe.url };
-    await toss.fault("transactions", "internal");
+    await toss.fault("transactions", "internal", { times: 4 }); // 다시 보내도(상한 4번) 모두 500
     const failed = await run("npx", ["tsx", "scripts/reconcile.ts", `--date=${today}`], { env }).then(() => 0, (err: { code: number; stdout: string }) => {
       expect(err.stdout).toMatch(/toss: 실패/);
       expect(err.stdout).toMatch(/stripe: PG 1건, 우리 \d+건, 불일치 1건/);
@@ -193,6 +193,51 @@ describe("PG 대사", () => {
     expect(ok.stdout).toMatch(/toss: PG 1건/);
     expect(await issueSet()).toEqual([`stripe:amount_mismatch:${s.paymentKey}`]);
   }, 60_000);
+
+  describe("PG 조회 한도(429)·일시 오류(5xx)", () => {
+    it("거래 목록 503과 결제 조회 429는 Retry-After를 따라 다시 보내 대사를 끝낸다", async () => {
+      await paidToss();
+      await paidToss();
+      await toss.fault("transactions", "unavailable");
+      await toss.fault("fetch", "rate_limited", { retryAfter: 1 });
+      const started = Date.now();
+      const result = await service.run(today);
+      expect(result.runs.find((r) => r.provider === "toss")).toMatchObject({ error: null, pgCount: 2, issueCount: 0 });
+      expect(Date.now() - started).toBeGreaterThanOrEqual(950); // Retry-After: 1초를 기다렸다
+      const calls = await toss.calls();
+      expect(calls.transactions).toBe(2);
+      expect(calls.fetch).toBe(3); // 결제 2건 + 429로 한 번 더
+    });
+
+    it("다시 보내는 횟수에는 상한(4번)이 있고, 넘으면 그 provider만 실패로 남긴다", async () => {
+      await paidToss();
+      await paidStripe();
+      await toss.fault("fetch", "rate_limited", { retryAfter: 0, times: 20 });
+      const result = await service.run(today);
+      expect(result.failed).toBe(true);
+      expect(result.runs.find((r) => r.provider === "toss")!.error).toMatch(/429/);
+      expect(result.runs.find((r) => r.provider === "stripe")).toMatchObject({ error: null, pgCount: 1 });
+      expect((await toss.calls()).fetch).toBe(4);
+    });
+
+    it("Stripe 목록 429도 다시 보낸다", async () => {
+      await paidStripe();
+      await stripe.fault("list", "rate_limited", { retryAfter: 0 });
+      const result = await service.run(today);
+      expect(result.runs.find((r) => r.provider === "stripe")).toMatchObject({ error: null, pgCount: 1, issueCount: 0 });
+      expect((await stripe.calls()).list).toBe(3); // PaymentIntent 목록(429 → 다시) + 환불 목록
+    });
+
+    it("결제 재조회는 한 번에 4건까지만 동시에 보낸다", async () => {
+      for (let i = 0; i < 7; i++) await paidToss();
+      await toss.post("/__sim/latency", { fetchMs: 150 });
+      const result = await service.run(today);
+      expect(result.runs.find((r) => r.provider === "toss")).toMatchObject({ error: null, pgCount: 7 });
+      const { maxConcurrentFetch } = await toss.calls();
+      expect(maxConcurrentFetch).toBeGreaterThan(1);
+      expect(maxConcurrentFetch).toBeLessThanOrEqual(4);
+    });
+  });
 
   it("정기 작업은 04:00(Asia/Seoul) 전에는 돌지 않고, 뒤에는 전날 분을 하루 한 번만 돈다", async () => {
     const job = app.get(ReconciliationJob);

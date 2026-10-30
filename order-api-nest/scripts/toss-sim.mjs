@@ -5,7 +5,8 @@
 //   거래 조회: 승인과 취소가 따로 한 행(transactionKey로 구분). 날짜 인자는 yyyy-MM-dd'T'HH:mm:ss 한국 시각, 끝을 포함한다
 //   결제위젯: GET /v2/standard 가 window.TossPayments를 흉내 내는 가짜 SDK를 준다. requestPayment는 이 서버의
 //            결제창(/widget/pay)으로 가고, 승인하면 successUrl?paymentKey&orderId&amount로 돌려보낸다
-//   제어(테스트용, /__sim): authorize(결제창 없이 인증), faults(실패 주입: timeout, already_processed, amount_mismatch, unavailable, internal(500)),
+//   제어(테스트용, /__sim): authorize(결제창 없이 인증), faults(실패 주입: timeout, already_processed, amount_mismatch, unavailable, internal(500),
+//            rate_limited(429 + Retry-After: retryAfter초, 기본 1)), latency(조회 응답 지연 fetchMs),
 //            calls(호출 수), status(PG 쪽 상태 바꾸기), webhook(PAYMENT_STATUS_CHANGED 보내기), reset,
 //            대사용 불일치 심기: payments(PG에만 있는 결제), payments/{key}/patch(금액·잔액·상태·취소 고치기), payments/{key}/delete(PG에서 지우기)
 // 실행: SIM_PORT=4200 SIM_API_URL=http://localhost:4000 node scripts/toss-sim.mjs  (SIM_PORT=0이면 빈 포트)
@@ -19,7 +20,9 @@ const payments = new Map(); // paymentKey → Payment
 let transactions = []; // 거래 조회용: 승인·취소 한 건마다 한 행(시간순)
 const idempotent = new Map(); // "METHOD path key" → { status, body } | "processing"
 let faults = []; // { op, kind, delayMs, times }
-let calls = { confirm: 0, fetch: 0, cancel: 0, transactions: 0 };
+let calls = { confirm: 0, fetch: 0, cancel: 0, transactions: 0, maxConcurrentFetch: 0 };
+let latency = { fetchMs: 0 }; // 결제 조회(GET /v1/payments/...) 응답 지연: 동시에 몇 건이 오는지 보려고
+let fetchInFlight = 0;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // 한국 시각 + 오프셋 표기(실제 API처럼 2026-10-30T13:00:00+09:00)
@@ -128,18 +131,25 @@ async function core(req, res, op, path, run) {
   }
   if (cacheKey) idempotent.set(cacheKey, "processing");
   const fault = takeFault(op);
+  if (op === "fetch") calls.maxConcurrentFetch = Math.max(calls.maxConcurrentFetch, ++fetchInFlight);
+  try {
+    if (op === "fetch" && latency.fetchMs > 0) await sleep(latency.fetchMs);
+  } finally {
+    if (op === "fetch") fetchInFlight--;
+  }
   let result;
   if (fault?.kind === "already_processed") result = error(400, "ALREADY_PROCESSED_PAYMENT", "이미 처리된 결제 입니다.");
   else if (fault?.kind === "amount_mismatch") result = error(400, "INVALID_REQUEST", "결제 금액이 인증된 금액과 다릅니다.");
   else if (fault?.kind === "unavailable") result = error(503, "FAILED_INTERNAL_SYSTEM_PROCESSING", "내부 시스템 처리 작업이 실패했습니다.");
   else if (fault?.kind === "internal") result = error(500, "FAILED_INTERNAL_SYSTEM_PROCESSING", "내부 시스템 처리 작업이 실패했습니다.");
+  else if (fault?.kind === "rate_limited") result = { ...error(429, "TOO_MANY_REQUESTS", "요청이 너무 많습니다."), headers: { "Retry-After": String(fault.retryAfter ?? 1) } };
   else result = run(await readBody(req));
   // unavailable: 요청이 처리 전에 떨어졌다(멱등 결과를 남기지 않는다 - 같은 키로 다시 보내면 처리된다)
-  if (cacheKey && (fault?.kind === "unavailable" || fault?.kind === "internal")) idempotent.delete(cacheKey);
+  if (cacheKey && (fault?.kind === "unavailable" || fault?.kind === "internal" || fault?.kind === "rate_limited")) idempotent.delete(cacheKey);
   else if (cacheKey) idempotent.set(cacheKey, { status: result.status, body: structuredClone(result.body) });
   // 시간 초과: 처리는 끝냈지만(돈은 움직였다) 응답이 늦게 간다
   if (fault?.kind === "timeout") await sleep(fault.delayMs ?? 5000);
-  if (!res.destroyed) send(res, result.status, result.body);
+  if (!res.destroyed) send(res, result.status, result.body, result.headers);
 }
 
 async function sendWebhook(paymentKey, status) {
@@ -256,8 +266,12 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "POST" && path === "/__sim/faults") {
       const b = await readBody(req);
-      faults.push({ op: b.op, kind: b.kind, delayMs: b.delayMs, times: b.times ?? 1 });
+      faults.push({ op: b.op, kind: b.kind, delayMs: b.delayMs, retryAfter: b.retryAfter, times: b.times ?? 1 });
       return send(res, 200, { faults });
+    }
+    if (req.method === "POST" && path === "/__sim/latency") {
+      latency = { fetchMs: Number((await readBody(req)).fetchMs ?? 0) };
+      return send(res, 200, latency);
     }
     if (req.method === "GET" && path === "/__sim/calls") return send(res, 200, calls);
     if (req.method === "POST" && path === "/__sim/reset") {
@@ -265,7 +279,8 @@ const server = createServer(async (req, res) => {
       idempotent.clear();
       transactions = [];
       faults = [];
-      calls = { confirm: 0, fetch: 0, cancel: 0, transactions: 0 };
+      latency = { fetchMs: 0 };
+      calls = { confirm: 0, fetch: 0, cancel: 0, transactions: 0, maxConcurrentFetch: 0 };
       return send(res, 200, { ok: true });
     }
     m = path.match(/^\/__sim\/payments\/([^/]+)\/status$/);

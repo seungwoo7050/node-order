@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 export type Simulator = {
   url: string;
   calls(): Promise<Record<string, number>>;
-  fault(op: string, kind: string, extra?: { delayMs?: number; times?: number }): Promise<void>;
+  fault(op: string, kind: string, extra?: { delayMs?: number; times?: number; retryAfter?: number }): Promise<void>;
   post<T = unknown>(path: string, body?: unknown): Promise<T>;
   reset(): Promise<void>;
   stop(): Promise<void>;
