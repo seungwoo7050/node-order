@@ -15,12 +15,12 @@
   "current": {
     "branch": "28-fulfillment",
     "stage": "implement",
-    "note": "28 구현과 27 devlog를 같이 돌린다. 26·27 가이드는 포트가 겹쳐 구현이 비는 사이에 한다"
+    "note": "28 구현 중. 27 devlog가 찾은 결함 2건(토스 미결제 24시간 자동 취소 없음, blue/green 사이 Stripe 결제 행 누락)을 28 범위에 더했다. 26·27 가이드 대기"
   },
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
     "26-search": "implemented @ bfb0840 (devlog 완료, 가이드 대기)",
-    "27-toss-payments": "implemented @ 2558cde (verify 통과, devlog 진행, 가이드 대기)",
+    "27-toss-payments": "implemented @ 2558cde (verify 통과, devlog 완료, 가이드 대기)",
     "28-fulfillment": "implementing",
     "29-admin": "todo",
     "30-ai-mcp": "todo",
