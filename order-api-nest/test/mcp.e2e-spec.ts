@@ -2,6 +2,7 @@ import type { INestApplication } from "@nestjs/common";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { Redis } from "ioredis";
 import { SELLER_TOOL_NAMES } from "../src/mcp/mcp-tools.js";
 import { adminDb } from "./admin-db.js";
 import { SHIPPING, client, demoAdminToken, seedPaymentData, startPaymentApp } from "./payment-app.js";
@@ -12,6 +13,7 @@ describe("MCP /mcp", () => {
   let baseUrl: string;
   let tokens: { user: string; admin: string };
   const open: Client[] = [];
+  const redis = new Redis(process.env.REDIS_URL!);
 
   beforeAll(async () => {
     ({ app, baseUrl } = await startPaymentApp());
@@ -19,6 +21,9 @@ describe("MCP /mcp", () => {
 
   beforeEach(async () => {
     tokens = await seedPaymentData(baseUrl);
+    // 토큰 id가 테스트마다 1부터 다시 시작하므로 앞 테스트가 센 호출 수를 지운다
+    const keys = await redis.keys("rate:mcp:*");
+    if (keys.length) await redis.del(...keys);
   });
 
   afterEach(async () => {
@@ -26,6 +31,7 @@ describe("MCP /mcp", () => {
   });
 
   afterAll(async () => {
+    await redis.quit();
     await app.close();
   });
 
@@ -243,6 +249,42 @@ describe("MCP /mcp", () => {
     expect(await call(c, "adjust_stock", { productId: 1, delta: -7 })).toMatchObject({ isError: true, body: { status: 409 } });
     const low = await call(c, "list_low_stock", { threshold: 6 });
     expect(low.body).toMatchObject({ threshold: 6, items: [{ id: 1, stock: 6 }] });
+  });
+
+  it("JSON-RPC 배열(tools/call 30개)은 400이고 아무것도 실행하지 않는다", async () => {
+    const t = await issue(["read", "write"]);
+    const batch = Array.from({ length: 30 }, (_, i) => ({ jsonrpc: "2.0", id: i + 1, method: "tools/call", params: { name: "adjust_stock", arguments: { productId: 1, delta: 1 } } }));
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", Authorization: `Bearer ${t.token}` },
+      body: JSON.stringify(batch),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: { code: number } }).error.code).toBe(-32600);
+    expect((await adminDb.product.findUniqueOrThrow({ where: { id: 1 } })).stock).toBe(10);
+    expect(await adminDb.mcpAuditEntry.count()).toBe(0);
+  });
+
+  it("도구 호출은 토큰마다 분당 한도까지만, 넘으면 429(목록 조회는 세지 않는다)", async () => {
+    process.env.MCP_RATE_LIMIT_PER_MINUTE = "3";
+    try {
+      const a = await issue(["read"]);
+      const b = await issue(["read"]);
+      const c = await connect(a.token);
+      for (let i = 0; i < 3; i++) expect((await call(c, "list_low_stock")).isError).toBe(false);
+      await c.listTools();
+      const over = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", Authorization: `Bearer ${a.token}` },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "list_low_stock", arguments: {} } }),
+      });
+      expect(over.status).toBe(429);
+      expect(Number(over.headers.get("retry-after"))).toBeGreaterThan(0);
+      expect(((await over.json()) as { id: number }).id).toBe(9);
+      expect((await call(await connect(b.token), "list_low_stock")).isError).toBe(false); // 다른 토큰은 따로 센다
+    } finally {
+      delete process.env.MCP_RATE_LIMIT_PER_MINUTE;
+    }
   });
 
   it("GET·DELETE /mcp는 405(상태 없는 서버)", async () => {
