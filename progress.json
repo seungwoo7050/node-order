@@ -15,7 +15,7 @@
   "current": {
     "branch": "31-observability",
     "stage": "implement",
-    "note": "31 구현과 30 devlog를 같이 돌린다. 끝나면 26~31 가이드를 차례로"
+    "note": "31 구현 중. 30 devlog 결함 5건은 31이 끝나면 후속 수정으로(queued_fixes)"
   },
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
@@ -23,7 +23,7 @@
     "27-toss-payments": "implemented @ 2558cde (verify 통과, devlog 완료, 가이드 대기)",
     "28-fulfillment": "implemented @ 90d0278 (verify 통과, devlog 완료, 가이드 대기)",
     "29-admin": "implemented @ f4a23ee (verify 통과, devlog 완료, 가이드 대기)",
-    "30-ai-mcp": "implemented @ b1584e0 (verify 통과, 실제 Claude Code 연결 확인, devlog 진행, 가이드 대기)",
+    "30-ai-mcp": "implemented @ b1584e0 (verify 통과, 실제 Claude Code 연결 확인, devlog 완료, 가이드 대기)",
     "31-observability": "implementing"
   },
   "blocked": [
@@ -72,5 +72,12 @@
     "seed가 견본 사용자의 PG 결제 주문을 남겨 e2e를 돌릴 때마다 주문이 늘어난다",
     "0034 트리거는 옛 칸(paid, canceled_at)을 쓸 때마다 같은 행을 다시 UPDATE하고, status_changed_at에 트리거 시각을 적는다. contract 마이그레이션 때 지운다",
     "MCP 결과에 손님이 쓴 글이 실려 write 토큰을 쥔 클라이언트 모델에 간다. 서버는 untrusted 칸 표시와 이스케이프까지 하고, 마지막 방어는 클라이언트의 확인 절차다"
+  ],
+  "queued_fixes": [
+    "세션 만료 뒤 로그인 전 장바구니에 앞 사람의 배송지가 보이고, 칸 하나를 고치면 다음 로그인 사용자가 물려받는다(tsx로 확인됨)",
+    "호출 제한(429)에 걸린 MCP 호출이 감사 로그에 남지 않는다",
+    "감사 로그 쓰기가 실패해도 도구 효과는 일어나고 기록만 빈다",
+    "82로 시작하는 송장번호가 감사 로그에서 전화번호로 가려지고, +82가 아닌 국제번호는 안 가려진다",
+    "초안을 시작하면 저장하지 않은 손 편집이 사라진다"
   ]
 }
