@@ -2,7 +2,8 @@
 
 import { useInfiniteQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { authFetch } from "@/lib/api-client";
 import { ORDER_STATUS_CODES, ORDER_STATUS_LABEL, won, type OrderStatusCode } from "@/lib/orders";
 import { LoadMore } from "../../load-more";
@@ -13,13 +14,20 @@ type Page = { items: Row[]; nextCursor: string | null };
 
 const READ_ONLY = "데모 관리자는 볼 수만 있습니다. 배송 준비·송장 입력·취소·반품 처리는 진짜 관리자만 할 수 있어 버튼을 꺼 두었습니다.";
 
+const isStatus = (v: string | null): v is OrderStatusCode => !!v && (ORDER_STATUS_CODES as string[]).includes(v);
+
+// 대시보드 타일 링크(?status=paid, ?returns=requested)로 열면 그 필터로 시작한다
 function OrderTable() {
-  const [status, setStatus] = useState<OrderStatusCode | "">("paid");
+  const search = useSearchParams();
+  const initialStatus = search.get("status");
+  const [status, setStatus] = useState<OrderStatusCode | "">(isStatus(initialStatus) ? initialStatus : search.get("returns") ? "" : "paid");
+  const [returnsOnly, setReturnsOnly] = useState(search.get("returns") === "requested");
   const query = useInfiniteQuery({
-    queryKey: ["admin-orders", status],
+    queryKey: ["admin-orders", status, returnsOnly],
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({ limit: "20" });
       if (status) params.set("status", status);
+      if (returnsOnly) params.set("returns", "requested");
       if (pageParam) params.set("cursor", pageParam);
       return authFetch<Page>(`/admin/orders?${params}`);
     },
@@ -30,13 +38,19 @@ function OrderTable() {
 
   return (
     <>
-      <label className="mb-6 flex items-center gap-3 text-sm">
-        <span className="label">상태</span>
-        <select className="border border-line px-2 py-1" value={status} onChange={(e) => setStatus(e.target.value as OrderStatusCode | "")} data-testid="status-filter">
-          <option value="">전체</option>
-          {ORDER_STATUS_CODES.map((s) => <option key={s} value={s}>{ORDER_STATUS_LABEL[s]}</option>)}
-        </select>
-      </label>
+      <div className="mb-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+        <label className="flex items-center gap-3">
+          <span className="label">상태</span>
+          <select className="border border-line px-2 py-1" value={status} onChange={(e) => setStatus(e.target.value as OrderStatusCode | "")} data-testid="status-filter">
+            <option value="">전체</option>
+            {ORDER_STATUS_CODES.map((s) => <option key={s} value={s}>{ORDER_STATUS_LABEL[s]}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={returnsOnly} onChange={(e) => setReturnsOnly(e.target.checked)} data-testid="returns-filter" />
+          반품·교환 요청이 있는 주문만
+        </label>
+      </div>
       {query.isPending ? (
         <p role="status" className="text-sm text-muted">주문을 불러오는 중입니다.</p>
       ) : query.error && rows.length === 0 ? (
@@ -80,7 +94,9 @@ export default function AdminOrdersPage() {
     <main className="page flex-1 pb-12 pt-2">
       <h1 className="title mb-8">주문 관리</h1>
       <AdminOnly readOnlyNote={READ_ONLY} note={null}>
-        <OrderTable />
+        <Suspense fallback={<p role="status" className="text-sm text-muted">주문을 불러오는 중입니다.</p>}>
+          <OrderTable />
+        </Suspense>
       </AdminOnly>
     </main>
   );

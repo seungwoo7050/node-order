@@ -8,8 +8,9 @@ import { useAuthStore } from "@/lib/auth-store";
 import { useCartStore } from "@/lib/cart-store";
 import { useCanSeeAdmin } from "@/lib/use-profile";
 
-function NavLink({ href, children, testId }: { href: string; children: React.ReactNode; testId?: string }) {
-  const current = usePathname().startsWith(href);
+function NavLink({ href, children, testId, exact = false }: { href: string; children: React.ReactNode; testId?: string; exact?: boolean }) {
+  const pathname = usePathname();
+  const current = exact ? pathname === href : pathname.startsWith(href);
   return (
     <Link
       href={href}
@@ -35,6 +36,7 @@ export function Nav() {
       <nav aria-label="주요 메뉴" className="flex items-baseline gap-5">
         <NavLink href="/shop">상품</NavLink>
         <NavLink href="/me/orders">내 주문</NavLink>
+        {canSeeAdmin && <NavLink href="/admin" exact>대시보드</NavLink>}
         {canSeeAdmin && <NavLink href="/admin/products">관리</NavLink>}
         {canSeeAdmin && <NavLink href="/admin/orders">주문 처리</NavLink>}
         <NavLink href="/cart" testId="cart-count">장바구니 <span className="num">{cartCount}</span></NavLink>
