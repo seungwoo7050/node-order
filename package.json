@@ -15,7 +15,7 @@
     "test:e2e:api": "npm run test:e2e -w order-api-nest",
     "test:web": "npm run test -w order-console-next && npm run test:e2e:web",
     "test:e2e:web": "bash scripts/harness/with-api.sh npm run test:e2e -w order-console-next",
-    "test:rules": "docker run --rm -v \"$PWD/monitoring:/m\" --entrypoint promtool prom/prometheus:latest test rules /m/alert-rules.test.yml",
+    "test:rules": "bash monitoring/test.sh",
     "test:harness": "bash scripts/harness/test.sh",
     "verify:fast": "bash scripts/harness/verify.sh fast",
     "verify": "bash scripts/harness/verify.sh full",

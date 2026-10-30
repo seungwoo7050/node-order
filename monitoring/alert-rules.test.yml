@@ -1,8 +1,10 @@
+# promtool test rules alert-rules.test.yml. 규칙마다 울림과 안 울림을 하나 이상 둔다
 rule_files:
   - alert-rules.yml
 evaluation_interval: 5s
 
 tests:
+  # ── ApiDown ──
   - interval: 5s
     input_series:
       - series: 'up{job="order-api", instance="api:4000"}'
@@ -18,7 +20,9 @@ tests:
             exp_annotations:
               summary: "order-api가 응답하지 않는다"
               description: "api:4000의 /metrics를 30초 넘게 가져오지 못했다"
+              runbook: docs/runbook.md#apidown
 
+  # ── HighErrorRate: 잠깐 튄 5xx는 안 울림, 계속되면 울림 ──
   - interval: 5s
     input_series:
       - series: 'http_request_duration_seconds_count{route="/products", status_code="200"}'
@@ -50,3 +54,220 @@ tests:
             exp_annotations:
               summary: "5xx 응답 비율이 높다"
               description: "최근 30초 5xx 비율 50%"
+              runbook: docs/runbook.md#higherrorrate
+
+  # ── OutboxBacklog ──
+  - interval: 30s
+    input_series:
+      - series: 'outbox_unpublished_events{job="order-api", instance="api:4000"}'
+        values: "5 10 30 30 30 30"
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: OutboxBacklog
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: OutboxBacklog
+        exp_alerts:
+          - exp_labels: { severity: warning, job: order-api, instance: "api:4000" }
+            exp_annotations:
+              summary: "outbox 알림이 쌓이고 있다"
+              description: "발행되지 않은 이벤트 30건"
+              runbook: docs/runbook.md#outboxbacklog
+
+  # ── ReconciliationMismatch: 리더가 아닌 인스턴스의 0과 리더의 2를 max로 합친다 ──
+  - interval: 1m
+    input_series:
+      - series: 'reconciliation_open_issues{job="order-api", instance="api-blue:4000"}'
+        values: "0 0 0 2 2 2 2"
+      - series: 'reconciliation_open_issues{job="order-api", instance="api-green:4000"}'
+        values: "0 0 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ReconciliationMismatch
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: ReconciliationMismatch
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: "PG 대사 불일치가 있다"
+              description: "해결되지 않은 대사 불일치 2건"
+              runbook: docs/runbook.md#reconciliationmismatch
+
+  # ── RefundOutcomeUnknown: 1시간 전에는 안 울림 ──
+  - interval: 1m
+    input_series:
+      - series: 'refunds_unresolved_oldest_seconds{job="order-api", instance="api-blue:4000"}'
+        values: "0 1800 3000 3700 3760 3820"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: RefundOutcomeUnknown
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: RefundOutcomeUnknown
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations:
+              summary: "결과를 모르는 환불이 1시간 넘게 남아 있다"
+              description: "가장 오래된 requested 환불이 1h 3m 40s 전에 요청됐다"
+              runbook: docs/runbook.md#refundoutcomeunknown
+
+  # ── PaymentConfirmFailureRate: 절반이 실패하면 울림 ──
+  - interval: 1m
+    input_series:
+      - series: 'payments_confirm_attempts_total{provider="toss"}'
+        values: "0+2x30"
+      - series: 'payments_confirm_failed_total{provider="toss", reason="rejected"}'
+        values: "0+1x30"
+      - series: 'payments_confirm_failed_total{provider="toss", reason="amount_mismatch"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: PaymentConfirmFailureRate
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: PaymentConfirmFailureRate
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations:
+              summary: "결제 승인 실패율이 높다"
+              description: "최근 15분 승인 실패율 50%"
+              runbook: docs/runbook.md#paymentconfirmfailurerate
+
+  # 실패율 10%(낮음), 시도가 적은 provider의 전부 실패(15분 3건)는 안 울림
+  - interval: 1m
+    input_series:
+      - series: 'payments_confirm_attempts_total{provider="toss"}'
+        values: "0+2x30"
+      - series: 'payments_confirm_failed_total{provider="toss", reason="rejected"}'
+        values: "0+0.2x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PaymentConfirmFailureRate
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: 'payments_confirm_attempts_total{provider="stripe"}'
+        values: "0+0.2x30"
+      - series: 'payments_confirm_failed_total{provider="stripe", reason="amount_mismatch"}'
+        values: "0+0.2x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PaymentConfirmFailureRate
+        exp_alerts: []
+
+  # ── ReconciliationRetryExhausted: 상한(5)에 닿은 provider만 ──
+  - interval: 1m
+    input_series:
+      - series: 'reconciliation_consecutive_failures{provider="toss", job="order-api", instance="api-blue:4000"}'
+        values: "3 4 5 5 5"
+      - series: 'reconciliation_consecutive_failures{provider="stripe", job="order-api", instance="api-blue:4000"}'
+        values: "0 0 1 2 2"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ReconciliationRetryExhausted
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ReconciliationRetryExhausted
+        exp_alerts:
+          - exp_labels: { severity: critical, provider: toss }
+            exp_annotations:
+              summary: "PG 대사가 재시도 상한까지 실패했다"
+              description: "toss 대사가 마지막 성공 뒤 5번 연속 실패했다(더 돌지 않는다)"
+              runbook: docs/runbook.md#reconciliationretryexhausted
+
+  # ── LlmDailyTokenBudgetExceeded: 분당 175 토큰 → 24시간 25.2만 > 상한 20만(10시간째는 10.5만이라 안 울림) ──
+  - interval: 1m
+    input_series:
+      - series: 'llm_tokens_total{provider="anthropic", model="claude-haiku-4-5", direction="input"}'
+        values: "0+150x1600"
+      - series: 'llm_tokens_total{provider="anthropic", model="claude-haiku-4-5", direction="output"}'
+        values: "0+25x1600"
+      - series: 'llm_daily_token_budget{job="order-api", instance="api-blue:4000"}'
+        values: "200000x1600"
+    alert_rule_test:
+      - eval_time: 10h
+        alertname: LlmDailyTokenBudgetExceeded
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: LlmDailyTokenBudgetExceeded
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: "하루 LLM 토큰 사용량이 상한을 넘었다"
+              description: "최근 24시간 LLM 토큰 252k개"
+              runbook: docs/runbook.md#llmdailytokenbudgetexceeded
+
+  # ── SearchIndexLag: 10분 전에는 안 울림 ──
+  - interval: 1m
+    input_series:
+      - series: 'search_index_lag_seconds{job="order-api", instance="api-blue:4000"}'
+        values: "0 60 300 650 710 770"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: SearchIndexLag
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: SearchIndexLag
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: "검색 색인이 10분 넘게 밀렸다"
+              description: "가장 오래 기다린 상품이 12m 50s째 색인되지 않았다"
+              runbook: docs/runbook.md#searchindexlag
+
+  # ── MailJobsFailing: 실패가 없으면 안 울림, 하나라도 생기면 울림 ──
+  - interval: 1m
+    input_series:
+      - series: 'mail_jobs_failed_total{job="order-api", instance="api-blue:4000"}'
+        values: "0 0 0 1 1 1"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: MailJobsFailing
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: MailJobsFailing
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: "메일 발송이 재시도 끝에 실패했다"
+              description: "최근 30분 실패로 끝난 메일 job 1건"
+              runbook: docs/runbook.md#mailjobsfailing
+
+  # ── FulfillmentOverdue: 30분 넘게 이어질 때만 ──
+  - interval: 5m
+    input_series:
+      - series: 'fulfillment_overdue_orders{job="order-api", instance="api-blue:4000"}'
+        values: "0 0 1x20"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: FulfillmentOverdue
+        exp_alerts: []
+      - eval_time: 45m
+        alertname: FulfillmentOverdue
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: "결제 뒤 오래 배송 준비를 시작하지 않은 주문이 있다"
+              description: "처리 지연 주문 1건(결제 완료 뒤 FULFILLMENT_OVERDUE_DAYS일, 기본 3일)"
+              runbook: docs/runbook.md#fulfillmentoverdue
+
+  # ── Watchdog: 지표가 하나도 없어도 항상 울린다 ──
+  - interval: 1m
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: Watchdog
+        exp_alerts:
+          - exp_labels: { severity: none }
+            exp_annotations:
+              summary: "경보 경로가 살아 있다(항상 울린다)"
+              description: "이 경보가 dead man's switch로 가지 않으면 외부 서비스가 알린다"
+              runbook: docs/runbook.md#watchdog
+      - eval_time: 3h
+        alertname: Watchdog
+        exp_alerts:
+          - exp_labels: { severity: none }
+            exp_annotations:
+              summary: "경보 경로가 살아 있다(항상 울린다)"
+              description: "이 경보가 dead man's switch로 가지 않으면 외부 서비스가 알린다"
+              runbook: docs/runbook.md#watchdog

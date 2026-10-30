@@ -102,6 +102,12 @@ export const paymentConfirmFailed = new Counter({
   registers: [registry],
 });
 
+// 시계열을 0으로 미리 만든다(첫 실패도 경보의 increase()에 잡히게. 처음 생긴 시계열의 첫 값은 increase가 세지 않는다)
+for (const provider of ["toss", "stripe"]) {
+  paymentConfirmAttempts.inc({ provider }, 0);
+  for (const reason of ["amount_mismatch", "rejected", "unknown_outcome", "pg_mismatch", "not_paid", "canceled_meanwhile"]) paymentConfirmFailed.inc({ provider, reason }, 0);
+}
+
 // 재시도를 다 쓰고 failed로 옮겨진 메일 job
 export const mailJobsFailed = new Counter({
   name: "mail_jobs_failed_total",

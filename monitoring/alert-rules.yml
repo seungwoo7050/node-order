@@ -1,3 +1,6 @@
+# 경보 규칙. 규칙마다 promtool 단위 테스트(alert-rules.test.yml)에 울림·안 울림이 있고,
+# runbook annotation이 docs/runbook.md의 절을 가리킨다(링크 검사: scripts/harness/monitoring.test.sh).
+# 업무 지표 게이지는 리더 인스턴스만 계산하므로 max()로 인스턴스를 합친다(블루·그린이 같이 떠 있어도 한 값)
 groups:
   - name: order-api
     rules:
@@ -9,6 +12,7 @@ groups:
         annotations:
           summary: "order-api가 응답하지 않는다"
           description: "{{ $labels.instance }}의 /metrics를 30초 넘게 가져오지 못했다"
+          runbook: docs/runbook.md#apidown
 
       - alert: HighErrorRate
         expr: |
@@ -20,6 +24,7 @@ groups:
         annotations:
           summary: "5xx 응답 비율이 높다"
           description: "최근 30초 5xx 비율 {{ $value | humanizePercentage }}"
+          runbook: docs/runbook.md#higherrorrate
 
       - alert: OutboxBacklog
         expr: outbox_unpublished_events > 20
@@ -29,3 +34,106 @@ groups:
         annotations:
           summary: "outbox 알림이 쌓이고 있다"
           description: "발행되지 않은 이벤트 {{ $value }}건"
+          runbook: docs/runbook.md#outboxbacklog
+
+  - name: business
+    rules:
+      - alert: ReconciliationMismatch
+        expr: max(reconciliation_open_issues) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PG 대사 불일치가 있다"
+          description: "해결되지 않은 대사 불일치 {{ $value }}건"
+          runbook: docs/runbook.md#reconciliationmismatch
+
+      - alert: RefundOutcomeUnknown
+        expr: max(refunds_unresolved_oldest_seconds) > 3600
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "결과를 모르는 환불이 1시간 넘게 남아 있다"
+          description: "가장 오래된 requested 환불이 {{ $value | humanizeDuration }} 전에 요청됐다"
+          runbook: docs/runbook.md#refundoutcomeunknown
+
+      # 15분 동안 승인 시도가 5번 이상이고 그중 20% 넘게 실패(손님 몇 명의 금액 위조나 카드 거절로는 울리지 않게)
+      - alert: PaymentConfirmFailureRate
+        expr: |
+          (
+            sum(increase(payments_confirm_failed_total[15m]))
+              / sum(increase(payments_confirm_attempts_total[15m]))
+          ) > 0.2
+          and sum(increase(payments_confirm_attempts_total[15m])) >= 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "결제 승인 실패율이 높다"
+          description: "최근 15분 승인 실패율 {{ $value | humanizePercentage }}"
+          runbook: docs/runbook.md#paymentconfirmfailurerate
+
+      # 정기 대사의 provider별 재시도 상한(RECONCILE_MAX_ATTEMPTS, 기본 5)에 닿았다. 상한을 바꾸면 이 값도 바꾼다
+      - alert: ReconciliationRetryExhausted
+        expr: max by (provider) (reconciliation_consecutive_failures) >= 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PG 대사가 재시도 상한까지 실패했다"
+          description: "{{ $labels.provider }} 대사가 마지막 성공 뒤 {{ $value }}번 연속 실패했다(더 돌지 않는다)"
+          runbook: docs/runbook.md#reconciliationretryexhausted
+
+      # 하루(최근 24시간) 입력+출력 토큰이 상한(LLM_DAILY_TOKEN_BUDGET → llm_daily_token_budget)을 넘었다
+      - alert: LlmDailyTokenBudgetExceeded
+        expr: sum(increase(llm_tokens_total[1d])) > max(llm_daily_token_budget)
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "하루 LLM 토큰 사용량이 상한을 넘었다"
+          description: "최근 24시간 LLM 토큰 {{ $value | humanize }}개"
+          runbook: docs/runbook.md#llmdailytokenbudgetexceeded
+
+      - alert: SearchIndexLag
+        expr: max(search_index_lag_seconds) > 600
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "검색 색인이 10분 넘게 밀렸다"
+          description: "가장 오래 기다린 상품이 {{ $value | humanizeDuration }}째 색인되지 않았다"
+          runbook: docs/runbook.md#searchindexlag
+
+      - alert: MailJobsFailing
+        expr: sum(increase(mail_jobs_failed_total[30m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "메일 발송이 재시도 끝에 실패했다"
+          description: "최근 30분 실패로 끝난 메일 job {{ $value | humanize }}건"
+          runbook: docs/runbook.md#mailjobsfailing
+
+      - alert: FulfillmentOverdue
+        expr: max(fulfillment_overdue_orders) > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "결제 뒤 오래 배송 준비를 시작하지 않은 주문이 있다"
+          description: "처리 지연 주문 {{ $value }}건(결제 완료 뒤 FULFILLMENT_OVERDUE_DAYS일, 기본 3일)"
+          runbook: docs/runbook.md#fulfillmentoverdue
+
+  - name: meta
+    rules:
+      # 항상 울린다. Alertmanager가 외부 dead man's switch(DEADMAN_URL)로 계속 핑을 보내고,
+      # 핑이 끊기면(서버·Prometheus·Alertmanager가 죽으면) 외부 서비스가 알린다
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: none
+        annotations:
+          summary: "경보 경로가 살아 있다(항상 울린다)"
+          description: "이 경보가 dead man's switch로 가지 않으면 외부 서비스가 알린다"
+          runbook: docs/runbook.md#watchdog
