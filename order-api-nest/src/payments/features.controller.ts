@@ -12,7 +12,7 @@ import { PaymentGateways } from "./payment-gateways.js";
 export class FeaturesController {
   constructor(
     private readonly gateways: PaymentGateways,
-    // LLM_API_KEY가 있을 때만 만들어진다(llm.module.ts). 콘솔은 이것으로 "설명 초안 만들기" 버튼을 보인다
+    // LLM_API_KEY가 있을 때만 enabled(llm.module.ts). 콘솔은 이것으로 "설명 초안 만들기" 버튼을 보인다
     @Optional() @Inject(LLM_PROVIDER) private readonly llm: LlmProvider | null = null,
   ) {}
 
@@ -25,7 +25,7 @@ export class FeaturesController {
         toss: payments.includes("toss"),
         stripe: payments.includes("stripe"),
         errorTracking: Boolean(process.env.SENTRY_DSN), // 31에서 쓴다
-        llm: Boolean(this.llm),
+        llm: Boolean(this.llm?.enabled),
       },
       ...(payments.includes("toss") ? { toss: this.gateways.toss.widgetConfig() } : {}),
     };

@@ -5,6 +5,7 @@ import type { LlmChunk, LlmInput, LlmProvider } from "../src/llm/llm-provider.js
 export class FakeLlm implements LlmProvider {
   readonly name = "fake";
   readonly model = "fake-model";
+  readonly enabled = true;
   chunks = ["첫 문장입니다. ", "둘째 문장입니다. ", "셋째 문장입니다."];
   delayMs = 0;
   failAfter: number | null = null;

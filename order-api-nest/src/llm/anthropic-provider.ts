@@ -4,6 +4,7 @@ import type { LlmChunk, LlmInput, LlmProvider } from "./llm-provider.js";
 // Anthropic Messages API 스트리밍. baseURL을 바꾸면 로컬 대역 서버(scripts/llm-sim.mjs, 테스트의 가짜 HTTP 서버)로 간다
 export class AnthropicProvider implements LlmProvider {
   readonly name = "anthropic";
+  readonly enabled = true;
   readonly model: string;
   private readonly client: Anthropic;
 

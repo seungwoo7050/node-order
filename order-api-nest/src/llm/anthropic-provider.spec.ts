@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { AnthropicProvider } from "./anthropic-provider.js";
 import { draftPrompt } from "./description-draft.js";
 import type { LlmChunk } from "./llm-provider.js";
-import { createLlmProvider } from "./llm.module.js";
+import { EnvLlmProvider, createLlmProvider } from "./llm.module.js";
 
 // 실제 API를 부르지 않는다: SDK의 baseURL을 로컬 가짜 HTTP 서버로 바꿔 요청 모양과 스트림 파싱을 본다
 type Captured = { method?: string; url?: string; headers: IncomingMessage["headers"]; body: Record<string, unknown> };
@@ -134,6 +134,26 @@ describe("AnthropicProvider (가짜 HTTP 서버)", () => {
     })()).rejects.toThrow();
     expect(got).toEqual([{ type: "text", text: "하나 " }]);
     await serverSawClose;
+  });
+
+  it("EnvLlmProvider는 부를 때마다 환경변수를 본다(키가 없으면 enabled false)", async () => {
+    const saved = { key: process.env.LLM_API_KEY, base: process.env.LLM_BASE_URL };
+    try {
+      delete process.env.LLM_API_KEY;
+      const provider = new EnvLlmProvider();
+      expect(provider.enabled).toBe(false);
+      process.env.LLM_API_KEY = "k";
+      process.env.LLM_BASE_URL = baseURL;
+      expect(provider.enabled).toBe(true);
+      expect(provider.model).toBe("claude-haiku-4-5");
+      respond = sseResponse(messageStream(["env"]));
+      const chunks: LlmChunk[] = [];
+      for await (const c of provider.streamText({ system: "s", prompt: "p", maxTokens: 10 }, new AbortController().signal)) chunks.push(c);
+      expect(chunks[0]).toEqual({ type: "text", text: "env" });
+    } finally {
+      if (saved.key === undefined) delete process.env.LLM_API_KEY; else process.env.LLM_API_KEY = saved.key;
+      if (saved.base === undefined) delete process.env.LLM_BASE_URL; else process.env.LLM_BASE_URL = saved.base;
+    }
   });
 
   it("LLM_MODEL로 모델을 바꾸고, 키가 없으면 공급자를 만들지 않는다", async () => {

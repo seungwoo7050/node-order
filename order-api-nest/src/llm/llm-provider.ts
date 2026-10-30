@@ -9,6 +9,8 @@ export type LlmChunk = { type: "text"; text: string } | { type: "usage"; inputTo
 
 export interface LlmProvider {
   readonly name: string;
+  // 지금 쓸 수 있는가(키가 있는가). false면 features.llm이 false, 초안 엔드포인트는 404
+  readonly enabled: boolean;
   readonly model: string;
   streamText(input: LlmInput, signal: AbortSignal): AsyncIterable<LlmChunk>;
 }
