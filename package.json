@@ -18,6 +18,7 @@
     "test:rules": "docker run --rm -v \"$PWD/monitoring:/m\" --entrypoint promtool prom/prometheus:latest test rules /m/alert-rules.test.yml",
     "test:harness": "bash scripts/harness/test.sh",
     "verify:fast": "bash scripts/harness/verify.sh fast",
-    "verify": "bash scripts/harness/verify.sh full"
+    "verify": "bash scripts/harness/verify.sh full",
+    "search:reindex": "npm run search:reindex -w order-api-nest"
   }
 }
