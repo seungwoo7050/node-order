@@ -13,16 +13,16 @@
     "note": "Next 16.4.0 빌드가 보안 업그레이드 안내로 불규칙하게 실패한다(재시도하면 통과). 25 첫 커밋에서 16.4.3으로 올린다"
   },
   "current": {
-    "branch": "28-fulfillment",
+    "branch": "29-admin",
     "stage": "implement",
-    "note": "28 구현 중. 27 devlog가 찾은 결함 2건(토스 미결제 24시간 자동 취소 없음, blue/green 사이 Stripe 결제 행 누락)을 28 범위에 더했다. 26·27 가이드 대기"
+    "note": "구현은 포트를 써서 한 번에 하나만 돌린다. 26·27·28 가이드는 31 구현이 끝난 뒤 차례로 한다(시작 기준점이 고정이라 내용이 달라지지 않는다). 29 구현과 28 devlog를 같이 돌린다"
   },
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
     "26-search": "implemented @ bfb0840 (devlog 완료, 가이드 대기)",
     "27-toss-payments": "implemented @ 2558cde (verify 통과, devlog 완료, 가이드 대기)",
-    "28-fulfillment": "implemented @ 90d0278 (평가 중)",
-    "29-admin": "brief-confirmed",
+    "28-fulfillment": "implemented @ 90d0278 (verify 통과, devlog 진행, 가이드 대기)",
+    "29-admin": "implementing",
     "30-ai-mcp": "todo",
     "31-observability": "todo"
   },
@@ -45,7 +45,8 @@
   ],
   "push_policy": "로컬 커밋만. 원격 푸시는 사람에게 묻는다.",
   "needs_human": [
-    "운영 서버의 웹 이미지가 Next 16.4.0이다(critical 권고). 패치는 25에 들어가지만 운영 배포는 사람이 정한다"
+    "운영 서버의 웹 이미지가 Next 16.4.0이다(critical 권고). 패치는 25에 들어가지만 운영 배포는 사람이 정한다",
+    "반품 정책: 단순변심 반품을 여러 건으로 나눠 신청하면 건마다 왕복 배송비 6,000원을 뺀다. 그대로 둘지, 주문당 한 번만 뺄지 정해야 한다"
   ],
   "harness_gaps": [
     "Bash 가드 우회: sh -c \"git push\", 변수로 감싼 git, cp/mv/dd로 .env 쓰기, echo>/sed -i로 기존 마이그레이션 수정이 통과한다",
