@@ -1,0 +1,102 @@
+import type { Prisma } from "../generated/prisma/client.js";
+import { CARRIERS, isCarrierCode, trackingUrl } from "./carriers.js";
+import { allowedEvents, nextReturnStatus, type OrderStatus } from "./order-state.js";
+import { returnDeadline } from "./policy.js";
+
+type Tx = Prisma.TransactionClient;
+
+// 주문 상세에 같이 싣는 이행 정보(상태 이력, 송장, 반품). 손님 화면과 관리자 화면이 같은 모양을 쓴다
+export const fulfillmentSelect = {
+  id: true, userId: true, totalAmount: true, shippingFee: true, paid: true, canceledAt: true, createdAt: true,
+  status: true, statusChangedAt: true, deliveredAt: true,
+  recipientName: true, recipientPhone: true, postalCode: true, address1: true, address2: true, deliveryMemo: true,
+  items: { select: { quantity: true, unitPrice: true, product: { select: { id: true, name: true } } }, orderBy: { productId: "asc" } },
+  history: { select: { fromStatus: true, toStatus: true, actorType: true, reason: true, createdAt: true }, orderBy: { id: "asc" } },
+  shipments: { select: { id: true, returnId: true, carrier: true, trackingNumber: true, shippedAt: true }, orderBy: { id: "asc" } },
+  returns: {
+    select: {
+      id: true, kind: true, status: true, reason: true, detail: true, refundAmount: true, rejectReason: true,
+      requestedAt: true, decidedAt: true, completedAt: true,
+      items: { select: { productId: true, quantity: true, unitPrice: true, product: { select: { name: true } } }, orderBy: { productId: "asc" } },
+    },
+    orderBy: { id: "asc" },
+  },
+  payment: { select: { provider: true, status: true, amount: true } },
+} as const satisfies Prisma.OrderSelect;
+
+type Row = Prisma.OrderGetPayload<{ select: typeof fulfillmentSelect }>;
+
+const shipmentView = (s: Row["shipments"][number]) => ({
+  ...s,
+  carrierName: isCarrierCode(s.carrier) ? CARRIERS[s.carrier].name : s.carrier,
+  trackingUrl: trackingUrl(s.carrier, s.trackingNumber),
+});
+
+// 반품 환불은 refunds의 멱등 키(return-<id>)로 찾는다
+async function returnRefunds(tx: Tx, orderId: number) {
+  const refunds = await tx.refund.findMany({
+    where: { payment: { orderId }, idempotencyKey: { startsWith: "return-" } },
+    select: { idempotencyKey: true, amount: true, status: true },
+  });
+  return new Map(refunds.map((r) => [r.idempotencyKey, { amount: r.amount, status: r.status }]));
+}
+
+// 반품할 수 있는 수량: 주문 수량 - (거절되지 않은 반품 요청의 수량)
+export function returnableQuantities(row: {
+  items: { quantity: number; product: { id: number } }[];
+  returns: { status: string; items: { productId: number; quantity: number }[] }[];
+}): Map<number, number> {
+  const left = new Map(row.items.map((i) => [i.product.id, i.quantity]));
+  for (const r of row.returns) {
+    if (r.status === "rejected") continue;
+    for (const i of r.items) left.set(i.productId, (left.get(i.productId) ?? 0) - i.quantity);
+  }
+  return left;
+}
+
+async function baseView(tx: Tx, row: Row, now: Date) {
+  const refunds = await returnRefunds(tx, row.id);
+  const { totalAmount, recipientName, recipientPhone, postalCode, address1, address2, deliveryMemo, ...rest } = row;
+  const deadline = row.deliveredAt ? returnDeadline(row.deliveredAt) : null;
+  const left = returnableQuantities(row);
+  const openReturn = row.returns.some((r) => r.status === "requested");
+  const canReturn = row.status === "delivered" && deadline !== null && now <= deadline && [...left.values()].some((q) => q > 0);
+  return {
+    ...rest,
+    price: totalAmount,
+    subtotal: totalAmount - row.shippingFee,
+    shipping: recipientName ? { recipientName, recipientPhone, postalCode, address1, address2, deliveryMemo } : null,
+    shipments: row.shipments.map(shipmentView),
+    returns: row.returns.map((r) => ({ ...r, refund: refunds.get(`return-${r.id}`) ?? null })),
+    returnDeadline: deadline,
+    returnable: row.items.map((i) => ({ productId: i.product.id, name: i.product.name, quantity: Math.max(0, left.get(i.product.id) ?? 0) })),
+    canReturn,
+    canConfirm: row.status === "delivered" && !openReturn,
+  };
+}
+
+export async function customerOrderView(tx: Tx, userId: string, orderId: number, now = new Date()) {
+  const row = await tx.order.findFirst({ where: { id: orderId, userId }, select: fulfillmentSelect });
+  return row ? baseView(tx, row, now) : null;
+}
+
+export type AdminAction = "prepare" | "ship" | "deliver" | "cancel";
+
+export async function adminOrderView(tx: Tx, orderId: number, now = new Date()) {
+  const row = await tx.order.findUnique({ where: { id: orderId }, select: fulfillmentSelect });
+  if (!row) return null;
+  const view = await baseView(tx, row, now);
+  const exchangeShipped = new Set(row.shipments.map((s) => s.returnId).filter((id) => id !== null));
+  return {
+    ...view,
+    // 지금 상태에서 관리자에게 허용된 동작만(화면은 이것만 보인다)
+    actions: allowedEvents(row.status as OrderStatus, "admin") as AdminAction[],
+    returns: view.returns.map((r) => ({
+      ...r,
+      actions: [
+        ...(nextReturnStatus(r.status, "approve", "admin").ok ? ["approve", "reject"] : []),
+        ...(r.kind === "exchange" && r.status === "approved" && !exchangeShipped.has(r.id) ? ["ship"] : []),
+      ],
+    })),
+  };
+}

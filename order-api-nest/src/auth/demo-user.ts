@@ -36,6 +36,7 @@ async function createSampleOrders(tx: Prisma.TransactionClient, userId: string):
         totalAmount: total,
         paid: i === 0,
         canceledAt: i === 0 ? null : new Date(),
+        status: i === 0 ? "paid" : "canceled",
         createdAt,
         items: { create: items },
       },
@@ -47,7 +48,7 @@ async function createSampleOrders(tx: Prisma.TransactionClient, userId: string):
 
 export async function deleteUsers(tx: Prisma.TransactionClient, ids: string[]): Promise<number> {
   if (ids.length === 0) return 0;
-  const pending = await tx.order.findMany({ where: { userId: { in: ids }, paid: false, canceledAt: null }, select: { id: true } });
+  const pending = await tx.order.findMany({ where: { userId: { in: ids }, status: "pending_payment" }, select: { id: true } });
   for (const o of pending) await cancelUnpaidOrder(tx, o.id);
   await deleteDemoUserOrders(tx, ids); // 데모 사용자의 결제·환불 기록도 명시적으로 지운다
   await tx.refreshToken.deleteMany({ where: { userId: { in: ids } } });
