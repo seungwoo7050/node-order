@@ -9,6 +9,9 @@ import { adminDb } from "./admin-db.js";
 import { client, demoAdminToken, seedPaymentData, startPaymentApp } from "./payment-app.js";
 
 const MINUTE = 60_000;
+// 기준 시각을 고정한다(자정 근처에 돌려도 "오늘"이 바뀌지 않게): 2026-01-15 12:00 Asia/Seoul
+const FIXED_DAY = "2026-01-15";
+const FIXED_NOW = new Date(`${FIXED_DAY}T12:00:00+09:00`);
 
 // 대시보드 타일. 하루 경계는 Asia/Seoul 자정이다(서버·DB 시간대와 상관없이)
 describe("GET /admin/dashboard", () => {
@@ -50,7 +53,7 @@ describe("GET /admin/dashboard", () => {
   };
 
   it("자정(Asia/Seoul) 앞뒤로 만든 주문과 부분 환불이 섞여도 오늘 주문 수·순매출·처리 대기·재고 부족·0건 검색어가 기대값과 같다", async () => {
-    const midnight = new Date(`${kstDate()}T00:00:00+09:00`); // 오늘 0시(한국)
+    const midnight = new Date(`${FIXED_DAY}T00:00:00+09:00`); // 기준일 0시(한국)
     const before = new Date(midnight.getTime() - MINUTE); // 어제 23:59
     const after = new Date(midnight.getTime() + MINUTE); // 오늘 00:01
 
@@ -93,7 +96,11 @@ describe("GET /admin/dashboard", () => {
 
     const res = await client(baseUrl, tokens.admin).get("/admin/dashboard");
     expect(res.status).toBe(200);
-    expect(res.body.today).toEqual({ date: kstDate(), orders: 4, paidAmount: 44_000, refundedAmount: 12_000, netSales: 32_000, href: "/admin/orders" });
+    expect(res.body.today).toMatchObject({ date: kstDate() }); // HTTP는 지금 시각으로 센다
+    // 숫자는 고정한 기준 시각으로 센다(서비스에 시각을 넣는다)
+    const fixed = JSON.parse(JSON.stringify(await app.get(DashboardService).get(FIXED_NOW)));
+    expect(fixed.today).toEqual({ date: FIXED_DAY, orders: 4, paidAmount: 44_000, refundedAmount: 12_000, netSales: 32_000, href: "/admin/orders" });
+    expect({ ...fixed, today: undefined }).toEqual({ ...res.body, today: undefined }); // 시각과 상관없는 타일은 HTTP와 같다
     expect(res.body.pending).toEqual({
       paid: { count: 2, href: "/admin/orders?status=paid" },
       preparing: { count: 1, href: "/admin/orders?status=preparing" },
@@ -110,7 +117,7 @@ describe("GET /admin/dashboard", () => {
   });
 
   it("DB 세션 시간대가 UTC가 아니어도 같은 날을 오늘로 센다(쿼리가 Asia/Seoul을 적는다)", async () => {
-    const midnight = new Date(`${kstDate()}T00:00:00+09:00`);
+    const midnight = new Date(`${FIXED_DAY}T00:00:00+09:00`);
     await order({ status: "paid", amount: 1_000, approvedAt: new Date(midnight.getTime() + MINUTE), paymentStatus: "paid" });
     await order({ status: "paid", amount: 2_000, approvedAt: new Date(midnight.getTime() - MINUTE), paymentStatus: "paid" });
     // 세션 시간대를 바꾼 연결로 같은 서비스를 돌린다(서버 시간대에 기댔다면 경계가 어긋난다)
@@ -123,10 +130,19 @@ describe("GET /admin/dashboard", () => {
     try {
       expect((await prisma.$queryRaw<{ tz: string }[]>`SELECT current_setting('TimeZone') AS tz`)[0]!.tz).toBe("America/Los_Angeles");
       const dashboard = new DashboardService(prisma, app.get(SearchStats), app.get(StoreSettingsService));
-      expect((await dashboard.get()).today).toMatchObject({ orders: 1, paidAmount: 1_000, netSales: 1_000 });
+      expect((await dashboard.get(FIXED_NOW)).today).toMatchObject({ date: FIXED_DAY, orders: 1, paidAmount: 1_000, netSales: 1_000 });
     } finally {
       await prisma.$disconnect();
     }
+  });
+
+  it("기준 시각을 넣으면 그 시각의 한국 날짜로 센다(자정 직전·직후)", async () => {
+    const midnight = new Date(`${FIXED_DAY}T00:00:00+09:00`);
+    await order({ status: "paid", amount: 3_000, approvedAt: new Date(midnight.getTime() - MINUTE), paymentStatus: "paid" }); // 전날 23:59
+    await order({ status: "paid", amount: 5_000, approvedAt: new Date(midnight.getTime() + MINUTE), paymentStatus: "paid" }); // 00:01
+    const dashboard = app.get(DashboardService);
+    expect((await dashboard.get(new Date(midnight.getTime() - 1))).today).toMatchObject({ date: "2026-01-14", orders: 1, paidAmount: 3_000 });
+    expect((await dashboard.get(midnight)).today).toMatchObject({ date: FIXED_DAY, orders: 1, paidAmount: 5_000 });
   });
 
   it("데모 관리자는 대시보드를 읽을 수 있고, 손님은 403", async () => {
