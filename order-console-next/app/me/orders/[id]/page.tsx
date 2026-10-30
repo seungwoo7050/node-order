@@ -63,7 +63,7 @@ function MyOrderDetail({ id }: { id: number }) {
           </ul>
         </dd>
       </dl>
-      {waiting && <p className="mt-3 text-[0.78rem] text-muted">Stripe가 결제 결과를 알려 주면 자동으로 바뀝니다. 보통 몇 초 걸립니다.</p>}
+      {waiting && <p className="mt-3 text-[0.78rem] text-muted">결제사(PG)가 결제 결과를 알려 주면 자동으로 바뀝니다. 보통 몇 초 걸립니다.</p>}
     </section>
   );
 }
