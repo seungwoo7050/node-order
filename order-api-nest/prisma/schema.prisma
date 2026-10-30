@@ -38,10 +38,71 @@ model Order {
   stripeSessionId   String?     @unique @map("stripe_session_id")
   canceledAt        DateTime?   @map("canceled_at")
   items             OrderItem[]
+  payment           Payment?
 
   @@index([createdAt, id])
   @@index([userId, createdAt, id])
   @@map("orders")
+}
+
+enum PaymentProvider {
+  stripe
+  toss
+  manual // 관리자·seed가 결제 완료로 만든 주문(PG를 거치지 않았다)
+}
+
+enum PaymentStatus {
+  ready
+  paid
+  partial_refunded
+  refunded
+  canceled
+}
+
+enum RefundStatus {
+  requested
+  succeeded
+  failed
+}
+
+// 결제(0030). 주문 하나에 하나. 상태 전이는 조건부 update(WHERE status = ...)로 한 번만 일어난다
+// amount >= 0 CHECK와 RLS 정책은 마이그레이션 SQL에만 있다
+model Payment {
+  id                 Int             @id @default(autoincrement())
+  orderId            Int             @unique @map("order_id")
+  order              Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider           PaymentProvider
+  providerOrderId    String          @map("provider_order_id")
+  providerPaymentKey String?         @map("provider_payment_key")
+  amount             Int
+  status             PaymentStatus   @default(ready)
+  approvedAt         DateTime?       @map("approved_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @default(now()) @updatedAt @map("updated_at")
+  refunds            Refund[]
+
+  @@unique([provider, providerOrderId])
+  @@unique([provider, providerPaymentKey])
+  @@map("payments")
+}
+
+// 환불(0030). 결제 하나에 여러 번. requested로 먼저 커밋하고 PG를 부른 뒤 succeeded·failed로 바꾼다
+model Refund {
+  id                Int          @id @default(autoincrement())
+  paymentId         Int          @map("payment_id")
+  payment           Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  amount            Int
+  reason            String
+  idempotencyKey    String       @unique @map("idempotency_key")
+  providerRefundKey String?      @map("provider_refund_key")
+  status            RefundStatus @default(requested)
+  failureReason     String?      @map("failure_reason")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @default(now()) @updatedAt @map("updated_at")
+
+  @@index([paymentId])
+  @@index([status, createdAt])
+  @@map("refunds")
 }
 
 model StripeEvent {
