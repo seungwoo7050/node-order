@@ -53,3 +53,14 @@ services:
   web-green:
     environment:
       AUTH_URL: http://${WEB_HOST}
+
+  # 모니터링(31): 운영과 같은 Prometheus·Alertmanager. 포트를 개발 compose(9090·9093)와 겹치지 않게 두고,
+  # 경보는 이 PC의 가짜 수신기(scripts/alert-receiver.mjs, 5001)로 보낸다(rehearsal.env의 ALERT_WEBHOOK_URL·DEADMAN_URL)
+  prometheus:
+    ports: !override
+      - "127.0.0.1:9190:9090"
+  alertmanager:
+    ports: !override
+      - "127.0.0.1:9193:9093"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

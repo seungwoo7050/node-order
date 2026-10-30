@@ -211,7 +211,11 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
       - name: 설정 파일 올리기
-        run: scp -rp deploy/compose.yml deploy/Caddyfile deploy/release.sh deploy/rollback.sh deploy/ops ubuntu@${{ vars.DEPLOY_HOST }}:/opt/node-order/
+        run: |
+          scp -rp deploy/compose.yml deploy/Caddyfile deploy/release.sh deploy/rollback.sh deploy/ops ubuntu@${{ vars.DEPLOY_HOST }}:/opt/node-order/
+          ssh ubuntu@${{ vars.DEPLOY_HOST }} mkdir -p /opt/node-order/monitoring/alertmanager
+          scp -p monitoring/prometheus.prod.yml monitoring/alert-rules.yml ubuntu@${{ vars.DEPLOY_HOST }}:/opt/node-order/monitoring/
+          scp -p monitoring/alertmanager/render.sh ubuntu@${{ vars.DEPLOY_HOST }}:/opt/node-order/monitoring/alertmanager/
       - name: 대기 환경에 새 버전 띄우기
         run: |
           TOKEN=$(openssl rand -hex 16)

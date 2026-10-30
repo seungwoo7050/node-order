@@ -19,6 +19,12 @@ reload_caddy() {
   fi
 }
 
+# Prometheus가 긁을 API(활성 슬롯 하나). 파일이 바뀌면 Prometheus가 다시 읽는다(file_sd). mv로 한 번에 바꾼다
+targets() {
+  printf '[{"targets":["api-%s:4000"],"labels":{"slot":"%s","release":"%s"}}]\n' "$1" "$1" "$(env_of "$(upper "$1")_TAG")" > live/targets.json.tmp
+  mv live/targets.json.tmp live/targets.json
+}
+
 route() {
   if [ -n "${3:-}" ]; then
     printf '@preview header Cookie *deploy_slot=%s*\nhandle @preview {\n\theader X-Deploy-Slot preview\n\treverse_proxy web-%s:3000\n}\nhandle {\n\treverse_proxy web-%s:3000\n}\n' "$3" "$2" "$1" > live/web.caddy
@@ -27,6 +33,7 @@ route() {
   fi
   echo "reverse_proxy api-$1:4000 # WebSocket(Upgrade)도 그대로 넘긴다" > live/api.caddy
   reload_caddy
+  targets "$1"
 }
 
 up() {
@@ -46,7 +53,12 @@ up() {
 
   mkdir -p live
   [ -f live/web.caddy ] || { echo "reverse_proxy web-$IDLE:3000" > live/web.caddy; echo "reverse_proxy api-$IDLE:4000" > live/api.caddy; }
+  [ -f live/targets.json ] || echo '[]' > live/targets.json # 첫 배포: switch가 활성 쪽을 적을 때까지 긁을 것이 없다
   "${DC[@]}" up -d --wait --no-recreate
+  # 경보 규칙·설정 파일이 바뀌었을 수 있다(CI가 monitoring/을 올린다): Prometheus는 SIGHUP으로 다시 읽고,
+  # Alertmanager는 환경변수(웹훅 주소)가 바뀌었으면 다시 만든다(render.sh가 기동할 때 설정을 만든다)
+  "${DC[@]}" up -d --no-deps --wait alertmanager
+  "${DC[@]}" kill -s SIGHUP prometheus > /dev/null 2>&1 || true
 
   say "마이그레이션"
   RELEASE_TAG=$NEW "${DC[@]}" run --rm -T migrate 2>&1 | { grep -E "^Applying|^No pending|rror|P3[0-9]{3}" || true; }

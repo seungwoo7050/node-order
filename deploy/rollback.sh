@@ -14,6 +14,8 @@ say "== $ACTIVE → $BACK($BACK_TAG)"
 echo "reverse_proxy web-$BACK:3000" > live/web.caddy
 echo "reverse_proxy api-$BACK:4000 # WebSocket(Upgrade)도 그대로 넘긴다" > live/api.caddy
 "${DC[@]}" exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1 | { grep '"level":"error"' || true; }
+# Prometheus가 긁을 API도 되돌린다(release.sh의 targets와 같은 모양)
+printf '[{"targets":["api-%s:4000"],"labels":{"slot":"%s","release":"%s"}}]\n' "$BACK" "$BACK" "$BACK_TAG" > live/targets.json.tmp && mv live/targets.json.tmp live/targets.json
 sed -i.bak "s|^ACTIVE=.*|ACTIVE=$BACK|" .env && rm .env.bak
 say "트래픽 → $BACK"
 sleep "${DRAIN_SECONDS:-10}"

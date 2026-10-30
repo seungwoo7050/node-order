@@ -9,7 +9,7 @@ x-api: &api
   restart: unless-stopped
   init: true
   stop_grace_period: 30s
-  environment:
+  environment: &api-env
     PORT: "4000"
     JWT_SECRET: ${JWT_SECRET:?}
     DEMO_LOGIN: ${DEMO_LOGIN:-0}
@@ -32,6 +32,14 @@ x-api: &api
     STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
     TOSS_CLIENT_KEY: ${TOSS_CLIENT_KEY:-}
     TOSS_SECRET_KEY: ${TOSS_SECRET_KEY:-}
+    LLM_API_KEY: ${LLM_API_KEY:-}
+    # 오류 추적(31): DSN이 있을 때만 켜진다. release는 서비스마다 그 슬롯의 이미지 태그(api-blue·api-green)
+    SENTRY_DSN: ${SENTRY_DSN:-}
+    SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+    # 업무 지표(31)
+    BUSINESS_METRICS_INTERVAL_MS: ${BUSINESS_METRICS_INTERVAL_MS:-30000}
+    FULFILLMENT_OVERDUE_DAYS: ${FULFILLMENT_OVERDUE_DAYS:-3}
+    LLM_DAILY_TOKEN_BUDGET: ${LLM_DAILY_TOKEN_BUDGET:-200000}
   volumes:
     - ./rds-ca.pem:/certs/rds-ca.pem:ro
   healthcheck:
@@ -92,10 +100,16 @@ services:
     <<: *api
     profiles: ["blue"]
     image: ${IMAGE_PREFIX:-ghcr.io/seungwoo7050/node-order}/order-api:${BLUE_TAG:-none}
+    environment:
+      <<: *api-env
+      SENTRY_RELEASE: ${BLUE_TAG:-}
   api-green:
     <<: *api
     profiles: ["green"]
     image: ${IMAGE_PREFIX:-ghcr.io/seungwoo7050/node-order}/order-api:${GREEN_TAG:-none}
+    environment:
+      <<: *api-env
+      SENTRY_RELEASE: ${GREEN_TAG:-}
 
   web-blue:
     <<: *web
@@ -107,6 +121,9 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:?}
       AUTH_GITHUB_ID: ${GITHUB_CLIENT_ID:-}
       AUTH_GITHUB_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      SENTRY_DSN: ${SENTRY_WEB_DSN:-${SENTRY_DSN:-}}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_RELEASE: ${BLUE_TAG:-}
   web-green:
     <<: *web
     profiles: ["green"]
@@ -117,6 +134,50 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:?}
       AUTH_GITHUB_ID: ${GITHUB_CLIENT_ID:-}
       AUTH_GITHUB_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      SENTRY_DSN: ${SENTRY_WEB_DSN:-${SENTRY_DSN:-}}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_RELEASE: ${GREEN_TAG:-}
+
+  # 모니터링(31). 운영에는 Prometheus·Alertmanager만 두고, Grafana는 개발 PC에서 SSH 터널로 붙인다(docs/runbook.md 공통).
+  # 포트는 서버 안(127.0.0.1)에만 연다. 설정 파일은 저장소의 monitoring/(서버에서는 MONITORING_DIR=./monitoring)
+  prometheus:
+    logging: *logging
+    image: prom/prometheus:v3.15.1
+    restart: unless-stopped
+    mem_limit: 256m
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=1GB
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ${MONITORING_DIR:-../monitoring}/prometheus.prod.yml:/etc/prometheus/prometheus.yml:ro
+      - ${MONITORING_DIR:-../monitoring}/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - ./live:/etc/prometheus/live:ro # release.sh가 쓰는 targets.json(활성 API)
+      - prometheus_data:/prometheus
+
+  alertmanager:
+    logging: *logging
+    image: prom/alertmanager:v0.34.2
+    restart: unless-stopped
+    mem_limit: 64m
+    # 설정은 render.sh가 환경변수로 만든다. 주소가 비어 있으면 null 수신자(기동은 된다)
+    entrypoint: ["/bin/sh", "/etc/alertmanager/render.sh", "--run"]
+    command: ["--storage.path=/alertmanager", "--cluster.listen-address="]
+    environment:
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      DEADMAN_URL: ${DEADMAN_URL:-}
+      RUNBOOK_BASE_URL: ${RUNBOOK_BASE_URL:-}
+      ALERT_ENV: ${ALERT_ENV:-production}
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ${MONITORING_DIR:-../monitoring}/alertmanager/render.sh:/etc/alertmanager/render.sh:ro
+      - alertmanager_data:/alertmanager
 
 volumes:
   caddy_data:
+  prometheus_data:
+  alertmanager_data:
