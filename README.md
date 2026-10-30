@@ -192,6 +192,17 @@ Execution Time: 5.082 ms
 
 </details>
 
+## 주문 이행(28)
+
+- 주문 상태 `orders.status`: pending_payment → paid → preparing → shipped → delivered → confirmed, 그리고 canceled. 전이 표는 `order-api-nest/src/fulfillment/order-state.ts` 한 곳, DB 반영은 조건부 update(`WHERE status = <from>`)이고 모든 전이가 `order_status_history`에 남는다. 옛 칸 `paid`·`canceled_at`은 같이 맞춘다(expand)
+- 배송지는 주문에 사본으로 붙고(결제 시작 전에 검증, 로그에는 마스킹), 배송비는 상품 합계 5만 원 미만이면 3,000원(`shipping_fee`, `total_amount`에 포함)
+- 관리자 API `/admin/orders`(상태 필터)·`/admin/orders/:id`와 `prepare`·`shipment`·`deliver`·`cancel`, `/admin/returns/:id/approve`·`reject`·`shipment`. 데모 관리자는 읽기만
+- 손님 API `POST /me/orders/:id/confirm`(구매확정), `POST /me/orders/:id/returns`(배송 완료 뒤 7일 안). 단순변심 반품은 왕복 배송비 6,000원을 빼고 환불
+- 취소·반품 환불은 상태 전이·재고 복구를 커밋한 뒤 27의 환불을 멱등 키 `cancel-<주문id>`·`return-<반품id>`로 부른다
+- 리더 작업 `FulfillmentJob`(`FULFILLMENT_INTERVAL_MS`, 기본 10분): 24시간 넘은 미결제 주문 취소(PG 재조회 뒤), 발송 5일 뒤 배송 완료, 배송 완료 7일 뒤 구매확정, 환불이 확정된 반품 완료
+- 알림 메일은 outbox 이벤트 종류별 템플릿(`src/mail/templates.ts`)
+- 화면: 장바구니 배송지, 내 주문 상세(타임라인·송장 조회 링크·반품 신청·구매확정), 관리자 `/admin/orders`
+
 ## 정리
 
 ```sh
