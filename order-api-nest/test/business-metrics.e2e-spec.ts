@@ -1,5 +1,6 @@
 import type { INestApplication } from "@nestjs/common";
 import { BusinessMetricsJob } from "../src/leader/business-metrics.job.js";
+import { PrismaService } from "../src/prisma/prisma.service.js";
 import { adminDb } from "./admin-db.js";
 import { startSimulator, type Simulator } from "./fake-pg.js";
 import { CONSENT, SHIPPING, client, paymentOf, seedPaymentData, startPaymentApp } from "./payment-app.js";
@@ -100,6 +101,28 @@ describe("업무 지표(/metrics)", () => {
     }
     expect(text).not.toContain(SHIPPING.recipientPhone);
     expect(text).not.toContain(SHIPPING.address1);
+  });
+
+  it("계산하면 마지막 성공 시각을 남기고, 실패하면 실패 카운터가 늘고 성공 시각은 그대로다(BusinessMetricsStale이 본다)", async () => {
+    const job = app.get(BusinessMetricsJob);
+    const leader = (job as unknown as { leaderElection: { leader: boolean } }).leaderElection;
+    const was = leader.leader;
+    leader.leader = true;
+    const read = async (name: string) => Number(new RegExp(`^${name} (\\S+)$`, "m").exec(await (await fetch(`${baseUrl}/metrics`)).text())?.[1]);
+    try {
+      const at = new Date("2026-10-30T07:00:00Z");
+      expect(await job.run(at)).toBe(true);
+      expect(await read("business_metrics_last_success_timestamp_seconds")).toBe(at.getTime() / 1000);
+      const failures = await read("business_metrics_failures_total");
+      const spy = vi.spyOn(app.get(PrismaService), "asAdmin").mockRejectedValueOnce(new Error("DB에 연결할 수 없다"));
+      expect(await job.run(new Date(at.getTime() + 60_000))).toBe(false);
+      spy.mockRestore();
+      expect(await read("business_metrics_failures_total")).toBe(failures + 1);
+      expect(await read("business_metrics_last_success_timestamp_seconds")).toBe(at.getTime() / 1000);
+      expect(Number.isNaN(await read("reconciliation_open_issues"))).toBe(true);
+    } finally {
+      leader.leader = was;
+    }
   });
 
   it("리더가 아니면 업무 게이지를 0으로 돌린다(옛 리더의 낡은 값이 남지 않게)", async () => {

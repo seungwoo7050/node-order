@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from "@nestjs/common";
 import { describeError } from "../logger/describe-error.js";
-import { businessGauges } from "../metrics/metrics.js";
+import { businessGauges, businessMetricsFailures, businessMetricsLastSuccess } from "../metrics/metrics.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { LeaderElection } from "./leader-election.js";
 
@@ -37,6 +37,7 @@ export class BusinessMetricsJob implements OnApplicationBootstrap, OnModuleDestr
   async run(now = new Date()): Promise<boolean> {
     if (!this.leaderElection.isLeader) {
       for (const g of Object.values(businessGauges)) g.reset();
+      businessMetricsLastSuccess.reset();
       return false;
     }
     if (this.running) return false;
@@ -49,6 +50,7 @@ export class BusinessMetricsJob implements OnApplicationBootstrap, OnModuleDestr
     } catch (err) {
       if (!this.failing) this.logger.warn(`업무 지표 계산 실패(다음 회차에 다시): ${describeError(err)}`);
       this.failing = true;
+      businessMetricsFailures.inc();
       for (const g of Object.values(businessGauges)) g.set(Number.NaN);
       return false;
     } finally {
@@ -70,5 +72,6 @@ export class BusinessMetricsJob implements OnApplicationBootstrap, OnModuleDestr
     businessGauges.searchIndexLag.set(ageSeconds(dirty._min.markedAt, now));
     businessGauges.outboxOldestUnpublished.set(ageSeconds(outbox._min.createdAt, now));
     businessGauges.fulfillmentOverdue.set(overdue);
+    businessMetricsLastSuccess.set(now.getTime() / 1000);
   }
 }
