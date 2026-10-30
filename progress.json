@@ -15,14 +15,14 @@
   "current": {
     "branch": "30-ai-mcp",
     "stage": "implement",
-    "note": "30 구현과 29 devlog를 같이 돌린다. 26~29 가이드는 31 구현 뒤 차례로"
+    "note": "30 구현 중. 29 devlog가 찾은 결함 6건은 30이 끝나면 후속 수정으로(queued_fixes). 반품 배송비 정책 2건은 사람에게"
   },
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
     "26-search": "implemented @ bfb0840 (devlog 완료, 가이드 대기)",
     "27-toss-payments": "implemented @ 2558cde (verify 통과, devlog 완료, 가이드 대기)",
     "28-fulfillment": "implemented @ 90d0278 (verify 통과, devlog 완료, 가이드 대기)",
-    "29-admin": "implemented @ f4a23ee (verify 통과, devlog 진행, 가이드 대기)",
+    "29-admin": "implemented @ f4a23ee (verify 통과, devlog 완료, 가이드 대기)",
     "30-ai-mcp": "implementing",
     "31-observability": "brief-confirmed"
   },
@@ -46,7 +46,7 @@
   "push_policy": "로컬 커밋만. 원격 푸시는 사람에게 묻는다.",
   "needs_human": [
     "운영 서버의 웹 이미지가 Next 16.4.0이다(critical 권고). 패치는 25에 들어가지만 운영 배포는 사람이 정한다",
-    "반품 정책: 단순변심 반품을 여러 건으로 나눠 신청하면 건마다 왕복 배송비 6,000원을 뺀다. 그대로 둘지, 주문당 한 번만 뺄지 정해야 한다"
+    "반품 정책: 단순변심 반품을 여러 건으로 나눠 신청하면 건마다 왕복 배송비 6,000원을 뺀다. 그대로 둘지, 주문당 한 번만 뺄지 정해야 한다. 같은 묶음: 반품 왕복 배송비를 승인 시점 설정 값으로 뺀다(지난 주문에도 걸림). 주문 시점 값으로 고정할지 정해야 한다"
   ],
   "harness_gaps": [
     "Bash 가드 우회: sh -c \"git push\", 변수로 감싼 git, cp/mv/dd로 .env 쓰기, echo>/sed -i로 기존 마이그레이션 수정이 통과한다",
@@ -66,5 +66,13 @@
     "토스 환불 확정은 금액으로 짝을 지어 같은 금액 환불 두 건이 동시에 결과 미상이면 짝이 바뀔 수 있다(작음)",
     "seed가 견본 사용자의 PG 결제 주문을 남겨 e2e를 돌릴 때마다 주문이 늘어난다",
     "0034 트리거는 옛 칸(paid, canceled_at)을 쓸 때마다 같은 행을 다시 UPDATE하고, status_changed_at에 트리거 시각을 적는다. contract 마이그레이션 때 지운다"
+  ],
+  "queued_fixes": [
+    "대사 정기 작업이 그날 run 행이 하나라도 있으면 다시 돌지 않는다. provider 실패·도중 종료·손 실행이 있던 날을 건너뛰고 경보도 없다",
+    "로그아웃이 아닌 경로(다른 계정 로그인, GitHub 로그인, 세션 만료)로 사용자가 바뀌면 앞 사람의 배송지가 장바구니에 남아 결제에 쓰인다",
+    "mapLimit가 하나가 실패해도 남은 PG 조회를 계속 보낸다(429 때 부담 증가)",
+    "저절로 풀린 대사 불일치가 열린 채 남는다(다음 실행에서 일치하면 자동 해결 표시)",
+    "e2e adminDatabaseUrl이 환경변수보다 .env를 먼저 읽는다",
+    "대시보드 테스트에 시계 주입이 없어 자정 근처에 흔들린다"
   ]
 }
