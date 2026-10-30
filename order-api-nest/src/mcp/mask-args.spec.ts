@@ -20,6 +20,21 @@ describe("maskArgs", () => {
     expect(maskText(`연락처 ${raw} 로`)).not.toContain("2345");
   });
 
+  it("82로 시작하는 송장번호도 송장번호 칸이면 그대로 둔다", () => {
+    expect(maskArgs({ orderId: 3, carrier: "cj", trackingNumber: "821012345678" })).toEqual({ orderId: 3, carrier: "cj", trackingNumber: "821012345678" });
+    expect(maskArgs({ trackingNumber: "8210-1234-5678" })).toEqual({ trackingNumber: "8210-1234-5678" });
+  });
+
+  it.each([
+    ["+1 415 555 2671", "+1-***-2671"],
+    ["+1-415-555-2671", "+1-***-2671"],
+    ["+44 20 7946 0958", "+44-***-0958"],
+    ["+81 90 1234 5678", "+81-***-5678"],
+    ["+14155552671", "+1-***-2671"],
+  ])("+82가 아닌 국제번호(E.164) %s도 가린다", (raw, masked) => {
+    expect(maskText(`연락처 ${raw} 로`)).toBe(`연락처 ${masked} 로`);
+  });
+
   it("주문 번호·송장번호 같은 긴 숫자는 그대로 둔다", () => {
     expect(maskArgs({ orderId: 12, trackingNumber: "123456789012", carrier: "cj" })).toEqual({ orderId: 12, trackingNumber: "123456789012", carrier: "cj" });
   });

@@ -37,11 +37,15 @@ export const PERSONAL_DATA_MASKERS: Record<string, (v: string) => string> = {
 const INTL_PHONE = /(?<![\d+])(?:\+\s?|00)?82[-.\s]?(?:\(0\)|0)?[-.\s]?(1\d|[2-9]\d?)[-.\s]?(\d{3,4})[-.\s]?(\d{4})(?!\d)/g;
 const PHONE = /(?<!\d)(0\d{1,2})[-.\s]?(\d{3,4})[-.\s]?(\d{4})(?!\d)/g;
 const EMAIL = /([\p{L}\p{N}._%+-])[\p{L}\p{N}._%+-]*@([\p{L}\p{N}.-]+\.[\p{L}]{2,})/gu;
+// 그 밖의 국제 표기(E.164: + 국가번호 1~3자리 + 번호, 모두 15자리 이하). 국가번호 뒤에 구분자가 있으면 그 묶음을,
+// 붙여 썼으면 첫 숫자만 국가번호로 본다(+14155552671 → +1). 끝 4자리만 남긴다
+const E164 = /(?<![\w+*])\+(?:([1-9]\d{0,2})[-.\s]|([1-9]))((?:\d[-.\s]?){4,11})(\d{4})(?!\d)/g;
 
-// 글에 섞인 전화번호(국내 0…, 국제 +82·0082·82…)와 이메일을 가린다(길이는 자르지 않는다)
+// 글에 섞인 전화번호(국내 0…, 국제 +82·0082·82…, 그 밖의 +국가번호)와 이메일을 가린다(길이는 자르지 않는다)
 export function maskContacts(text: string): string {
   return text
     .replace(INTL_PHONE, (_m, _a, _b, last: string) => `+82-**-****-${last}`)
+    .replace(E164, (_m, spaced: string | undefined, compact: string | undefined, _mid, last: string) => `+${spaced ?? compact}-***-${last}`)
     .replace(PHONE, (m) => maskPhone(m))
     .replace(EMAIL, (_, first: string, domain: string) => `${first}***@${domain}`);
 }
