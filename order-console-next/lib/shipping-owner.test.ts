@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useAuthStore } from "./auth-store";
-import { EMPTY_SHIPPING, useCartStore } from "./cart-store";
+import { EMPTY_SHIPPING, shippingFor, useCartStore } from "./cart-store";
 
 // 장바구니 저장소의 배송지는 그것을 쓴 사용자의 것이다. 로그아웃을 거치지 않고 사용자가 바뀌어도
 // (다른 계정 로그인, GitHub 로그인, 세션 만료 뒤 다른 사람이 로그인) 앞 사람의 배송지를 다음 사람의 결제에 쓰지 않는다
@@ -44,6 +44,26 @@ describe("배송지 소유자", () => {
     useCartStore.setState({ shipping: SHIPPING, shippingOwner: undefined });
     login("kim");
     expect(cart().shipping).toEqual(EMPTY_SHIPPING);
+  });
+
+  it("세션이 만료되면(인증 없음) 앞 사람의 배송지를 보여 주지 않는다", () => {
+    login("kim");
+    cart().setShipping(SHIPPING);
+    useAuthStore.getState().clear(); // 갱신 실패(세션 만료). 로그아웃을 거치지 않았다
+    expect(shippingFor(cart(), null)).toEqual(EMPTY_SHIPPING);
+    expect(shippingFor(cart(), jwt("lee"))).toEqual(EMPTY_SHIPPING);
+    expect(shippingFor(cart(), jwt("kim"))).toEqual(SHIPPING);
+  });
+
+  it("세션 만료 뒤 칸 하나를 고쳐도 앞 사람의 배송지를 다음 사용자에게 물려주지 않는다", () => {
+    login("kim");
+    cart().setShipping(SHIPPING);
+    useAuthStore.getState().clear();
+    cart().setShipping({ deliveryMemo: "경비실" }); // 인증 없이 한 칸만 고친다
+    expect(cart().shipping).toEqual({ ...EMPTY_SHIPPING, deliveryMemo: "경비실" });
+    login("park");
+    expect(cart().shipping).toEqual({ ...EMPTY_SHIPPING, deliveryMemo: "경비실" });
+    expect(JSON.stringify(cart())).not.toContain(SHIPPING.recipientPhone);
   });
 
   it("로그인 전에 쓴 배송지는 로그인한 사람의 것이 된다", () => {

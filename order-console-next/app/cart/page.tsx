@@ -4,7 +4,8 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import Link from "next/link";
 import { useState } from "react";
 import { ApiError, authFetch } from "@/lib/api-client";
-import { useCartStore } from "@/lib/cart-store";
+import { useAuthStore } from "@/lib/auth-store";
+import { shippingFor, useCartStore } from "@/lib/cart-store";
 import { defaultProvider, featuresOptions, providerLabel, providerNote, type PaymentProvider } from "@/lib/features";
 import { productListOptions } from "@/lib/lists";
 import { shippingFeeFor, won } from "@/lib/orders";
@@ -28,7 +29,9 @@ const SHIPPING_FIELDS = [
 export default function CartPage() {
   const items = useCartStore((s) => s.items);
   const remove = useCartStore((s) => s.remove);
-  const shipping = useCartStore((s) => s.shipping);
+  // 소유자가 있는 배송지는 그 사람이 인증돼 있을 때만 보인다(세션 만료 뒤 앞 사람의 배송지를 보이지 않는다)
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const shipping = useCartStore((s) => shippingFor(s, accessToken));
   const setShipping = useCartStore((s) => s.setShipping);
   const online = useOnline();
   const queryClient = useQueryClient();
