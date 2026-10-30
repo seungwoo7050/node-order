@@ -2,7 +2,8 @@
 # npm run test:rules. 도커로 Prometheus·Alertmanager 도구를 받아 검사한다(CI의 alert-rules 잡도 이것을 부른다).
 #   1. promtool test rules: 경보 규칙마다 울림·안 울림(alert-rules.test.yml)
 #   2. promtool check config: 개발·운영 Prometheus 설정(규칙 파일까지)
-#   3. Alertmanager: render.sh가 환경변수로 만든 설정을 경우마다 amtool check-config, 수신자 경로(alertmanager/check.sh)
+#   3. Caddy: 공개 주소의 /metrics 변형 경로가 막히는지(deploy/check-caddy-metrics.sh)
+#   4. Alertmanager: render.sh가 환경변수로 만든 설정을 경우마다 amtool check-config, 수신자 경로(alertmanager/check.sh)
 # 이미지 태그는 운영 Compose와 같다(PROM_IMAGE, ALERTMANAGER_IMAGE로 바꿀 수 있다)
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -17,6 +18,9 @@ for f in prometheus.yml prometheus.prod.yml; do
   docker run --rm -v "$here:/m:ro" -v "$here/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro" \
     --entrypoint promtool "$prom" check config "/m/$f"
 done
+
+echo "## Caddy: 공개 API 주소의 /metrics 변형 경로"
+bash "$here/../deploy/check-caddy-metrics.sh"
 
 echo "## alertmanager"
 docker run --rm -v "$here:/m:ro" --entrypoint sh "$am" /m/alertmanager/check.sh
