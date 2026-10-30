@@ -13,9 +13,9 @@
     "note": "Next 16.4.0 빌드가 보안 업그레이드 안내로 불규칙하게 실패한다(재시도하면 통과). 25 첫 커밋에서 16.4.3으로 올린다"
   },
   "current": {
-    "branch": "30-ai-mcp",
+    "branch": "31-observability",
     "stage": "implement",
-    "note": "30 구현 중. 29 devlog가 찾은 결함 6건은 30이 끝나면 후속 수정으로(queued_fixes). 반품 배송비 정책 2건은 사람에게"
+    "note": "31 구현과 30 devlog를 같이 돌린다. 끝나면 26~31 가이드를 차례로"
   },
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
@@ -23,8 +23,8 @@
     "27-toss-payments": "implemented @ 2558cde (verify 통과, devlog 완료, 가이드 대기)",
     "28-fulfillment": "implemented @ 90d0278 (verify 통과, devlog 완료, 가이드 대기)",
     "29-admin": "implemented @ f4a23ee (verify 통과, devlog 완료, 가이드 대기)",
-    "30-ai-mcp": "implemented @ a63e041 (기준 4 오케스트레이터 확인, 평가 중)",
-    "31-observability": "brief-confirmed"
+    "30-ai-mcp": "implemented @ b1584e0 (verify 통과, 실제 Claude Code 연결 확인, devlog 진행, 가이드 대기)",
+    "31-observability": "implementing"
   },
   "blocked": [
     {
@@ -70,6 +70,7 @@
   "known_risks": [
     "토스 환불 확정은 금액으로 짝을 지어 같은 금액 환불 두 건이 동시에 결과 미상이면 짝이 바뀔 수 있다(작음)",
     "seed가 견본 사용자의 PG 결제 주문을 남겨 e2e를 돌릴 때마다 주문이 늘어난다",
-    "0034 트리거는 옛 칸(paid, canceled_at)을 쓸 때마다 같은 행을 다시 UPDATE하고, status_changed_at에 트리거 시각을 적는다. contract 마이그레이션 때 지운다"
+    "0034 트리거는 옛 칸(paid, canceled_at)을 쓸 때마다 같은 행을 다시 UPDATE하고, status_changed_at에 트리거 시각을 적는다. contract 마이그레이션 때 지운다",
+    "MCP 결과에 손님이 쓴 글이 실려 write 토큰을 쥔 클라이언트 모델에 간다. 서버는 untrusted 칸 표시와 이스케이프까지 하고, 마지막 방어는 클라이언트의 확인 절차다"
   ]
 }
