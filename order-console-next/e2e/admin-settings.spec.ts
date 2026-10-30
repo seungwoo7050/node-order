@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
+import pg from "pg";
 
 // 상점 설정·법적 고지·대시보드·대사 화면. 설정을 저장하면 배포 없이 바닥글과 /legal/*가 새 값을 보인다(태그 캐시 무효화)
 test.use({ serviceWorkers: "block" });
@@ -21,6 +23,26 @@ async function save(page: Page) {
   await form(page).getByRole("button", { name: "저장" }).click();
 }
 
+// 이 테스트가 만든 약관 판은 본문 앞에 표시를 달고, 끝나면 DB에서 지운다(개발 DB에 판이 쌓이지 않게).
+// 법적 고지 판은 API로 지울 수 없다(변경 이력 공개라 지우는 길을 두지 않는다). 그래서 API의 .env에 있는 관리자 DB 주소로 직접 지운다.
+// 지운 뒤에도 이 실행의 콘솔 캐시(legal 태그)에는 남지만, 이 파일 뒤의 테스트는 이용약관을 보지 않는다
+const E2E_MARK = "[e2e] ";
+function adminDatabaseUrl(): string {
+  const env = readFileSync(new URL("../../order-api-nest/.env", import.meta.url), "utf8");
+  const url = process.env.ADMIN_DATABASE_URL ?? env.match(/^ADMIN_DATABASE_URL=(.+)$/m)?.[1]?.trim();
+  if (!url) throw new Error("order-api-nest/.env에 ADMIN_DATABASE_URL이 없다");
+  return url;
+}
+async function deleteE2eLegalVersions(): Promise<number> {
+  const db = new pg.Client({ connectionString: adminDatabaseUrl() });
+  await db.connect();
+  try {
+    return (await db.query("DELETE FROM legal_documents WHERE body LIKE $1 AND version > 1", [`${E2E_MARK}%`])).rowCount ?? 0;
+  } finally {
+    await db.end();
+  }
+}
+
 let original: Record<"storeName" | "privacyOfficer" | "returnShippingFee" | "businessNumber", string> | null = null;
 
 test.beforeAll(async ({ browser }) => {
@@ -38,6 +60,7 @@ test.beforeAll(async ({ browser }) => {
 
 // 다른 테스트가 보는 값(반품 배송비 등)을 처음 값으로 돌려놓는다. 화면으로 저장해 콘솔 캐시도 같이 버린다
 test.afterAll(async ({ browser }) => {
+  await deleteE2eLegalVersions();
   if (!original) return;
   const page = await browser.newPage({ serviceWorkers: "block" });
   await loginAsKim(page);
@@ -121,7 +144,7 @@ test("연결된 기능은 연결됨·없음만 보이고, 화면 어디에도 �
 });
 
 test("약관을 고치면 새 판이 생기고 공개 페이지에서 지난 판을 열람할 수 있다", async ({ page }) => {
-  const body = `이용약관 개정 ${Date.now().toString(36)}: 제3조(배송) 결제 뒤 3영업일 안에 발송합니다.`;
+  const body = `${E2E_MARK}이용약관 개정 ${Date.now().toString(36)}: 제3조(배송) 결제 뒤 3영업일 안에 발송합니다.`;
   await page.goto("/legal/terms");
   const before = await page.getByTestId("legal-version").textContent();
   const beforeVersion = Number(before!.match(/(\d+)판/)![1]);
@@ -140,6 +163,9 @@ test("약관을 고치면 새 판이 생기고 공개 페이지에서 지난 판
   await expect(page).toHaveURL(new RegExp(`/legal/terms\\?version=${beforeVersion}$`));
   await expect(page.getByText("지난 판입니다")).toBeVisible();
   await expect(page.getByTestId("legal-body")).not.toHaveText(body);
+
+  // 정리: 이 테스트가 만든 판만 지운다(다음 실행의 판 번호가 늘지 않는다)
+  expect(await deleteE2eLegalVersions()).toBe(1);
 });
 
 test("장바구니는 지금 개인정보처리방침 판에 동의해야 결제할 수 있다", async ({ page }) => {
