@@ -68,6 +68,15 @@ export function EditProductForm({ product }: { product: CatalogProduct }) {
   const { data: features } = useQuery(featuresOptions);
   const canDraft = features?.integrations?.llm === true && !readOnly;
   const draft = useDescriptionDraft(product.id, setDescription);
+  // 손으로 고친 설명이 저장되지 않은 채 있으면 초안으로 덮어쓰기 전에 묻는다(초안은 칸을 비우고 다시 채운다)
+  const [handEdited, setHandEdited] = useState(false);
+  const [confirmOverwrite, setConfirmOverwrite] = useState(false);
+  function startDraft(force = false) {
+    if (!force && handEdited && description.trim() !== product.description.trim()) return setConfirmOverwrite(true);
+    setConfirmOverwrite(false);
+    setHandEdited(false);
+    void draft.start(keywords);
+  }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -80,7 +89,7 @@ export function EditProductForm({ product }: { product: CatalogProduct }) {
       void queryClient.invalidateQueries({ queryKey: trpc.products.pathKey() });
       let result = await saveProduct(token, product.id, input);
       if (result.status === 401 && (token = await refreshAccessToken())) result = await saveProduct(token, product.id, input);
-      setError(result.message);
+      setError(result.message); // 저장되면 목록으로 넘어간다(redirect)
     });
   }
 
@@ -98,7 +107,7 @@ export function EditProductForm({ product }: { product: CatalogProduct }) {
       </label>
       <label className="grid gap-1">
         <span className="label">설명</span>
-        <textarea className="min-h-32 border border-line-strong bg-bg px-3 py-2" value={description} onChange={(e) => setDescription(e.target.value)}
+        <textarea className="min-h-32 border border-line-strong bg-bg px-3 py-2" value={description} onChange={(e) => { setDescription(e.target.value); setHandEdited(true); }}
           maxLength={DESCRIPTION_MAX} disabled={readOnly} readOnly={draft.drafting} aria-busy={draft.drafting}
           aria-describedby={readOnly ? "read-only-note" : canDraft ? "draft-note" : undefined} />
       </label>
@@ -119,9 +128,19 @@ export function EditProductForm({ product }: { product: CatalogProduct }) {
                 <button type="button" className="btn" onClick={draft.stop}>멈추기</button>
               </>
             ) : (
-              <button type="button" className="btn" onClick={() => void draft.start(keywords)}>설명 초안 만들기</button>
+              <button type="button" className="btn" onClick={() => startDraft()}>설명 초안 만들기</button>
             )}
           </p>
+          {confirmOverwrite && (
+            <div role="alertdialog" aria-labelledby="overwrite-title" aria-describedby="overwrite-desc" className="grid gap-2 border border-line-strong p-3">
+              <p id="overwrite-title" className="label">저장하지 않은 설명</p>
+              <p id="overwrite-desc" className="text-sm">손으로 고친 설명이 아직 저장되지 않았습니다. 초안을 만들면 설명 칸을 덮어씁니다.</p>
+              <p className="flex gap-2">
+                <button type="button" className="btn" onClick={() => startDraft(true)}>덮어쓰기</button>
+                <button type="button" className="btn" onClick={() => setConfirmOverwrite(false)}>취소</button>
+              </p>
+            </div>
+          )}
           {draft.draftError && <p role="alert" className="alert" data-testid="draft-error">{draft.draftError}</p>}
         </section>
       )}
