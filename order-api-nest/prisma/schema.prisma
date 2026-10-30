@@ -135,6 +135,8 @@ model ProductSearch {
 model SearchDirty {
   productId Int      @id @map("product_id")
   markedAt  DateTime @default(now()) @map("marked_at")
+  version   BigInt   @default(autoincrement()) // 기록할 때마다 새 값(0029). 가져간 version 그대로인 행만 지운다
+  claimedAt DateTime? @map("claimed_at")
 
   @@map("search_dirty")
 }

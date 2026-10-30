@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { ValidationPipe } from "@nestjs/common";
+import { Logger, ValidationPipe } from "@nestjs/common";
 import { HttpAdapterHost } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { Test } from "@nestjs/testing";
@@ -8,6 +8,7 @@ import cookieParser from "cookie-parser";
 import { Redis } from "ioredis";
 import { AppModule } from "../src/app.module.js";
 import { hashPassword } from "../src/auth/password.js";
+import { LeaderElection } from "../src/leader/leader-election.js";
 import { SearchIndexJob } from "../src/leader/search-index.job.js";
 import { PrismaExceptionFilter } from "../src/prisma/prisma-exception.filter.js";
 import { SEARCH_ENGINE, type SearchEngine } from "../src/search/search-engine.js";
@@ -140,6 +141,40 @@ describe("상품 검색 API", () => {
       expect(await dirtyCount()).toBe(0);
     });
 
+    it("색인하는 동안의 상품 수정·카테고리 변경은 기다리지 않고, 그 변경은 남아 다음 회차에 반영된다", async () => {
+      const id = ids["여행용 가방"]!;
+      expect((await patch(id, { name: "캠핑 배낭" })).status).toBe(200);
+      const index = engine.index.bind(engine);
+      let entered!: () => void;
+      let release!: () => void;
+      const inIndex = new Promise<void>((r) => (entered = r));
+      const gate = new Promise<void>((r) => (release = r));
+      vi.spyOn(engine, "index").mockImplementationOnce(async (productIds) => {
+        await index(productIds); // "캠핑 배낭"을 색인한 뒤
+        entered();
+        await gate; // 반영이 끝나기 전에 멈춘다
+      });
+      const round = job.indexOnce();
+      await inIndex;
+
+      const within = <T>(p: Promise<T>) => Promise.race([p, new Promise<"기다림">((r) => setTimeout(() => r("기다림"), 2000))]);
+      expect(await within(patch(id, { name: "등산 배낭" }).then((r) => r.status))).toBe(200);
+      expect(await within(adminDb.category.update({ where: { id: 2 }, data: { name: "오디오" } }).then(() => "끝"))).toBe("끝");
+      release();
+      await round;
+
+      const doc = await adminDb.$queryRaw<{ name: string }[]>`SELECT name FROM product_search WHERE product_id = ${id}`;
+      expect(doc).toEqual([{ name: "캠핑 배낭" }]); // 이번 회차는 가져간 뒤 읽은 값
+      const left = await adminDb.$queryRaw<{ product_id: number }[]>`SELECT product_id FROM search_dirty ORDER BY product_id`;
+      expect(left.map((r) => r.product_id)).toEqual([id, ids["블루투스 이어폰"], ids["블루투스 스피커"], ids["유선 이어폰"]].sort((a, b) => a! - b!));
+
+      await job.indexOnce();
+      expect(await names("등산")).toEqual(["등산 배낭"]);
+      expect(await names("캠핑")).toEqual([]);
+      expect(await names("오디오")).toHaveLength(3);
+      expect(await dirtyCount()).toBe(0);
+    });
+
     it("상품을 지우면 색인에서도 빠진다", async () => {
       await adminDb.product.delete({ where: { id: ids["유선 이어폰"] } });
       await job.indexOnce();
@@ -154,8 +189,13 @@ describe("상품 검색 API", () => {
       await expect(job.indexOnce()).rejects.toThrow("색인 엔진이 응답하지 않음");
       expect(await dirtyCount()).toBe(1);
 
-      vi.spyOn(engine, "index").mockRejectedValueOnce(new Error("또 실패"));
-      await expect(job.run()).resolves.toBeUndefined(); // 리더 타이머 경로는 예외를 삼키고 로그만 남긴다
+      // 리더 타이머 경로는 예외를 삼키고, 원인(code·meta·cause)이 보이는 경고를 남긴다
+      vi.spyOn(app.get(LeaderElection), "isLeader", "get").mockReturnValue(true);
+      const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => {});
+      const prismaLike = Object.assign(new Error(""), { name: "PrismaClientKnownRequestError", code: "P2010", meta: { driverAdapterError: "ConnectionClosed" }, cause: new Error("connection terminated") });
+      vi.spyOn(engine, "index").mockRejectedValueOnce(prismaLike);
+      await expect(job.run()).resolves.toBeUndefined();
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/검색 색인 실패.*code=P2010.*ConnectionClosed.*cause=\[Error: connection terminated\]/));
       expect((await search("가방")).status).toBe(200);
       expect((await patch(ids["여행용 가방"]!, { price: 12_000 })).status).toBe(200);
       expect(await dirtyCount()).toBe(1);
