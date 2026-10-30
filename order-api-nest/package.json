@@ -28,7 +28,8 @@
     "start:traced": "node --env-file=.env --import ./dist/instrumentation.js dist/main.js",
     "search:reindex": "tsx scripts/search-reindex.ts",
     "search:bench": "tsx scripts/search-bench.ts",
-    "payments:resolve-refunds": "tsx scripts/resolve-refunds.ts"
+    "payments:resolve-refunds": "tsx scripts/resolve-refunds.ts",
+    "payments:reconcile": "tsx scripts/reconcile.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1149.0",

@@ -109,6 +109,30 @@ export class StripeGateway implements PaymentGateway {
     };
   }
 
+  // 기간 안에 만들어진 PaymentIntent(GET /v1/payment_intents?created[gte]&created[lt])와 환불(GET /v1/refunds?created[...])을
+  // starting_after로 끝까지 읽고, 그 결제들을 fetchPayment로 다시 읽는다(환불 합계가 결제마다 필요하다)
+  async listTransactions(period: { from: Date; to: Date }): Promise<PgPayment[]> {
+    const created = { gte: Math.floor(period.from.getTime() / 1000), lt: Math.floor(period.to.getTime() / 1000) };
+    const ids = new Set<string>();
+    let after: string | undefined;
+    do {
+      const page = await call(() => this.stripe.paymentIntents.list({ created, limit: 100, ...(after ? { starting_after: after } : {}) }));
+      for (const pi of page.data) if (pi.status === "succeeded" || pi.status === "canceled") ids.add(pi.id);
+      after = page.has_more ? page.data.at(-1)?.id : undefined;
+    } while (after);
+    do {
+      const page = await call(() => this.stripe.refunds.list({ created, limit: 100, ...(after ? { starting_after: after } : {}) }));
+      for (const r of page.data) {
+        const pi = typeof r.payment_intent === "string" ? r.payment_intent : r.payment_intent?.id;
+        if (pi) ids.add(pi);
+      }
+      after = page.has_more ? page.data.at(-1)?.id : undefined;
+    } while (after);
+    const payments: PgPayment[] = [];
+    for (const id of ids) payments.push(await this.fetchPayment(id));
+    return payments.filter((p) => p.approvedAt); // 결제되지 않고 취소된 PaymentIntent는 빼고
+  }
+
   async refund(paymentKey: string, input: { amount: number; reason: string; refundId: number }, idempotencyKey: string): Promise<PgRefund> {
     const refund = await call(() =>
       this.stripe.refunds.create(

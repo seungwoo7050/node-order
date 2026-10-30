@@ -7,6 +7,8 @@ import { OrphanImageCleanupJob } from "./orphan-image-cleanup.job.js";
 import { TokenCleanupJob } from "./token-cleanup.job.js";
 import { DemoUserCleanupJob } from "./demo-user-cleanup.job.js";
 import { SearchIndexJob } from "./search-index.job.js";
+import { ReconciliationModule } from "../reconciliation/reconciliation.module.js";
+import { ReconciliationJob } from "./reconciliation.job.js";
 
-@Module({ imports: [SearchModule, FulfillmentModule], providers: [LeaderElection, TokenCleanupJob, OrphanImageCleanupJob, DemoUserCleanupJob, SearchIndexJob, FulfillmentJob] })
+@Module({ imports: [SearchModule, FulfillmentModule, ReconciliationModule], providers: [LeaderElection, TokenCleanupJob, OrphanImageCleanupJob, DemoUserCleanupJob, SearchIndexJob, FulfillmentJob, ReconciliationJob] })
 export class LeaderModule {}

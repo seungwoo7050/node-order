@@ -1,10 +1,13 @@
 // 토스페이먼츠 시뮬레이터(테스트 대역). 키 없이 토스 결제를 끝까지 돌리고, 실패를 주입한다.
 //   코어 API: POST /v1/payments/confirm, GET /v1/payments/{paymentKey}, GET /v1/payments/orders/{orderId},
-//            POST /v1/payments/{paymentKey}/cancel  (Basic 인증, Idempotency-Key, 오류 본문 { code, message })
+//            POST /v1/payments/{paymentKey}/cancel, GET /v1/transactions?startDate&endDate&startingAfter&limit
+//            (Basic 인증, Idempotency-Key, 오류 본문 { code, message })
+//   거래 조회: 승인과 취소가 따로 한 행(transactionKey로 구분). 날짜 인자는 yyyy-MM-dd'T'HH:mm:ss 한국 시각, 끝을 포함한다
 //   결제위젯: GET /v2/standard 가 window.TossPayments를 흉내 내는 가짜 SDK를 준다. requestPayment는 이 서버의
 //            결제창(/widget/pay)으로 가고, 승인하면 successUrl?paymentKey&orderId&amount로 돌려보낸다
-//   제어(테스트용, /__sim): authorize(결제창 없이 인증), faults(실패 주입: timeout, already_processed, amount_mismatch, unavailable), calls(호출 수), status(PG 쪽 상태 바꾸기),
-//            webhook(PAYMENT_STATUS_CHANGED 보내기), reset
+//   제어(테스트용, /__sim): authorize(결제창 없이 인증), faults(실패 주입: timeout, already_processed, amount_mismatch, unavailable, internal(500)),
+//            calls(호출 수), status(PG 쪽 상태 바꾸기), webhook(PAYMENT_STATUS_CHANGED 보내기), reset,
+//            대사용 불일치 심기: payments(PG에만 있는 결제), payments/{key}/patch(금액·잔액·상태·취소 고치기), payments/{key}/delete(PG에서 지우기)
 // 실행: SIM_PORT=4200 SIM_API_URL=http://localhost:4000 node scripts/toss-sim.mjs  (SIM_PORT=0이면 빈 포트)
 import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
@@ -13,12 +16,16 @@ const PORT = Number(process.env.SIM_PORT ?? 4200);
 const API = process.env.SIM_API_URL ?? "http://localhost:4000";
 
 const payments = new Map(); // paymentKey → Payment
+let transactions = []; // 거래 조회용: 승인·취소 한 건마다 한 행(시간순)
 const idempotent = new Map(); // "METHOD path key" → { status, body } | "processing"
 let faults = []; // { op, kind, delayMs, times }
-let calls = { confirm: 0, fetch: 0, cancel: 0 };
+let calls = { confirm: 0, fetch: 0, cancel: 0, transactions: 0 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const now = () => new Date().toISOString().replace("Z", "+09:00");
+// 한국 시각 + 오프셋 표기(실제 API처럼 2026-10-30T13:00:00+09:00)
+const KST_MS = 9 * 3600_000;
+const kstLocal = (ms) => new Date(ms + KST_MS).toISOString().slice(0, 19);
+const now = () => `${kstLocal(Date.now())}+09:00`;
 const newKey = (prefix) => `${prefix}${Date.now().toString(36)}${randomBytes(6).toString("hex")}`;
 
 async function readBody(req) {
@@ -62,7 +69,27 @@ function confirm(body) {
   if (p.orderId !== body.orderId) return error(400, "INVALID_REQUEST", "주문번호가 인증된 결제와 다릅니다.");
   if (Number(body.amount) !== p.totalAmount) return error(400, "INVALID_REQUEST", "결제 금액이 인증된 금액과 다릅니다.");
   Object.assign(p, { status: "DONE", approvedAt: now() });
+  record(p, p.lastTransactionKey = newKey("tx_"), p.totalAmount);
   return { status: 200, body: p };
+}
+
+function record(p, transactionKey, amount) {
+  transactions.push({
+    mId: "tvivarepublica", transactionKey, paymentKey: p.paymentKey, orderId: p.orderId, method: p.method, customerKey: "sim-customer",
+    useEscrow: false, receiptUrl: null, status: p.status, transactionAt: now(), currency: "KRW", amount,
+  });
+}
+
+// startDate·endDate(한국 시각, 끝 포함) 안의 거래. startingAfter 뒤부터 limit개
+function listTransactions(q) {
+  const start = q.get("startDate"), end = q.get("endDate");
+  if (!start || !end) return error(400, "INVALID_REQUEST", "startDate, endDate가 필요합니다.");
+  const limit = Math.min(5000, Math.max(1, Number(q.get("limit") ?? 100)));
+  const at = (t) => t.transactionAt.slice(0, 19);
+  let rows = transactions.filter((t) => at(t) >= start && at(t) <= end);
+  const after = q.get("startingAfter");
+  if (after) rows = rows.slice(rows.findIndex((t) => t.transactionKey === after) + 1);
+  return { status: 200, body: rows.slice(0, limit) };
 }
 
 function cancel(paymentKey, body) {
@@ -75,10 +102,12 @@ function cancel(paymentKey, body) {
   if (!(amount > 0) || amount > p.balanceAmount) return error(403, "NOT_CANCELABLE_AMOUNT", "취소 할 수 없는 금액 입니다.");
   p.balanceAmount -= amount;
   p.status = p.balanceAmount === 0 ? "CANCELED" : "PARTIAL_CANCELED";
+  const transactionKey = newKey("tx_");
   p.cancels = [...(p.cancels ?? []), {
-    transactionKey: newKey("tx_"), cancelAmount: amount, cancelReason: body.cancelReason, taxFreeAmount: 0,
+    transactionKey, cancelAmount: amount, cancelReason: body.cancelReason, taxFreeAmount: 0,
     refundableAmount: p.balanceAmount, canceledAt: now(), cancelStatus: "DONE",
   }];
+  record(p, transactionKey, amount);
   return { status: 200, body: p };
 }
 
@@ -103,9 +132,10 @@ async function core(req, res, op, path, run) {
   if (fault?.kind === "already_processed") result = error(400, "ALREADY_PROCESSED_PAYMENT", "이미 처리된 결제 입니다.");
   else if (fault?.kind === "amount_mismatch") result = error(400, "INVALID_REQUEST", "결제 금액이 인증된 금액과 다릅니다.");
   else if (fault?.kind === "unavailable") result = error(503, "FAILED_INTERNAL_SYSTEM_PROCESSING", "내부 시스템 처리 작업이 실패했습니다.");
+  else if (fault?.kind === "internal") result = error(500, "FAILED_INTERNAL_SYSTEM_PROCESSING", "내부 시스템 처리 작업이 실패했습니다.");
   else result = run(await readBody(req));
   // unavailable: 요청이 처리 전에 떨어졌다(멱등 결과를 남기지 않는다 - 같은 키로 다시 보내면 처리된다)
-  if (cacheKey && fault?.kind === "unavailable") idempotent.delete(cacheKey);
+  if (cacheKey && (fault?.kind === "unavailable" || fault?.kind === "internal")) idempotent.delete(cacheKey);
   else if (cacheKey) idempotent.set(cacheKey, { status: result.status, body: structuredClone(result.body) });
   // 시간 초과: 처리는 끝냈지만(돈은 움직였다) 응답이 늦게 간다
   if (fault?.kind === "timeout") await sleep(fault.delayMs ?? 5000);
@@ -202,6 +232,7 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.method === "POST" && path === "/v1/payments/confirm") return core(req, res, "confirm", path, confirm);
+    if (req.method === "GET" && path === "/v1/transactions") return core(req, res, "transactions", path, () => listTransactions(url.searchParams));
     let m = path.match(/^\/v1\/payments\/orders\/([^/]+)$/);
     if (req.method === "GET" && m) {
       return core(req, res, "fetch", path, () => {
@@ -232,8 +263,9 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && path === "/__sim/reset") {
       payments.clear();
       idempotent.clear();
+      transactions = [];
       faults = [];
-      calls = { confirm: 0, fetch: 0, cancel: 0 };
+      calls = { confirm: 0, fetch: 0, cancel: 0, transactions: 0 };
       return send(res, 200, { ok: true });
     }
     m = path.match(/^\/__sim\/payments\/([^/]+)\/status$/);
@@ -242,6 +274,32 @@ const server = createServer(async (req, res) => {
       if (!p) return send(res, 404, { code: "NOT_FOUND_PAYMENT" });
       p.status = (await readBody(req)).status;
       return send(res, 200, p);
+    }
+    // 대사 테스트: PG에만 있는 결제(우리 DB에 없다). 승인 거래도 남긴다
+    if (req.method === "POST" && path === "/__sim/payments") {
+      const b = await readBody(req);
+      const paymentKey = authorize(b.orderId ?? `sim-only-${Date.now()}`, Number(b.amount ?? 10000), "PG에만 있는 결제");
+      const p = payments.get(paymentKey);
+      Object.assign(p, { status: "DONE", approvedAt: now() });
+      record(p, newKey("tx_"), p.totalAmount);
+      return send(res, 200, p);
+    }
+    // 대사 테스트: PG 쪽 값 고치기(totalAmount, balanceAmount, status, cancelAmounts = 취소 금액을 차례로 바꾼다)
+    m = path.match(/^\/__sim\/payments\/([^/]+)\/patch$/);
+    if (req.method === "POST" && m) {
+      const p = payments.get(m[1]);
+      if (!p) return send(res, 404, { code: "NOT_FOUND_PAYMENT" });
+      const b = await readBody(req);
+      for (const k of ["totalAmount", "balanceAmount", "status"]) if (b[k] !== undefined) p[k] = b[k];
+      if (Array.isArray(b.cancelAmounts)) b.cancelAmounts.forEach((a, i) => { if (p.cancels?.[i]) p.cancels[i].cancelAmount = a; });
+      return send(res, 200, p);
+    }
+    // 대사 테스트: PG가 모르는 결제로 만들기(결제와 그 거래를 지운다)
+    m = path.match(/^\/__sim\/payments\/([^/]+)\/delete$/);
+    if (req.method === "POST" && m) {
+      payments.delete(m[1]);
+      transactions = transactions.filter((t) => t.paymentKey !== m[1]);
+      return send(res, 200, { ok: true });
     }
     if (req.method === "POST" && path === "/__sim/webhook") {
       const b = await readBody(req);
