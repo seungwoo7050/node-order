@@ -13,7 +13,7 @@ export const FILTERED = "[Filtered]";
 
 const SECRET_KEY = /(authorization|cookie|token|secret|password|passwd|api[-_]?key|session|signature|dsn)/i;
 const CONTACT_KEY = /^(email|e-mail|phone|mobile|tel|contact|address|recipient|ip_address)$/i;
-const KEEP_KEYS = new Set(["event_id", "trace_id", "span_id", "parent_span_id", "release", "environment", "timestamp", "start_timestamp", "platform", "level", "type", "filename", "abs_path", "module", "function", "lineno", "colno", "in_app"]);
+const KEEP_KEYS = new Set(["modules", "event_id", "trace_id", "span_id", "parent_span_id", "release", "environment", "timestamp", "start_timestamp", "platform", "level", "type", "filename", "abs_path", "module", "function", "lineno", "colno", "in_app"]);
 
 const TOKEN_PATTERNS: RegExp[] = [
   /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, // Authorization 헤더 값
@@ -25,10 +25,14 @@ const TOKEN_PATTERNS: RegExp[] = [
   /\bgh[pousr]_[A-Za-z0-9]{20,}/g, // GitHub 토큰
 ];
 
+// 글에 섞인 도로명 주소: "서울특별시 강남구 테헤란로 123 101동 202호" → "서울특별시 강남구 ***"(maskAddress처럼 시·구까지만).
+// 앞에 시·도·구·군 낱말이 있어야 한다("무선 이어폰 프로 2" 같은 상품 이름을 가리지 않게)
+const ROAD_ADDRESS = /((?:[가-힣]+(?:특별시|광역시|특별자치시|특별자치도|시|도|구|군)\s+){1,3})[가-힣\d]+(?:로|길)(?:\s?\d+(?:-\d+)?)?(?:,?\s?[\d가-힣-]*\d[\d가-힣-]*(?:동|호|층))*/g;
+
 export function scrubText(text: string): string {
   let out = text; // 토큰을 먼저 지운다(토큰 속 숫자가 전화번호처럼 반만 가려지지 않게)
   for (const re of TOKEN_PATTERNS) out = out.replace(re, FILTERED);
-  return maskContacts(out);
+  return maskContacts(out).replace(ROAD_ADDRESS, (_m, head: string) => `${head}***`);
 }
 
 function scrubValue(value: unknown, key: string | undefined, depth: number): unknown {
