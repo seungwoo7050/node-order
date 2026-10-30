@@ -33,9 +33,11 @@ export const useCartStore = create<CartState>()(
       // 배송지가 바뀌면 다른 요청이므로 멱등 키를 새로 만든다(같은 키로 다른 내용을 보내면 422)
       // 고치는 사람에게 보이지 않는 배송지(남이 쓴 것, 세션 만료 뒤 인증이 없을 때)는 이어 쓰지 않고 빈 칸에서 시작한다:
       // 그러지 않으면 앞 사람의 연락처·주소가 null(로그인 전) 소유로 바뀌어 다음에 로그인한 사람에게 넘어간다
+      // 인증을 확인하는 동안(새로고침 직후)에는 소유자가 있는 배송지를 건드리지 않는다(화면은 칸을 잠근다)
       setShipping: (patch) =>
         set((state) => {
-          const token = useAuthStore.getState().accessToken;
+          const { accessToken: token, status } = useAuthStore.getState();
+          if (status === "checking" && typeof state.shippingOwner === "string") return {};
           return { checkoutKey: null, shipping: { ...shippingFor(state, token), ...patch }, shippingOwner: tokenSubject(token) };
         }),
       // 로그아웃할 때 배송지 원문(연락처·주소)을 이 브라우저에서 지운다. 담은 상품은 남긴다

@@ -2,8 +2,8 @@
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState } from "react";
-import { ApiError, authFetch } from "@/lib/api-client";
+import { useEffect, useState } from "react";
+import { ApiError, authFetch, refreshAccessToken } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/auth-store";
 import { shippingFor, useCartStore } from "@/lib/cart-store";
 import { defaultProvider, featuresOptions, providerLabel, providerNote, type PaymentProvider } from "@/lib/features";
@@ -31,6 +31,11 @@ export default function CartPage() {
   const remove = useCartStore((s) => s.remove);
   // 소유자가 있는 배송지는 그 사람이 인증돼 있을 때만 보인다(세션 만료 뒤 앞 사람의 배송지를 보이지 않는다)
   const accessToken = useAuthStore((s) => s.accessToken);
+  // 새로고침 직후에는 토큰이 없어 누구인지 모른다: 갱신을 한 번 해 보고, 그동안 배송지 칸을 잠근다(지우지도 덮어쓰지도 않게)
+  const checkingAuth = useAuthStore((s) => s.status === "checking");
+  useEffect(() => {
+    if (useAuthStore.getState().status === "checking") void refreshAccessToken().catch(() => {});
+  }, []);
   const shipping = useCartStore((s) => shippingFor(s, accessToken));
   const setShipping = useCartStore((s) => s.setShipping);
   const online = useOnline();
@@ -104,8 +109,9 @@ export default function CartPage() {
             ))}
           </ul>
           <aside aria-label="결제" className="lg:sticky lg:top-6"><form onSubmit={(e) => { e.preventDefault(); checkout.mutate(); }}>
-            <fieldset className="mb-6" data-testid="shipping-form">
+            <fieldset className="mb-6" data-testid="shipping-form" disabled={checkingAuth} aria-busy={checkingAuth}>
               <legend className="label mb-2">배송지</legend>
+              {checkingAuth && <p role="status" className="mb-2 text-[0.78rem] text-muted">로그인 상태를 확인하는 중입니다…</p>}
               {SHIPPING_FIELDS.map((f) => (
                 <label key={f.name} className="mb-2 block text-sm">
                   <span className="mb-1 block text-[0.78rem] text-muted">{f.label}{f.required ? "" : " (선택)"}</span>
