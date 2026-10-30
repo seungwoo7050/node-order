@@ -220,6 +220,8 @@ Execution Time: 5.082 ms
   - 읽기(`readOnlyHint`): `list_pending_work`, `search_orders`, `get_order`, `list_low_stock`, `list_zero_result_searches`, `list_reconciliation_issues`
   - 바꾸기: `register_shipment`, `mark_delivered`, `reject_return`, 돈·재고(`destructiveHint`) `approve_return`, `adjust_stock`. 상태 전이가 거부되면 `isError`와 `currentStatus`
 - 인증은 개인 접근 토큰(Bearer, `nop_…`). 화면 `/admin/mcp`나 `npm run mcp:token`으로 발급하고 원문은 그때 한 번만 보인다(DB에는 sha256). 범위 `read`·`write`·`pii`와 만료, 폐기. 없거나 폐기·만료된 토큰은 401. 데모 관리자가 발급하면 `read`만
+- JSON-RPC 배열 요청은 400, 도구 호출은 토큰마다 분당 60번(`MCP_RATE_LIMIT_PER_MINUTE`, Redis가 안 되면 프로세스 안에서 센다). 성공 결과는 `{ untrustedFields, notice, data }`로, 손님·외부가 쓴 칸(검색어, 반품 사유, 배송지·메모, 상품 이름, PG 값)의 경로를 머리에 싣는다. 초안 프롬프트는 칸마다 태그로 감싸고 `< > &`를 이스케이프한다
+- 남은 위험: untrusted 표시와 이스케이프는 모델에게 무엇이 데이터인지 알릴 뿐 지시를 따르지 않게 강제하지 못하므로, write 도구는 사람이 MCP 클라이언트에서 확인한 뒤 부르게 하고 감사 로그로 되짚는다
 - `pii` 범위가 없으면 손님 연락처·주소는 29의 규칙으로 가린다. 모든 도구 호출은 `mcp_audit_log`에 한 행(토큰, 도구, 연락처를 가린 인자, 성공·실패, 시각)이 남고 `/admin/mcp`에서 본다
 - 상품 설명 초안: 상품 수정 화면의 "설명 초안 만들기"가 `POST /admin/products/:id/description-draft`(SSE: `delta`·`done`·`error`)를 읽어 설명 칸에 흘려 넣는다. 저장은 판매자가 누를 때만. 입력은 이름·카테고리 경로·가격·기존 설명·키워드. 연결이 끊기면 공급자 호출도 끊고, 관리자당 분당 5번(`LLM_RATE_LIMIT_PER_MINUTE`), 토큰 수는 `llm_tokens_total`
 - 생성은 `LlmProvider` 뒤의 Anthropic SDK(기본 `claude-haiku-4-5`, `LLM_MODEL`). `LLM_API_KEY`가 없으면 `features.llm`이 false, 버튼이 숨고 엔드포인트는 404. 키 없이 웹 e2e를 돌리면 with-api가 `order-api-nest/scripts/llm-sim.mjs`(4300)를 띄워 `LLM_BASE_URL`로 보낸다

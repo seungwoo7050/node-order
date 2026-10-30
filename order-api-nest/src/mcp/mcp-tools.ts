@@ -15,6 +15,7 @@ import { ISSUE_KINDS, type IssueKind } from "../reconciliation/compare.js";
 import { ReconciliationService } from "../reconciliation/reconciliation.service.js";
 import { SearchStats } from "../search/search-stats.js";
 import type { McpPrincipal, Scope } from "./access-tokens.js";
+import { withUntrusted } from "./untrusted.js";
 
 // 판매자용 MCP 도구. 도구는 HTTP로 자기 API를 다시 부르지 않고 REST 컨트롤러가 쓰는 서비스를 그대로 부른다
 // (28 상태 기계·27 환불은 FulfillmentService, 29 대시보드·대사, 26 검색 통계).
@@ -67,7 +68,8 @@ export function registerSellerTools(server: McpServer, principal: McpPrincipal, 
         return json({ error: `이 토큰에는 ${scope} 범위가 없어 ${name}을(를) 부를 수 없습니다`, requiredScope: scope }, true);
       }
       try {
-        return json(view(await run(args)));
+        // 성공 결과: { untrustedFields(손님·외부가 쓴 칸의 경로), notice, data }
+        return json(withUntrusted(view(await run(args))));
       } catch (err) {
         return toolError(err);
       }
