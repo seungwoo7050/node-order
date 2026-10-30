@@ -3,6 +3,7 @@ import { FulfillmentService } from "../src/fulfillment/fulfillment.service.js";
 import { DAY_MS } from "../src/fulfillment/policy.js";
 import { FakeMailer } from "../src/mail/fake-mailer.js";
 import { PaymentGateways } from "../src/payments/payment-gateways.js";
+import { TossGateway } from "../src/payments/toss.gateway.js";
 import { resolveStaleRefunds } from "../src/payments/refund-resolver.js";
 import { RefundsService } from "../src/payments/refunds.service.js";
 import { PrismaService } from "../src/prisma/prisma.service.js";
@@ -358,15 +359,69 @@ describe("주문 이행 - 배송·취소·반품·교환", () => {
         history: await adminDb.orderStatusHistory.count(),
         notices: await adminDb.outboxEvent.count({ where: { type: "order.delivered" } }),
       });
-      expect(await service.autoAdvance(now)).toEqual({ delivered: 1, confirmed: 1, returnsCompleted: 0 });
+      expect(await service.autoAdvance(now)).toMatchObject({ delivered: 1, confirmed: 1, returnsCompleted: 0 });
       const once = await snapshot();
       expect(once.statuses).toEqual(["delivered", "shipped", "confirmed", "delivered", "delivered"]);
-      expect(await service.autoAdvance(now)).toEqual({ delivered: 0, confirmed: 0, returnsCompleted: 0 });
+      expect(await service.autoAdvance(now)).toEqual({ expired: 0, paidOnRecheck: 0, delivered: 0, confirmed: 0, returnsCompleted: 0 });
       expect(await snapshot()).toEqual(once);
       // 방금 배송 완료가 된 주문은 그 시각부터 7일을 센다
       expect(await adminDb.order.findUniqueOrThrow({ where: { id: shippedOld } })).toMatchObject({ deliveredAt: now, statusChangedAt: now });
       expect(await adminDb.orderStatusHistory.findFirstOrThrow({ where: { orderId: shippedOld, toStatus: "delivered" } })).toMatchObject({ actorType: "system", createdAt: now });
       expect(await service.autoAdvance(new Date(now.getTime() + 7 * DAY_MS))).toMatchObject({ delivered: 1, confirmed: 2 });
+    });
+  });
+
+  describe("결제 기한(시계 주입)", () => {
+    const HOUR_MS = 60 * 60 * 1000;
+    const startToss = async () => {
+      const started = await user().post("/orders/checkout", { items: [{ productId: 1, quantity: 2 }], shipping: SHIPPING, provider: "toss" });
+      expect(started.status).toBe(201);
+      return { id: started.body.id as number, payment: await paymentOf(started.body.id) };
+    };
+
+    it("pending_payment가 24시간을 넘으면 canceled + 재고 복구, 두 번 돌려도 한 번. 24시간 전 주문은 그대로", async () => {
+      const old = await startToss();
+      const fresh = await startToss();
+      expect(await stock()).toBe(6);
+      const now = new Date(Date.now() + 24 * HOUR_MS + 60_000); // old·fresh 모두 만든 지 24시간 1분
+      await adminDb.order.update({ where: { id: fresh.id }, data: { createdAt: new Date(now.getTime() - 23 * HOUR_MS) } });
+      const service = app.get(FulfillmentService);
+      expect(await service.autoAdvance(now)).toMatchObject({ expired: 1, paidOnRecheck: 0 });
+      expect(await service.autoAdvance(now)).toMatchObject({ expired: 0, paidOnRecheck: 0 });
+      expect(await statusOf(old.id)).toBe("canceled");
+      expect(await statusOf(fresh.id)).toBe("pending_payment");
+      expect(await stock()).toBe(8);
+      expect((await paymentOf(old.id)).status).toBe("canceled");
+      expect(await adminDb.orderStatusHistory.findMany({ where: { orderId: old.id } })).toMatchObject([
+        { fromStatus: "pending_payment", toStatus: "canceled", actorType: "system", createdAt: now },
+      ]);
+      expect((await sim.calls()).fetch).toBeGreaterThan(0); // 취소하기 전에 PG에 물었다
+    });
+
+    it("PG에서 이미 승인된 결제(승인 응답을 잃음)는 취소하지 않고 결제 완료로 반영한다", async () => {
+      const lost = await startToss();
+      const { paymentKey } = await sim.post<{ paymentKey: string }>("/__sim/authorize", { orderId: lost.payment.providerOrderId, amount: lost.payment.amount });
+      await app.get(TossGateway).confirm({ providerOrderId: lost.payment.providerOrderId, amount: lost.payment.amount, paymentKey }, "lost-confirm");
+      expect((await paymentOf(lost.id)).status).toBe("ready");
+      const now = new Date(Date.now() + 25 * HOUR_MS);
+      const service = app.get(FulfillmentService);
+      expect(await service.autoAdvance(now)).toMatchObject({ expired: 0, paidOnRecheck: 1 });
+      expect(await service.autoAdvance(now)).toMatchObject({ expired: 0, paidOnRecheck: 0 });
+      expect(await statusOf(lost.id)).toBe("paid");
+      expect(await paymentOf(lost.id)).toMatchObject({ status: "paid", providerPaymentKey: paymentKey });
+      expect(await stock()).toBe(8); // 재고는 결제된 주문의 것이라 돌려놓지 않는다
+      expect(await adminDb.outboxEvent.count({ where: { type: "order.paid" } })).toBe(1);
+    });
+
+    it("PG 조회가 실패하면 취소하지 않고 다음 회차에 다시 본다", async () => {
+      const o = await startToss();
+      await sim.fault("fetch", "unavailable");
+      const now = new Date(Date.now() + 25 * HOUR_MS);
+      const service = app.get(FulfillmentService);
+      expect(await service.autoAdvance(now)).toMatchObject({ expired: 0 });
+      expect(await statusOf(o.id)).toBe("pending_payment");
+      expect(await service.autoAdvance(now)).toMatchObject({ expired: 1 });
+      expect(await stock()).toBe(10);
     });
   });
 
