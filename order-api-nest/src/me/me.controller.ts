@@ -6,7 +6,7 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import { PageQueryDto } from "../pagination/page-query.dto.js";
 import { PAGE_QUERY } from "../pagination/page-query.pipe.js";
 import { listMyOrders } from "./my-orders.js";
-import { orderDetailSelect, withPrice } from "./order-select.js";
+import { customerOrderView } from "../fulfillment/views.js";
 
 @ApiTags("me")
 @ApiBearerAuth()
@@ -24,8 +24,9 @@ export class MeController {
   @Get("orders/:id")
   async myOrder(@Param("id", ParseIntPipe) id: number, @Req() req: Request) {
     const userId = (req.user as { userId: string }).userId;
-    const order = await this.prisma.asUser(userId, (tx) => tx.order.findFirst({ where: { id, userId }, select: orderDetailSelect }));
+    // 상태 이력·송장 조회 링크·반품 요청과 구매확정·반품 신청 가능 여부까지 싣는다
+    const order = await this.prisma.asUser(userId, (tx) => customerOrderView(tx, userId, id));
     if (!order) throw new NotFoundException(`order ${id} not found`);
-    return withPrice(order);
+    return order;
   }
 }
