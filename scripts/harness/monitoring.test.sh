@@ -61,4 +61,9 @@ expect 1 "Prometheus 보존 기간이 없으면 막는다" compose "$tmp/no-rete
 awk '/^  alertmanager:/ { am = 1 } am && /mem_limit/ { next } { print }' "$root/deploy/compose.yml" > "$tmp/no-mem.yml"
 expect 1 "Alertmanager 메모리 상한이 없으면 막는다" compose "$tmp/no-mem.yml"
 
+# 규칙의 창이 운영 스크레이프 간격(15s)의 4배 이상
+expect 0 "경보 규칙의 rate·increase 창이 운영 스크레이프 간격의 4배 이상이다" windows "$root/monitoring/alert-rules.yml" "$root/monitoring/prometheus.prod.yml"
+sed 's/\[2m\]/[30s]/g' "$root/monitoring/alert-rules.yml" > "$tmp/short-window.yml"
+expect 1 "창이 [30s](15s 스크레이프에 표본 2개)면 막는다" windows "$tmp/short-window.yml" "$root/monitoring/prometheus.prod.yml"
+
 exit $fail

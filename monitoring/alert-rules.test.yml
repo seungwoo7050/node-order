@@ -22,39 +22,93 @@ tests:
               description: "api:4000의 /metrics를 30초 넘게 가져오지 못했다"
               runbook: docs/runbook.md#apidown
 
-  # ── HighErrorRate: 잠깐 튄 5xx는 안 울림, 계속되면 울림 ──
-  - interval: 5s
+  # ── ApiTargetMissing: 긁을 대상이 없으면(targets.json이 []) up 시계열 자체가 없다 ──
+  - interval: 15s
+    input_series:
+      - series: 'up{job="prometheus", instance="localhost:9090"}'
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ApiTargetMissing
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ApiTargetMissing
+        exp_alerts:
+          - exp_labels: { severity: critical, job: order-api }
+            exp_annotations:
+              summary: "Prometheus가 긁을 order-api가 없다"
+              description: "order-api 대상이 2분 넘게 없다(live/targets.json이 비었거나 틀렸다)"
+              runbook: docs/runbook.md#apitargetmissing
+  - interval: 15s
+    input_series:
+      - series: 'up{job="order-api", instance="api-blue:4000"}'
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ApiTargetMissing
+        exp_alerts: []
+
+  # ── HighErrorRate: 운영 스크레이프 간격(15s). 한 번 튄 5xx는 안 울림, 계속되면 울림 ──
+  - interval: 15s
     input_series:
       - series: 'http_request_duration_seconds_count{route="/products", status_code="200"}'
-        values: "0+50x40"
+        values: "0+40x40"
       - series: 'http_request_duration_seconds_count{route="/products", status_code="500"}'
-        values: "0x4 50 100 100x34"
+        values: "0x8 10 10x31"
     alert_rule_test:
-      - eval_time: 40s
+      - eval_time: 4m
         alertname: HighErrorRate
         exp_alerts: []
-      - eval_time: 100s
+      - eval_time: 8m
         alertname: HighErrorRate
         exp_alerts: []
 
-  - interval: 5s
+  - interval: 15s
     input_series:
       - series: 'http_request_duration_seconds_count{route="/products", status_code="200"}'
-        values: "0+50x40"
+        values: "0+40x40"
       - series: 'http_request_duration_seconds_count{route="/products", status_code="500"}'
-        values: "0+50x40"
+        values: "0+40x40"
     alert_rule_test:
-      - eval_time: 50s
+      - eval_time: 2m
         alertname: HighErrorRate
         exp_alerts: []
-      - eval_time: 100s
+      - eval_time: 6m
         alertname: HighErrorRate
         exp_alerts:
           - exp_labels: { severity: warning }
             exp_annotations:
               summary: "5xx 응답 비율이 높다"
-              description: "최근 30초 5xx 비율 50%"
+              description: "최근 2분 5xx 비율 50%"
               runbook: docs/runbook.md#higherrorrate
+
+  # ── BusinessMetricsStale: 리더의 성공 시각이 멈추면 울림(리더가 아닌 인스턴스의 0은 max가 무시) ──
+  - interval: 1m
+    input_series:
+      - series: 'business_metrics_last_success_timestamp_seconds{job="order-api", instance="api-blue:4000"}'
+        values: "0+60x5 300x20"
+      - series: 'business_metrics_last_success_timestamp_seconds{job="order-api", instance="api-green:4000"}'
+        values: "0x25"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: BusinessMetricsStale
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: BusinessMetricsStale
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: "업무 지표를 계산하지 못하고 있다"
+              description: "마지막 성공 뒤 11m 0s 지났다(업무 경보들이 꺼져 있을 수 있다)"
+              runbook: docs/runbook.md#businessmetricsstale
+  - interval: 1m
+    input_series:
+      - series: 'business_metrics_last_success_timestamp_seconds{job="order-api", instance="api-blue:4000"}'
+        values: "0+60x25"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: BusinessMetricsStale
+        exp_alerts: []
 
   # ── OutboxBacklog ──
   - interval: 30s
@@ -85,6 +139,21 @@ tests:
       - eval_time: 2m
         alertname: ReconciliationMismatch
         exp_alerts: []
+      - eval_time: 5m
+        alertname: ReconciliationMismatch
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: "PG 대사 불일치가 있다"
+              description: "해결되지 않은 대사 불일치 2건"
+              runbook: docs/runbook.md#reconciliationmismatch
+
+  # 리더가 옮겨 가는 동안 게이지가 잠깐 0이 돼도 풀리지 않는다(keep_firing_for)
+  - interval: 1m
+    input_series:
+      - series: 'reconciliation_open_issues{job="order-api", instance="api-blue:4000"}'
+        values: "2 2 2 2 0 0 2 2"
+    alert_rule_test:
       - eval_time: 5m
         alertname: ReconciliationMismatch
         exp_alerts:
@@ -216,22 +285,34 @@ tests:
               description: "가장 오래 기다린 상품이 12m 50s째 색인되지 않았다"
               runbook: docs/runbook.md#searchindexlag
 
-  # ── MailJobsFailing: 실패가 없으면 안 울림, 하나라도 생기면 울림 ──
+  # ── MailJobsFailing: 많이 보내는 중 한두 건 실패는 안 울림, 실패율 10%·3건 이상이 10분 이어지면 울림 ──
   - interval: 1m
     input_series:
+      - series: 'mail_jobs_completed_total{job="order-api", instance="api-blue:4000"}'
+        values: "0+20x60"
       - series: 'mail_jobs_failed_total{job="order-api", instance="api-blue:4000"}'
-        values: "0 0 0 1 1 1"
+        values: "0 0 0 1 1 2 2x55"
     alert_rule_test:
-      - eval_time: 2m
+      - eval_time: 30m
         alertname: MailJobsFailing
         exp_alerts: []
-      - eval_time: 4m
+  - interval: 1m
+    input_series:
+      - series: 'mail_jobs_completed_total{job="order-api", instance="api-blue:4000"}'
+        values: "0+2x60"
+      - series: 'mail_jobs_failed_total{job="order-api", instance="api-blue:4000"}'
+        values: "0+1x60"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: MailJobsFailing
+        exp_alerts: []
+      - eval_time: 45m
         alertname: MailJobsFailing
         exp_alerts:
           - exp_labels: { severity: warning }
             exp_annotations:
-              summary: "메일 발송이 재시도 끝에 실패했다"
-              description: "최근 30분 실패로 끝난 메일 job 1건"
+              summary: "메일 발송이 재시도 끝에 실패하고 있다"
+              description: "최근 30분 메일 job 실패율 33.33%"
               runbook: docs/runbook.md#mailjobsfailing
 
   # ── FulfillmentOverdue: 30분 넘게 이어질 때만 ──
