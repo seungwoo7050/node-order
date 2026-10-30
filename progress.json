@@ -13,13 +13,13 @@
     "note": "Next 16.4.0 빌드가 보안 업그레이드 안내로 불규칙하게 실패한다(재시도하면 통과). 25 첫 커밋에서 16.4.3으로 올린다"
   },
   "current": {
-    "branch": "25-harness",
-    "stage": "guide",
-    "note": "25 가이드 파이프라인 진행 중. 26-search 브리프 확정됨(포트 충돌을 피하려고 가이드가 끝난 뒤 구현 시작)"
+    "branch": "26-search",
+    "stage": "implement",
+    "note": "26 구현 서브에이전트 실행 중. 25 devlog는 병행 작성 중"
   },
   "branches": {
-    "25-harness": "implemented @ dbb96db (verify 통과, 가이드 남음)",
-    "26-search": "brief-confirmed",
+    "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 작성 중)",
+    "26-search": "implementing",
     "27-fulfillment": "todo",
     "28-toss-payments": "todo",
     "29-admin": "todo",
@@ -37,5 +37,8 @@
     "과잉 차단: 저장소 밖 임시 디렉터리 rm -rf도 막는다. 기존 경고가 있는 파일을 고치면 PostToolUse가 exit 2를 낸다",
     "훅은 세션을 연 체크아웃의 .claude/settings.json을 따른다. 원본 체크아웃이 main(24)에 있으면 훅이 꺼진 채로 세션이 열린다",
     "verify의 포트 점유 검사에 가드 테스트가 없다(ORCHESTRATION 6절). 26 구현 때 같이 더한다"
+  ],
+  "deferred": [
+    "학습 저장소의 질문·답·AI 활용 사례(브랜치마다 쓸 것 중 study/interview 쪽): 그 브랜치 작업 트리에 사람의 커밋 안 한 변경이 있어 건드리지 않았다. 사람이 정리한 뒤 25부터 한꺼번에 옮긴다"
   ]
 }
