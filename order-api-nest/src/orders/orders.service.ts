@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { ConflictException, Injectable, Logger, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import { Prisma } from "../generated/prisma/client.js";
 import { NotificationsGateway } from "../notifications/notifications.gateway.js";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -9,10 +9,14 @@ import { shippingFeeFor } from "../fulfillment/policy.js";
 import { cancelUnpaidOrder, manualPayment } from "../payments/cancel-unpaid-order.js";
 import type { ProviderId } from "../payments/payment-gateway.js";
 import { PaymentGateways } from "../payments/payment-gateways.js";
+import { LegalService } from "../admin/legal.service.js";
+import { StoreSettingsService } from "../admin/store-settings.service.js";
+import type { ShippingPolicy } from "../fulfillment/policy.js";
 import { afterOrder, encodeOrderCursor, orderListOrder, toPage, type Page } from "../pagination/cursor.js";
 
 export type Order = { id: number; user: string; price: number; paid: boolean; }
 export type CheckoutResult = Order & { shippingFee: number; items: { productId: number; quantity: number; unitPrice: number }[] };
+type Consent = { version: number; at: Date };
 export type CheckoutResponse = CheckoutResult & { checkoutUrl: string; provider: ProviderId };
 
 const orderSelect = { id: true, userId: true, totalAmount: true, paid: true } as const;
@@ -29,6 +33,8 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsGateway,
     private readonly gateways: PaymentGateways,
+    private readonly settings: StoreSettingsService,
+    private readonly legal: LegalService,
   ) {}
 
   async list(query: { limit: number; cursor?: string; offset?: number; paid?: boolean }): Promise<Page<Order & { createdAt: Date }>> {
@@ -68,9 +74,15 @@ export class OrdersService {
     return Object.fromEntries(rows.map((r) => [r.userId, r._sum.totalAmount ?? 0]));
   }
 
-  async checkout(userId: string, items: CheckoutItemDto[], shipping: ShippingAddressDto, idempotencyKey?: string, provider?: ProviderId): Promise<CheckoutResponse> {
+  async checkout(userId: string, items: CheckoutItemDto[], shipping: ShippingAddressDto, consent: { privacyConsentVersion: number }, idempotencyKey?: string, provider?: ProviderId): Promise<CheckoutResponse> {
     const gateway = this.gateways.pick(provider); // 쓸 수 없는 결제 수단이면 주문을 만들기 전에 400
-    const placed = await this.placeOrReplay(userId, items, trimShipping(shipping), idempotencyKey);
+    // 개인정보 수집·이용(배송지) 동의: 손님이 본 판이 지금 시행 중인 개인정보처리방침이어야 한다(아니면 400, 다시 읽고 동의)
+    const privacy = await this.legal.current("privacy");
+    if (consent.privacyConsentVersion !== privacy.version) {
+      throw new BadRequestException(`개인정보처리방침이 바뀌었습니다(${privacy.version}판). 다시 확인하고 동의해 주세요`);
+    }
+    const policy = await this.settings.shippingPolicy(); // 배송비는 지금 설정으로 계산해 주문에 저장한다(지난 주문은 그대로)
+    const placed = await this.placeOrReplay(userId, items, trimShipping(shipping), { version: privacy.version, at: new Date() }, policy, idempotencyKey);
     const attemptKey = idempotencyKey && createHash("sha256").update(`${userId}:${idempotencyKey}:${placed.id}`).digest("hex");
     try {
       const started = await gateway.startCheckout({ id: placed.id, price: placed.price, name: `주문 #${placed.id}` }, attemptKey);
@@ -99,14 +111,16 @@ export class OrdersService {
     }
   }
 
-  private async placeOrReplay(userId: string, items: CheckoutItemDto[], shipping: ShippingAddressDto, idempotencyKey?: string): Promise<CheckoutResult> {
+  private async placeOrReplay(
+    userId: string, items: CheckoutItemDto[], shipping: ShippingAddressDto, consent: Consent, policy: ShippingPolicy, idempotencyKey?: string,
+  ): Promise<CheckoutResult> {
     const requestHash = createHash("sha256").update(JSON.stringify({ items, shipping })).digest("hex");
     try {
       const result = await this.prisma.asUser(userId, async (tx) => {
         if (idempotencyKey) {
           await tx.idempotencyKey.create({ data: { userId, key: idempotencyKey, requestHash } });
         }
-        const placed = await this.placeOrder(tx, userId, items, shipping);
+        const placed = await this.placeOrder(tx, userId, items, shipping, consent, policy);
         await tx.outboxEvent.create({ data: { type: "order.created", userId, payload: placed } });
         if (idempotencyKey) {
           await tx.idempotencyKey.update({
@@ -133,7 +147,9 @@ export class OrdersService {
     }
   }
 
-  private async placeOrder(tx: Prisma.TransactionClient, userId: string, items: CheckoutItemDto[], shipping: ShippingAddressDto): Promise<CheckoutResult> {
+  private async placeOrder(
+    tx: Prisma.TransactionClient, userId: string, items: CheckoutItemDto[], shipping: ShippingAddressDto, consent: Consent, policy: ShippingPolicy,
+  ): Promise<CheckoutResult> {
     const ids = [...new Set(items.map((i) => i.productId))];
     const products = await tx.$queryRaw<{ id: number; name: string; price: number; stock: number }[]>`
       SELECT id, name, price, stock FROM products WHERE id = ANY(${ids}) ORDER BY id FOR UPDATE`;
@@ -146,10 +162,11 @@ export class OrdersService {
       total += product.price * item.quantity;
     }
     // 배송비는 주문에 따로 저장하고 total_amount에 더한다. PG 승인 금액 대조(27)는 이 total과 비교한다
-    const shippingFee = shippingFeeFor(total);
+    const shippingFee = shippingFeeFor(total, policy);
     const order = await tx.order.create({
       data: {
         userId, totalAmount: total + shippingFee, shippingFee, paid: false, status: "pending_payment", ...shipping,
+        privacyConsentVersion: consent.version, privacyConsentedAt: consent.at,
         items: { create: items.map((i) => ({
           productId: i.productId, quantity: i.quantity, unitPrice: products.find((p) => p.id === i.productId)!.price,
         })) },

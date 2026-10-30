@@ -17,6 +17,9 @@ export async function startPaymentApp(): Promise<{ app: INestApplication; baseUr
 }
 
 // 결제 시작에 필요한 배송지(28). 연락처 원문이 로그에 남지 않는지 보는 테스트도 이 값을 쓴다
+// 결제할 때 동의한 개인정보처리방침 판(29). 테스트 DB의 지금 판은 0033이 넣은 1판이다(판을 늘린 테스트는 끝나면 지운다)
+export const CONSENT = { privacyConsentVersion: 1 };
+
 export const SHIPPING = { recipientName: "김구매", recipientPhone: "010-2345-6789", postalCode: "06236", address1: "서울특별시 강남구 테헤란로 123", address2: "4층", deliveryMemo: "문 앞" };
 
 // 7,000원 상품 하나(배송비 3,000원을 더해 1개 결제 금액이 10,000원), 구매자 kim, 관리자 boss
@@ -39,12 +42,19 @@ export function client(baseUrl: string, token: string) {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    return { status: res.status, body: (await res.json().catch(() => ({}))) as Record<string, any> };
+    return { status: res.status, headers: res.headers, body: (await res.json().catch(() => ({}))) as Record<string, any> };
   };
   return {
     get: (path: string) => call("GET", path),
     post: (path: string, body?: unknown, headers?: Record<string, string>) => call("POST", path, body, headers),
+    put: (path: string, body?: unknown, headers?: Record<string, string>) => call("PUT", path, body, headers),
+    patch: (path: string, body?: unknown, headers?: Record<string, string>) => call("PATCH", path, body, headers),
   };
+}
+
+export async function demoAdminToken(baseUrl: string): Promise<string> {
+  const res = await fetch(`${baseUrl}/auth/demo`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ as: "admin" }) });
+  return ((await res.json()) as { accessToken: string }).accessToken;
 }
 
 export const paymentOf = (orderId: number) => adminDb.payment.findUniqueOrThrow({ where: { orderId } });

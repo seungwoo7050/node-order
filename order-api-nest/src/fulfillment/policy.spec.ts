@@ -8,12 +8,21 @@ describe("배송비 정책", () => {
     expect(shippingFeeFor(50_000)).toBe(0);
     expect(shippingFeeFor(120_000)).toBe(0);
   });
+
+  it("상점 설정의 값으로 계산한다(배송비 2,500원, 3만 원 이상 무료)", () => {
+    const policy = { shippingFee: 2_500, freeShippingThreshold: 30_000 };
+    expect(shippingFeeFor(29_999, policy)).toBe(2_500);
+    expect(shippingFeeFor(30_000, policy)).toBe(0);
+  });
 });
 
 describe("반품 환불액", () => {
   const items = [{ unitPrice: 10_000, quantity: 2 }, { unitPrice: 5_000, quantity: 1 }];
   it("단순변심이면 항목 합계에서 왕복 배송비 6,000원을 뺀다", () => {
     expect(returnRefundAmount(items, "change_of_mind")).toBe(19_000);
+  });
+  it("반품 왕복 배송비도 설정 값으로 뺀다", () => {
+    expect(returnRefundAmount(items, "change_of_mind", 5_000)).toBe(20_000);
   });
   it("하자·오배송이면 항목 합계 전액", () => {
     expect(returnRefundAmount(items, "defective")).toBe(25_000);

@@ -31,7 +31,7 @@ export class OrdersController {
   @UseGuards(AuthGuard("jwt"))
   checkout(@Body() dto: CheckoutDto, @Req() req: Request, @Headers("idempotency-key") idempotencyKey?: string) {
     const userId = (req.user as { userId: string }).userId;
-    return this.ordersService.checkout(userId, dto.items, dto.shipping, idempotencyKey, dto.provider);
+    return this.ordersService.checkout(userId, dto.items, dto.shipping, { privacyConsentVersion: dto.privacyConsentVersion }, idempotencyKey, dto.provider);
   }
 
   @Get(":id")
