@@ -82,9 +82,11 @@ const priceOf = new Map(catalog.products.map((p) => [p.id, p.price]));
 for (const o of seedOrders) {
   const items = o.items.map(([productId, quantity]) => ({ productId, quantity, unitPrice: priceOf.get(productId)! }));
   const total = items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
-  await prisma.order.create({
+  const order = await prisma.order.create({
     data: { userId: o.userId, paid: o.paid, totalAmount: total, items: { create: items } },
   });
+  // 결제 완료 견본 주문에도 결제 행을 둔다(PG를 거치지 않았으므로 manual)
+  if (o.paid) await prisma.payment.create({ data: { orderId: order.id, provider: "manual", providerOrderId: `order-${order.id}`, amount: total, status: "paid", approvedAt: order.createdAt } });
 }
 
 // 5. 카탈로그 캐시

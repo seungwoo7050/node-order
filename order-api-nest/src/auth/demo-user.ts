@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { Prisma } from "../generated/prisma/client.js";
-import { cancelUnpaidOrder } from "../payments/cancel-unpaid-order.js";
+import { cancelUnpaidOrder, manualPayment } from "../payments/cancel-unpaid-order.js";
 
 export const DEMO_USER_TTL_MS = Number(process.env.DEMO_USER_TTL_SECONDS ?? 24 * 60 * 60) * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -28,16 +28,19 @@ async function createSampleOrders(tx: Prisma.TransactionClient, userId: string):
   for (const [i, group] of groups.entries()) {
     const items = group.map((p) => ({ productId: p.id, quantity: 1 + Math.floor(Math.random() * 2), unitPrice: p.price }));
     const total = items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
-    await tx.order.create({
+    const createdAt = new Date(Date.now() - (groups.length - i) * DAY_MS);
+    const order = await tx.order.create({
       data: {
         userId,
         totalAmount: total,
         paid: i === 0,
         canceledAt: i === 0 ? null : new Date(),
-        createdAt: new Date(Date.now() - (groups.length - i) * DAY_MS),
+        createdAt,
         items: { create: items },
       },
+      select: { id: true },
     });
+    if (i === 0) await tx.payment.create({ data: manualPayment(order.id, total, createdAt) });
   }
 }
 
