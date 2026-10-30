@@ -1,4 +1,5 @@
 import { useAuthStore } from "./auth-store";
+import { useCartStore } from "./cart-store";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -59,8 +60,13 @@ export async function exchangeCode(code: string): Promise<void> {
 }
 
 export async function logout(): Promise<void> {
-  await fetch(`${API_URL}/auth/logout`, { method: "POST", credentials: "include" });
-  useAuthStore.getState().clear();
+  // 배송지 원문은 서버 응답과 상관없이 먼저 지운다(같은 브라우저를 다음 사람이 쓴다)
+  useCartStore.getState().clearShipping();
+  try {
+    await fetch(`${API_URL}/auth/logout`, { method: "POST", credentials: "include" });
+  } finally {
+    useAuthStore.getState().clear();
+  }
 }
 
 let refreshing: Promise<string | null> | null = null;
