@@ -5,6 +5,8 @@ import { Nav } from './nav';
 import { connection } from "next/server";
 import { SwRegister } from './sw-resgister';
 import { OnlineBanner } from "./online-banner";
+import { StoreFooter } from "./store-footer";
+import { Suspense } from "react";
 import "./globals.css";
 
 const body = Noto_Sans_KR({ variable: "--font-body", weight: ["300", "400", "500"], preload: false, display: "swap" });
@@ -30,6 +32,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <SwRegister />
           <OnlineBanner />
           {children}
+          <Suspense fallback={null}>
+            <StoreFooter />
+          </Suspense>
         </Providers>
       </body>
     </html>
