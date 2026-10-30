@@ -1,11 +1,17 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { cancelUnpaidOrder } from "../payments/cancel-unpaid-order.js";
+import type { PgPayment } from "../payments/payment-gateway.js";
+import { PaymentGateways } from "../payments/payment-gateways.js";
+import { markPaid } from "../payments/payment-state.js";
 import { RefundsService, type RefundView } from "../payments/refunds.service.js";
 import { afterOrder, encodeOrderCursor, orderListOrder, toPage } from "../pagination/cursor.js";
 import { CARRIERS, TRACKING_NUMBER, normalizeTrackingNumber, type CarrierCode } from "./carriers.js";
 import { ORDER_STATUS_LABEL, nextReturnStatus, type OrderStatus, type ReturnStatus } from "./order-state.js";
-import { AUTO_CONFIRM_DAYS, AUTO_DELIVER_DAYS, DAY_MS, returnDeadline, returnRefundAmount, type ReturnReason } from "./policy.js";
+import {
+  AUTO_CONFIRM_DAYS, AUTO_DELIVER_DAYS, DAY_MS, UNPAID_ORDER_TTL_HOURS, returnDeadline, returnRefundAmount, type ReturnReason,
+} from "./policy.js";
 import { TransitionConflict, attemptTransition, restoreOrderStock, transitionOrder, type ActorRef } from "./transitions.js";
 import { adminOrderView, customerOrderView, returnableQuantities } from "./views.js";
 
@@ -16,7 +22,7 @@ const returnConflict = (current: ReturnStatus, what: string) =>
   new TransitionConflict(current, `반품 요청이 ${RETURN_LABEL[current]} 상태라 ${what}할 수 없습니다`);
 
 export type ReturnRequest = { kind: "refund" | "exchange"; reason: ReturnReason; detail?: string; items: { productId: number; quantity: number }[] };
-export type AutoAdvanceResult = { delivered: number; confirmed: number; returnsCompleted: number };
+export type AutoAdvanceResult = { expired: number; paidOnRecheck: number; delivered: number; confirmed: number; returnsCompleted: number };
 
 // 주문 이행: 배송 준비 → 송장 → 배송 완료 → 구매확정, 취소, 반품·교환.
 // 상태 전이와 재고는 한 트랜잭션, 환불(27의 RefundsService)은 커밋 뒤 멱등 키로 부른다:
@@ -28,6 +34,7 @@ export class FulfillmentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly refunds: RefundsService,
+    private readonly gateways: PaymentGateways,
   ) {}
 
   // ── 관리자 ────────────────────────────────────────────
@@ -212,6 +219,7 @@ export class FulfillmentService {
   }
 
   // ── 자동 전이(리더 작업) ──────────────────────────────
+  // pending_payment 24시간 → canceled + 재고 복구(PG에서 이미 승인됐으면 paid로 반영),
   // shipped 뒤 5일 → delivered, delivered 뒤 7일 → confirmed(처리 중인 반품 요청이 있으면 미룬다),
   // 환불이 끝난(payments:resolve-refunds가 확정한) 승인 반품 → completed.
   // 시각을 받아(시계 주입) 테스트가 같은 시각으로 두 번 돌려 볼 수 있다. 모두 조건부 update라 여러 번 돌아도 같다
@@ -225,7 +233,8 @@ export class FulfillmentService {
         select: { id: true }, orderBy: { id: "asc" }, take: limit,
       }),
     ]));
-    const result: AutoAdvanceResult = { delivered: 0, confirmed: 0, returnsCompleted: 0 };
+    const result: AutoAdvanceResult = { expired: 0, paidOnRecheck: 0, delivered: 0, confirmed: 0, returnsCompleted: 0 };
+    await this.expireUnpaid(now, limit, result);
     for (const { id } of toDeliver) {
       const moved = await this.prisma.asAdmin((tx) => attemptTransition(tx, id, "deliver", system, { now, reason: `발송 ${AUTO_DELIVER_DAYS}일 경과` }));
       if (moved.ok) result.delivered++;
@@ -246,8 +255,44 @@ export class FulfillmentService {
         if (await this.completeReturn(Number(idempotencyKey.slice("return-".length)), system, now)) result.returnsCompleted++;
       }
     }
-    if (result.delivered + result.confirmed + result.returnsCompleted > 0) this.logger.log(`자동 전이: ${JSON.stringify(result)}`);
+    if (Object.values(result).some((n) => n > 0)) this.logger.log(`자동 전이: ${JSON.stringify(result)}`);
     return result;
+  }
+
+  // 결제 기한이 지난 주문. 토스는 위젯에 가기 전에 떠나면 웹훅이 오지 않아 우리가 끝내야 한다(Stripe는 세션 만료 웹훅도 온다).
+  // 취소하기 전에 PG에 다시 묻는다: 승인돼 있으면(승인 응답·웹훅을 잃었다) 결제 완료로 반영하고, PG에 묻지 못하면 다음 회차로 미룬다
+  private async expireUnpaid(now: Date, limit: number, result: AutoAdvanceResult): Promise<void> {
+    const stale = await this.prisma.asAdmin((tx) => tx.order.findMany({
+      where: { status: "pending_payment", createdAt: { lte: new Date(now.getTime() - UNPAID_ORDER_TTL_HOURS * 60 * 60 * 1000) } },
+      select: { id: true, payment: { select: { id: true, provider: true, providerOrderId: true, providerPaymentKey: true, amount: true, status: true } } },
+      orderBy: { id: "asc" }, take: limit,
+    }));
+    for (const order of stale) {
+      const p = order.payment;
+      if (p && p.status === "ready" && p.provider !== "manual") {
+        let pg: PgPayment | null;
+        try {
+          const gateway = this.gateways.get(p.provider);
+          const key = p.providerPaymentKey ?? (await gateway.findPaymentKey(p.providerOrderId));
+          pg = key ? await gateway.fetchPayment(key) : null;
+        } catch (err) {
+          this.logger.warn(`결제 기한 취소 보류: 주문 #${order.id} PG(${p.provider}) 조회 실패 - ${(err as Error).message}`);
+          continue;
+        }
+        if (pg?.status === "paid") {
+          if (pg.totalAmount !== p.amount || (pg.providerOrderId && pg.providerOrderId !== p.providerOrderId)) {
+            this.logger.error(`결제 기한 취소 보류: 주문 #${order.id} PG 승인 금액·주문번호가 다르다(${pg.totalAmount}원 ≠ ${p.amount}원) - 사람이 확인한다`);
+            continue;
+          }
+          const paid = await this.prisma.asAdmin((tx) => markPaid(tx, p.id, { paymentKey: pg.paymentKey, approvedAt: pg.approvedAt }));
+          if (paid) result.paidOnRecheck++;
+          this.logger.warn(`결제 기한 재조회: 주문 #${order.id}은 PG에서 이미 승인됨 → 결제 완료로 반영`);
+          continue;
+        }
+      }
+      const canceled = await this.prisma.asAdmin((tx) => cancelUnpaidOrder(tx, order.id, { now, reason: `결제 기한(${UNPAID_ORDER_TTL_HOURS}시간) 지남` }));
+      if (canceled) result.expired++;
+    }
   }
 
   // ── 내부 ──────────────────────────────────────────────

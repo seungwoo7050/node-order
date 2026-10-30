@@ -7,6 +7,7 @@ export const RETURN_SHIPPING_FEE = 6_000; // 단순변심 반품의 왕복 배�
 export const RETURN_WINDOW_DAYS = 7; // 청약철회 기간: 배송 완료 뒤 7일, 구매확정 전
 export const AUTO_DELIVER_DAYS = 5; // shipped 뒤 5일이 지나면 delivered
 export const AUTO_CONFIRM_DAYS = 7; // delivered 뒤 7일이 지나면 confirmed
+export const UNPAID_ORDER_TTL_HOURS = 24; // pending_payment가 24시간을 넘으면 canceled(장바구니 안내 문구와 같다)
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
