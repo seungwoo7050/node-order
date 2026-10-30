@@ -36,7 +36,9 @@ has_kv AUTH_SECRET   || set_kv AUTH_SECRET "$(rand base64 32)"
 has_kv DEMO_PASSWORD || set_kv DEMO_PASSWORD "$(rand hex 8)"
 
 step "외부 서비스 값(환경 변수로 준 것만 바꾼다)"
-for k in GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET TOSS_CLIENT_KEY TOSS_SECRET_KEY; do
+set_kv MONITORING_DIR ./monitoring # CI가 저장소의 monitoring/을 /opt/node-order/monitoring에 올린다(31)
+# 관측(31)의 DSN·웹훅·dead man's switch 주소는 모두 선택이다(비면 꺼지거나 null 수신자)
+for k in GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET TOSS_CLIENT_KEY TOSS_SECRET_KEY LLM_API_KEY SENTRY_DSN SENTRY_WEB_DSN ALERT_WEBHOOK_URL DEADMAN_URL; do
   if [ -n "${!k:-}" ]; then set_kv "$k" "$(unquote "${!k}")"; echo "바꿈  $k"
   elif ! grep -q "^$k=" "$ENV_FILE"; then set_kv "$k" ""; fi
 done

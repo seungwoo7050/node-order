@@ -5,5 +5,7 @@
 
 {$PUBLIC_SCHEME:https}://{$API_HOST} {
 	encode zstd gzip
+	# 지표는 서버 안의 Prometheus만 긁는다(업무 지표를 밖에 보이지 않는다)
+	respond /metrics 404
 	import /etc/caddy/live/api.caddy
 }
