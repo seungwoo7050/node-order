@@ -28,10 +28,9 @@ export const CARRIER_OPTIONS = [
   { code: "logen", name: "로젠택배" },
 ] as const;
 
-// 배송비 표시용(서버가 같은 규칙으로 다시 계산하고, 결제 금액은 서버 값이 정한다)
-export const SHIPPING_FEE = 3_000;
-export const FREE_SHIPPING_THRESHOLD = 50_000;
-export const shippingFeeFor = (subtotal: number) => (subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE);
+// 배송비 표시용. 값은 상점 설정(GET /store)에서 온다. 서버가 같은 규칙으로 다시 계산하고, 결제 금액은 서버 값이 정한다
+export type ShippingPolicy = { shippingFee: number; freeShippingThreshold: number };
+export const shippingFeeFor = (subtotal: number, policy: ShippingPolicy) => (subtotal >= policy.freeShippingThreshold ? 0 : policy.shippingFee);
 
 export const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 export const dateTime = (iso: string | Date) =>

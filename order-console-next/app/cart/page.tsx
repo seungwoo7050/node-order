@@ -7,7 +7,8 @@ import { ApiError, authFetch } from "@/lib/api-client";
 import { useCartStore } from "@/lib/cart-store";
 import { defaultProvider, featuresOptions, providerLabel, providerNote, type PaymentProvider } from "@/lib/features";
 import { productListOptions } from "@/lib/lists";
-import { FREE_SHIPPING_THRESHOLD, shippingFeeFor, won } from "@/lib/orders";
+import { shippingFeeFor, won } from "@/lib/orders";
+import { privacyOptions, storeInfoOptions } from "@/lib/store-info";
 import { useTRPC } from "@/lib/trpc";
 import { useOnline } from "../online-banner";
 import { Stepper } from "../shop/stepper";
@@ -39,6 +40,10 @@ export default function CartPage() {
   const available = features.data?.payments ?? [];
   const [chosen, setChosen] = useState<PaymentProvider | null>(null);
   const provider = chosen && available.includes(chosen) ? chosen : defaultProvider(available);
+  // 배송비는 상점 설정에서, 동의할 개인정보처리방침은 지금 시행 중인 판(서버가 둘 다 다시 확인한다)
+  const store = useQuery(storeInfoOptions);
+  const privacy = useQuery(privacyOptions);
+  const [agreed, setAgreed] = useState(false);
 
   const checkout = useMutation({
     mutationFn: () => {
@@ -46,8 +51,18 @@ export default function CartPage() {
       return authFetch<CheckoutResult>("/orders/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Idempotency-Key": key },
-        body: JSON.stringify({ provider, shipping, items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })) }),
+        body: JSON.stringify({
+          provider, shipping, privacyConsentVersion: privacy.data?.version,
+          items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+        }),
       });
+    },
+    onError: (err) => {
+      // 결제 도중 개인정보처리방침이 바뀌었다(400): 새 판을 다시 읽고 동의를 다시 받는다
+      if (err instanceof ApiError && err.status === 400 && /개인정보처리방침/.test(err.message)) {
+        setAgreed(false);
+        void queryClient.invalidateQueries({ queryKey: privacyOptions.queryKey });
+      }
     },
     onSuccess: (data) => {
       useCartStore.getState().finishCheckout();
@@ -58,8 +73,8 @@ export default function CartPage() {
   });
 
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-  const fee = shippingFeeFor(subtotal);
-  const total = subtotal + fee;
+  const fee = store.data ? shippingFeeFor(subtotal, store.data) : null;
+  const total = subtotal + (fee ?? 0);
   return (
     <main className="page flex-1 pb-12 pt-2">
       <h1 className="title mb-8">장바구니</h1>
@@ -104,11 +119,11 @@ export default function CartPage() {
               <dt className="text-muted">상품 합계</dt>
               <dd className="num text-right">{won(subtotal)}</dd>
               <dt className="text-muted">배송비</dt>
-              <dd className="num text-right" data-testid="shipping-fee">{fee === 0 ? "무료" : won(fee)}</dd>
+              <dd className="num text-right" data-testid="shipping-fee">{fee === null ? "확인 중" : fee === 0 ? "무료" : won(fee)}</dd>
               <dt className="label self-baseline pt-2">합계</dt>
               <dd className="num pt-2 text-right text-xl font-normal" data-testid="cart-total">{won(total)}</dd>
             </dl>
-            {fee > 0 && <p className="-mt-3 mb-5 text-[0.78rem] text-muted">상품 합계 {won(FREE_SHIPPING_THRESHOLD)} 이상이면 배송비가 무료입니다.</p>}
+            {store.data && fee !== null && fee > 0 && <p className="-mt-3 mb-5 text-[0.78rem] text-muted">상품 합계 {won(store.data.freeShippingThreshold)} 이상이면 배송비가 무료입니다.</p>}
             {available.length > 0 && (
               <fieldset className="mb-5">
                 <legend className="label mb-2">결제 수단</legend>
@@ -120,7 +135,15 @@ export default function CartPage() {
                 ))}
               </fieldset>
             )}
-            <button type="submit" className="btn btn-primary w-full" disabled={checkout.isPending || !online || !provider}>
+            <label className="mb-4 flex items-start gap-2 text-[0.82rem]" data-testid="privacy-consent">
+              {/* required: 동의하지 않으면 브라우저가 제출을 막는다(서버도 동의 판이 없으면 400) */}
+              <input type="checkbox" className="mt-1" required checked={agreed} onChange={(e) => setAgreed(e.target.checked)} disabled={!privacy.data} />
+              <span>
+                [필수] 개인정보 수집·이용(받는 분, 연락처, 배송지)에 동의합니다.{" "}
+                {privacy.data && <Link href="/legal/privacy" target="_blank">개인정보처리방침 {privacy.data.version}판 보기</Link>}
+              </span>
+            </label>
+            <button type="submit" className="btn btn-primary w-full" disabled={checkout.isPending || !online || !provider || !privacy.data || fee === null}>
               {checkout.isPending ? "결제 화면을 여는 중…" : "결제하기"}
             </button>
             <p className="mt-3 text-[0.78rem] text-muted" data-testid="checkout-note">
@@ -128,6 +151,7 @@ export default function CartPage() {
                 : features.isPending ? "결제 수단을 확인하는 중입니다."
                 : features.isError ? "결제 수단을 불러오지 못해 지금은 결제할 수 없습니다. 잠시 뒤 다시 열어 주세요."
                 : !provider ? "지금은 켜진 결제 수단이 없어 결제할 수 없습니다. 상점이 결제 키를 설정하면 열립니다."
+                : privacy.isError || store.isError ? "상점 정보를 불러오지 못해 지금은 결제할 수 없습니다. 잠시 뒤 다시 열어 주세요."
                 : `${providerNote[provider]} 24시간 안에 결제하지 않으면 주문이 취소됩니다.`}
             </p>
           </form></aside>
