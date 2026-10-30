@@ -29,6 +29,9 @@ export class CheckoutDto {
   @IsDefined({ message: "배송지(shipping)가 필요합니다" }) @ValidateNested() @Type(() => ShippingAddressDto)
   shipping!: ShippingAddressDto;
 
+  // 결제 화면에서 손님이 동의한 개인정보처리방침 판(GET /legal/privacy의 version). 없거나 지금 판이 아니면 400
+  @IsInt({ message: "개인정보 수집·이용(배송지)에 동의해 주세요" }) @IsPositive() privacyConsentVersion!: number;
+
   // 고르지 않으면 Stripe, Stripe가 꺼져 있으면 토스(GET /features가 켜진 수단을 알려 준다)
   @IsOptional() @IsIn(PROVIDERS) provider?: ProviderId;
 }

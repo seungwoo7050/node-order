@@ -9,7 +9,7 @@ import { RefundsService } from "../src/payments/refunds.service.js";
 import { PrismaService } from "../src/prisma/prisma.service.js";
 import { adminDb } from "./admin-db.js";
 import { startSimulator, type Simulator } from "./fake-pg.js";
-import { SHIPPING, client, paymentOf, seedPaymentData, startPaymentApp } from "./payment-app.js";
+import { CONSENT, SHIPPING, client, paymentOf, seedPaymentData, startPaymentApp } from "./payment-app.js";
 
 // 주문 이행: 토스 시뮬레이터로 결제를 끝낸 주문을 관리자·손님 API로 움직인다.
 // 상품 20,000원(배송비 3,000원, 1개 결제 23,000원), 재고 10
@@ -46,7 +46,7 @@ describe("주문 이행 - 배송·취소·반품·교환", () => {
 
   // 토스로 결제를 끝낸 주문
   const paidOrder = async (quantity = 1) => {
-    const started = await user().post("/orders/checkout", { items: [{ productId: 1, quantity }], shipping: SHIPPING, provider: "toss" });
+    const started = await user().post("/orders/checkout", { items: [{ productId: 1, quantity }], shipping: SHIPPING, ...CONSENT, provider: "toss" });
     expect(started.status).toBe(201);
     const payment = await paymentOf(started.body.id);
     const { paymentKey } = await sim.post<{ paymentKey: string }>("/__sim/authorize", { orderId: payment.providerOrderId, amount: payment.amount });
@@ -169,7 +169,7 @@ describe("주문 이행 - 배송·취소·반품·교환", () => {
       await admin().post(`/admin/orders/${id}/prepare`);
       await ship(id);
       expect((await admin().post(`/admin/orders/${id}/cancel`)).body).toMatchObject({ statusCode: 409, currentStatus: "shipped" });
-      const unpaid = await user().post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }], shipping: SHIPPING, provider: "toss" });
+      const unpaid = await user().post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }], shipping: SHIPPING, ...CONSENT, provider: "toss" });
       expect((await admin().post(`/admin/orders/${unpaid.body.id}/cancel`)).body).toMatchObject({ statusCode: 409, currentStatus: "pending_payment" });
       expect(await refundCalls()).toBe(0);
     });
@@ -306,7 +306,7 @@ describe("주문 이행 - 배송·취소·반품·교환", () => {
         { ...SHIPPING, recipientPhone: "전화 없음" },
       ];
       for (const shipping of bad) {
-        const res = await user().post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }], shipping, provider: "toss" });
+        const res = await user().post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }], shipping, ...CONSENT, provider: "toss" });
         expect(res.status, JSON.stringify(shipping)).toBe(400);
       }
       expect(await adminDb.order.count()).toBe(0);
@@ -374,7 +374,7 @@ describe("주문 이행 - 배송·취소·반품·교환", () => {
   describe("결제 기한(시계 주입)", () => {
     const HOUR_MS = 60 * 60 * 1000;
     const startToss = async () => {
-      const started = await user().post("/orders/checkout", { items: [{ productId: 1, quantity: 2 }], shipping: SHIPPING, provider: "toss" });
+      const started = await user().post("/orders/checkout", { items: [{ productId: 1, quantity: 2 }], shipping: SHIPPING, ...CONSENT, provider: "toss" });
       expect(started.status).toBe(201);
       return { id: started.body.id as number, payment: await paymentOf(started.body.id) };
     };

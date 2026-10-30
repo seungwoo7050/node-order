@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { StoreSettingsService } from "../admin/store-settings.service.js";
 import { cancelUnpaidOrder } from "../payments/cancel-unpaid-order.js";
 import type { PgPayment } from "../payments/payment-gateway.js";
 import { PaymentGateways } from "../payments/payment-gateways.js";
@@ -35,13 +36,14 @@ export class FulfillmentService {
     private readonly prisma: PrismaService,
     private readonly refunds: RefundsService,
     private readonly gateways: PaymentGateways,
+    private readonly settings: StoreSettingsService,
   ) {}
 
   // ── 관리자 ────────────────────────────────────────────
 
-  async list(query: { limit: number; cursor?: string; status?: OrderStatus }) {
+  async list(query: { limit: number; cursor?: string; status?: OrderStatus; returns?: "requested" }) {
     const rows = await this.prisma.asAdmin((tx) => tx.order.findMany({
-      where: { status: query.status, ...afterOrder(query.cursor) },
+      where: { status: query.status, ...(query.returns ? { returns: { some: { status: query.returns } } } : {}), ...afterOrder(query.cursor) },
       select: { id: true, userId: true, status: true, totalAmount: true, shippingFee: true, recipientName: true, createdAt: true, statusChangedAt: true },
       orderBy: [...orderListOrder],
       take: query.limit + 1,
@@ -98,12 +100,14 @@ export class FulfillmentService {
 
   async approveReturn(returnId: number, adminId: string) {
     const now = new Date();
+    // 반품 왕복 배송비는 승인하는 시점의 상점 설정 값(주문에는 따로 저장하지 않는다)
+    const { returnShippingFee } = await this.settings.shippingPolicy();
     let replayed = false;
     try {
       await this.prisma.asAdmin(async (tx) => {
         const r = await this.lockedReturn(tx, returnId);
         if (!nextReturnStatus(r.status, "approve", "admin").ok) throw returnConflict(r.status, "승인");
-        const refundAmount = r.kind === "refund" ? returnRefundAmount(r.items, r.reason) : null;
+        const refundAmount = r.kind === "refund" ? returnRefundAmount(r.items, r.reason, returnShippingFee) : null;
         const { count } = await tx.return.updateMany({ where: { id: returnId, status: "requested" }, data: { status: "approved", decidedAt: now, refundAmount } });
         if (count === 0) throw returnConflict(r.status, "승인");
         if (r.kind === "exchange") {

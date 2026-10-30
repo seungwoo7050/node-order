@@ -7,7 +7,7 @@ import { adminDb } from "./admin-db.js";
 import { hashPassword } from "../src/auth/password.js";
 import { StripeGateway } from "../src/payments/stripe.gateway.js";
 import { FakeStripeGateway } from "./fake-stripe.js";
-import { SHIPPING } from "./payment-app.js";
+import { CONSENT, SHIPPING } from "./payment-app.js";
 
 describe("POST /orders/checkout - 동시성 회귀 테스트", () => {
   let app: INestApplication;
@@ -43,7 +43,7 @@ describe("POST /orders/checkout - 동시성 회귀 테스트", () => {
     fetch(`${baseUrl}/orders/checkout`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...headers },
-      body: JSON.stringify({ items: [{ productId: 1, quantity: 1 }], shipping: SHIPPING }),
+      body: JSON.stringify({ items: [{ productId: 1, quantity: 1 }], shipping: SHIPPING, ...CONSENT }),
     });
 
   it("재고 5개에 동시 요청 20개 → 정확히 5건만 성공하고 재고는 0", async () => {

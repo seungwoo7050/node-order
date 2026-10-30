@@ -22,11 +22,12 @@ import { MetricsModule } from './metrics/metrics.module.js';
 import { RateLimitModule } from './rate-limit/rate-limit.module.js';
 import { CatalogCacheModule } from './cache/catalog-cache.js';
 import { FulfillmentModule } from './fulfillment/fulfillment.module.js';
+import { SettingsModule } from './admin/settings.module.js';
 
 @Module({
   imports: [
     LoggerModule.forRoot(loggerOptions),
-    MetricsModule, RateLimitModule, PrismaModule, StorageModule, CatalogCacheModule, HealthModule, OrdersModule, UsersModule, ProductsModule, OutboxModule, MeModule, LeaderModule, AuthModule, NotificationsModule, CategoriesModule, TrpcModule, PaymentsModule, FulfillmentModule],
+    MetricsModule, RateLimitModule, PrismaModule, StorageModule, CatalogCacheModule, HealthModule, OrdersModule, UsersModule, ProductsModule, OutboxModule, MeModule, LeaderModule, AuthModule, NotificationsModule, CategoriesModule, TrpcModule, PaymentsModule, FulfillmentModule, SettingsModule],
   controllers: [AppController],
   providers: [AppService, ShutdownLogger],
 })
