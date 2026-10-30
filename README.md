@@ -271,3 +271,21 @@ deploy/rehearsal-alerts.sh down        # 리허설 컨테이너·볼륨을 내�
 rm deploy/.env && rm -rf deploy/live
 docker compose down                                                     # 개발 컨테이너
 ```
+
+## 판매 전 남은 것
+
+구현은 31에서 멈춘다. 실제로 팔기 전에 남은 일과 알고 있는 결함이다.
+
+- 메일: 실제로 보내지 않는다. 발송은 `FakeMailer`(로그만)이고 받는 주소는 자리표시자(`<사용자 id>@example.com`)다. 발송 서비스 연결과 손님 이메일 칸이 필요하다
+- 결제: 토스는 시뮬레이터(`scripts/toss-sim.mjs`)로만 검증했다. 실제 테스트 키·라이브 키로 승인·취소·웹훅·대사를 확인하지 않았다
+- 운영 서버: 24의 구성 그대로다. 26~31(검색, 이행, 관리자·대사, MCP·LLM, 관측)은 운영에 배포하지 않았다(Prometheus·Alertmanager 포함). 실제 DSN·웹훅·dead man's switch도 연결하지 않았다
+- 판매자가 할 일: 사업자등록, 통신판매업 신고, PG 가맹(토스·Stripe 심사). 상점 설정 화면의 사업자 정보는 그 뒤에 채운다
+- 화면: 19의 디자인 하나뿐이다. 디자인 검토와 시각 회귀 테스트가 없다
+- 상품: 단일 SKU다(옵션·변형 없음)
+
+알려진 결함:
+
+- 리더(advisory lock)가 대기 슬롯 API에 있으면, Prometheus는 활성 슬롯만 긁으므로 업무 게이지가 0으로 보인다. BusinessMetricsStale이 5분 뒤 알린다
+- 0036의 `result` 기본값이 `ok`라서, blue/green이 겹치는 동안 옛 API가 남긴 실패 행(`ok=false`)이 `result=ok`가 된다. 또 쓰기 도구의 `finishAudit`가 실패하면 성공한 호출이 `pending`으로 남는다. `mcp_audit_failures_total`에 걸린 경보는 없다
+- 런북 ApiTargetMissing의 `targets.json` 손 명령에 `release` 라벨과 `mv`(한 번에 바꾸기)가 빠져 있다(`release.sh`의 `targets`와 다르다)
+- 메모리 예산 여유가 0이다(상한 합계 1792MB = 2GB − OS 몫 256MB). 서비스를 하나 더하거나 상한을 올리면 넘는다
