@@ -1,15 +1,16 @@
 import type { CatalogCache } from "../cache/catalog-cache.js";
+import type { PrismaClient } from "../generated/prisma/client.js";
 import type { PrismaService } from "../prisma/prisma.service.js";
 import type { StorageService } from "../storage/storage.service.js";
 import { toPage } from "../pagination/cursor.js";
 
-type CategoryStep = { id: number; name: string };
+export type CategoryStep = { id: number; name: string };
 export type CatalogItem = { id: number; name: string; price: number; imageKey: string | null; categories: CategoryStep[] };
 type CatalogPage = { items: CatalogItem[]; nextCursor: number | null };
 type CatalogProduct = CatalogItem & { description: string };
 export type ProductDeps = { prisma: PrismaService; storage: StorageService; cache: CatalogCache };
 
-async function categoryPaths(prisma: PrismaService, leaves: number[]): Promise<Map<number, CategoryStep[]>> {
+export async function categoryPaths(prisma: Pick<PrismaClient, "$queryRaw">, leaves: number[]): Promise<Map<number, CategoryStep[]>> {
   if (leaves.length === 0) return new Map();
   const rows = await prisma.$queryRaw<{ leaf: number; path: CategoryStep[] }[]>`
     WITH RECURSIVE up AS (
@@ -69,4 +70,25 @@ export async function getProduct(deps: ProductDeps, id: number) {
   if (!row) return null;
   const { imageKey, ...p } = catalog;
   return { ...p, categoryPath: p.categories.map((c) => c.name), stock: row.stock, imageUrl: imageKey ? await deps.storage.createDownloadUrl(imageKey, 600) : null };
+}
+
+// 검색 결과처럼 id 순서가 정해진 상품 목록에 목록과 같은 모양(재고, 이미지 URL, 카테고리 경로)을 붙인다
+// 카탈로그 캐시를 거치지 않는다(검색어마다 키가 생겨 끝없이 는다)
+export async function hydrateProducts(deps: Omit<ProductDeps, "cache">, ids: number[]) {
+  if (ids.length === 0) return [];
+  const rows = await deps.prisma.product.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, price: true, stock: true, imageKey: true, categoryId: true },
+  });
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const pathOf = await categoryPaths(deps.prisma, [...new Set(rows.flatMap((p) => (p.categoryId ? [p.categoryId] : [])))]);
+  return Promise.all(
+    ids.flatMap((id) => {
+      const row = byId.get(id);
+      if (!row) return []; // 색인에는 남았지만 지워진 상품
+      const { categoryId, imageKey, ...p } = row;
+      const categories = (categoryId && pathOf.get(categoryId)) || [];
+      return [(async () => ({ ...p, categories, categoryPath: categories.map((c) => c.name), imageUrl: imageKey ? await deps.storage.createDownloadUrl(imageKey, 600) : null }))()];
+    }),
+  );
 }
