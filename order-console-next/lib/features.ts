@@ -6,6 +6,8 @@ export type PaymentProvider = "toss" | "stripe";
 // API의 GET /features. 키가 있는 결제 수단만 온다(둘 다 없으면 빈 목록)
 export type Features = {
   payments: PaymentProvider[];
+  // 키가 있는가(연결됨·없음)만. 키 값은 API가 어디에도 싣지 않는다
+  integrations?: { toss: boolean; stripe: boolean; errorTracking: boolean; llm: boolean };
   toss?: { clientKey: string; sdkUrl: string };
 };
 
