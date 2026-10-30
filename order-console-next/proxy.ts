@@ -5,14 +5,19 @@ export function proxy(request: NextRequest) {
   const isDev = process.env.NODE_ENV === "development";
   const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
   const storage = process.env.NEXT_PUBLIC_STORAGE_URL ?? "http://localhost:9000";
+  // 토스페이먼츠 결제위젯: SDK 스크립트(js), 위젯·결제창 iframe과 SDK의 API 호출(*.tosspayments.com)
+  // SDK는 코드에서 붙이므로 'strict-dynamic'이 허용한다. 주소는 'strict-dynamic'을 모르는 옛 브라우저를 위해 둔다
+  const tossScript = "https://js.tosspayments.com";
+  const toss = "https://*.tosspayments.com";
 
   const csp = [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' ${tossScript}${isDev ? " 'unsafe-eval'" : ""}`,
     `style-src 'self' 'nonce-${nonce}'`,
     `img-src 'self' blob: data: ${storage}`,
     "font-src 'self'",
-    `connect-src 'self' ${api} ${storage}`,
+    `connect-src 'self' ${api} ${storage} ${toss}`,
+    `frame-src ${toss}`,
     "worker-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",

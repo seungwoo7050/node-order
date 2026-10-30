@@ -1,15 +1,17 @@
 "use client";
 
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useState } from "react";
 import { ApiError, authFetch } from "@/lib/api-client";
 import { useCartStore } from "@/lib/cart-store";
+import { defaultProvider, featuresOptions, providerLabel, providerNote, type PaymentProvider } from "@/lib/features";
 import { productListOptions } from "@/lib/lists";
 import { useTRPC } from "@/lib/trpc";
 import { useOnline } from "../online-banner";
 import { Stepper } from "../shop/stepper";
 
-type CheckoutResult = { id: number; price: number; checkoutUrl: string };
+type CheckoutResult = { id: number; price: number; checkoutUrl: string; provider: PaymentProvider };
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
@@ -21,6 +23,11 @@ export default function CartPage() {
   const trpc = useTRPC();
   const { data: products } = useInfiniteQuery(productListOptions(trpc));
   const stockOf = (productId: number) => products?.pages.flatMap((p) => p.items).find((p) => p.id === productId)?.stock ?? Infinity;
+  // 결제 수단: API가 켜 둔 것만 보인다(키가 있는 PG)
+  const features = useQuery(featuresOptions);
+  const available = features.data?.payments ?? [];
+  const [chosen, setChosen] = useState<PaymentProvider | null>(null);
+  const provider = chosen && available.includes(chosen) ? chosen : defaultProvider(available);
 
   const checkout = useMutation({
     mutationFn: () => {
@@ -28,7 +35,7 @@ export default function CartPage() {
       return authFetch<CheckoutResult>("/orders/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Idempotency-Key": key },
-        body: JSON.stringify({ items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })) }),
+        body: JSON.stringify({ provider, items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })) }),
       });
     },
     onSuccess: (data) => {
@@ -70,11 +77,26 @@ export default function CartPage() {
               <span className="label">합계</span>
               <span className="num text-xl font-normal">{won(total)}</span>
             </p>
-            <button type="button" className="btn btn-primary w-full" disabled={checkout.isPending || !online} onClick={() => checkout.mutate()}>
+            {available.length > 0 && (
+              <fieldset className="mb-5">
+                <legend className="label mb-2">결제 수단</legend>
+                {available.map((p) => (
+                  <label key={p} className="flex items-center gap-2 py-1 text-sm">
+                    <input type="radio" name="provider" value={p} checked={provider === p} onChange={() => setChosen(p)} />
+                    {providerLabel[p]}
+                  </label>
+                ))}
+              </fieldset>
+            )}
+            <button type="button" className="btn btn-primary w-full" disabled={checkout.isPending || !online || !provider} onClick={() => checkout.mutate()}>
               {checkout.isPending ? "결제 화면을 여는 중…" : "결제하기"}
             </button>
-            <p className="mt-3 text-[0.78rem] text-muted">
-              {online ? "결제는 Stripe 화면에서 이어집니다. 24시간 안에 결제하지 않으면 주문이 취소됩니다." : "연결되면 결제할 수 있습니다."}
+            <p className="mt-3 text-[0.78rem] text-muted" data-testid="checkout-note">
+              {!online ? "연결되면 결제할 수 있습니다."
+                : features.isPending ? "결제 수단을 확인하는 중입니다."
+                : features.isError ? "결제 수단을 불러오지 못해 지금은 결제할 수 없습니다. 잠시 뒤 다시 열어 주세요."
+                : !provider ? "지금은 켜진 결제 수단이 없어 결제할 수 없습니다. 상점이 결제 키를 설정하면 열립니다."
+                : `${providerNote[provider]} 24시간 안에 결제하지 않으면 주문이 취소됩니다.`}
             </p>
           </aside>
         </div>
