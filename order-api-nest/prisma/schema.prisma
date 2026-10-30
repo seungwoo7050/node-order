@@ -37,12 +37,128 @@ model Order {
   createdAt         DateTime    @default(now()) @map("created_at")
   stripeSessionId   String?     @unique @map("stripe_session_id")
   canceledAt        DateTime?   @map("canceled_at")
+  // 0032: 주문 상태(src/fulfillment/order-state.ts의 전이 표). paid·canceled_at은 expand 동안 앱이 같이 맞춘다
+  status            OrderStatus @default(pending_payment)
+  statusChangedAt   DateTime    @default(now()) @map("status_changed_at")
+  deliveredAt       DateTime?   @map("delivered_at")
+  shippingFee       Int         @default(0) @map("shipping_fee") // total_amount에 포함된다
+  // 배송지 사본(옛 주문은 비어 있다). 연락처·주소는 로그에 마스킹해서만 남긴다(src/fulfillment/mask.ts)
+  recipientName     String?     @map("recipient_name")
+  recipientPhone    String?     @map("recipient_phone")
+  postalCode        String?     @map("postal_code")
+  address1          String?
+  address2          String?
+  deliveryMemo      String?     @map("delivery_memo")
   items             OrderItem[]
   payment           Payment?
+  history           OrderStatusHistory[]
+  shipments         Shipment[]
+  returns           Return[]
 
   @@index([createdAt, id])
   @@index([userId, createdAt, id])
+  @@index([status, createdAt, id])
+  @@index([status, statusChangedAt])
   @@map("orders")
+}
+
+enum OrderStatus {
+  pending_payment
+  paid
+  preparing
+  shipped
+  delivered
+  confirmed
+  canceled
+}
+
+enum ActorType {
+  customer
+  admin
+  system
+}
+
+enum ReturnKind {
+  refund
+  exchange
+}
+
+enum ReturnStatus {
+  requested
+  approved
+  rejected
+  completed
+}
+
+enum ReturnReason {
+  change_of_mind // 단순변심: 왕복 배송비를 환불액에서 뺀다
+  defective
+  wrong_item
+}
+
+// 상태 이력(0032). 전이 하나에 한 행. RLS 정책은 마이그레이션 SQL에만 있다
+model OrderStatusHistory {
+  id         Int         @id @default(autoincrement())
+  orderId    Int         @map("order_id")
+  order      Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromStatus OrderStatus @map("from_status")
+  toStatus   OrderStatus @map("to_status")
+  actorType  ActorType   @map("actor_type")
+  actorId    String?     @map("actor_id")
+  reason     String?
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  @@index([orderId, id])
+  @@map("order_status_history")
+}
+
+// 송장(0032). 주문의 첫 발송은 returnId가 없고(주문당 하나, 부분 unique 인덱스는 SQL에만), 교환품 발송은 반품 요청에 붙는다
+model Shipment {
+  id             Int      @id @default(autoincrement())
+  orderId        Int      @map("order_id")
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  returnId       Int?     @unique @map("return_id")
+  return         Return?  @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  carrier        String
+  trackingNumber String   @map("tracking_number")
+  shippedAt      DateTime @default(now()) @map("shipped_at")
+
+  @@index([orderId])
+  @@map("shipments")
+}
+
+// 반품·교환 요청(0032). 환불은 refunds의 멱등 키 return-<id>로 이어진다
+model Return {
+  id           Int          @id @default(autoincrement())
+  orderId      Int          @map("order_id")
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kind         ReturnKind
+  status       ReturnStatus @default(requested)
+  reason       ReturnReason
+  detail       String?
+  refundAmount Int?         @map("refund_amount")
+  rejectReason String?      @map("reject_reason")
+  requestedAt  DateTime     @default(now()) @map("requested_at")
+  decidedAt    DateTime?    @map("decided_at")
+  completedAt  DateTime?    @map("completed_at")
+  items        ReturnItem[]
+  shipment     Shipment?
+
+  @@index([orderId])
+  @@index([status])
+  @@map("returns")
+}
+
+model ReturnItem {
+  returnId  Int     @map("return_id")
+  return    Return  @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  productId Int     @map("product_id")
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantity  Int
+  unitPrice Int     @map("unit_price")
+
+  @@id([returnId, productId])
+  @@map("return_items")
 }
 
 enum PaymentProvider {
@@ -121,6 +237,7 @@ model Product {
   description   String      @default("")
   imageKey      String?     @map("image_key")
   items         OrderItem[]
+  returnItems   ReturnItem[]
   categoryId    Int?        @map("category_id")
   category      Category?   @relation(fields: [categoryId], references: [id])
 
