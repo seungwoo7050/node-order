@@ -40,6 +40,20 @@ describe("RLS - 회귀 테스트", () => {
       .rejects.toMatchObject({ meta: { driverAdapterError: { cause: { originalCode: "42501" } } } });
   });
 
+  it("상태 이력·송장·반품도 그 주문을 볼 수 있는 사람만 본다(0032)", async () => {
+    await adminDb.product.create({ data: { name: "마우스", price: 1000, stock: 1 } });
+    await adminDb.orderStatusHistory.create({ data: { orderId: 2, fromStatus: "paid", toStatus: "preparing", actorType: "admin" } });
+    await adminDb.shipment.create({ data: { orderId: 2, carrier: "cj", trackingNumber: "123456789012" } });
+    await adminDb.return.create({ data: { orderId: 2, kind: "refund", reason: "defective", items: { create: [{ productId: 1, quantity: 1, unitPrice: 1000 }] } } });
+    const seen = (userId: string) => prisma.asUser(userId, async (tx) => [
+      await tx.orderStatusHistory.count(), await tx.shipment.count(), await tx.return.count(), await tx.returnItem.count(),
+    ]);
+    expect(await seen("kim")).toEqual([0, 0, 0, 0]);
+    expect(await seen("lee")).toEqual([1, 1, 1, 1]);
+    await expect(prisma.asUser("kim", (tx) => tx.return.create({ data: { orderId: 2, kind: "refund", reason: "defective" } })))
+      .rejects.toMatchObject({ meta: { driverAdapterError: { cause: { originalCode: "42501" } } } });
+  });
+
   it("트랜잭션이 끝나면 설정이 남지 않는다", async () => {
     await prisma.asUser("kim", (tx) => tx.order.findMany());
     expect(await prisma.order.count()).toBe(0);
