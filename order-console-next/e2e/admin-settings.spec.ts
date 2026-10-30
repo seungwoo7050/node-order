@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import pg from "pg";
 
@@ -28,7 +29,8 @@ async function save(page: Page) {
 // 지운 뒤에도 이 실행의 콘솔 캐시(legal 태그)에는 남지만, 이 파일 뒤의 테스트는 이용약관을 보지 않는다
 const E2E_MARK = "[e2e] ";
 function adminDatabaseUrl(): string {
-  const env = readFileSync(new URL("../../order-api-nest/.env", import.meta.url), "utf8");
+  // playwright는 order-console-next에서 돈다(npm -w). e2e는 CommonJS로 읽혀 import.meta를 쓸 수 없다
+  const env = readFileSync(path.join(process.cwd(), "..", "order-api-nest", ".env"), "utf8");
   const url = process.env.ADMIN_DATABASE_URL ?? env.match(/^ADMIN_DATABASE_URL=(.+)$/m)?.[1]?.trim();
   if (!url) throw new Error("order-api-nest/.env에 ADMIN_DATABASE_URL이 없다");
   return url;
