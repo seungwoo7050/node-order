@@ -29,7 +29,9 @@
     "search:reindex": "tsx scripts/search-reindex.ts",
     "search:bench": "tsx scripts/search-bench.ts",
     "payments:resolve-refunds": "tsx scripts/resolve-refunds.ts",
-    "payments:reconcile": "tsx scripts/reconcile.ts"
+    "payments:reconcile": "tsx scripts/reconcile.ts",
+    "mcp:token": "tsx scripts/mcp-token.ts",
+    "mcp:check": "tsx scripts/mcp-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

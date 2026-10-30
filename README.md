@@ -214,6 +214,29 @@ Execution Time: 5.082 ms
 - expand 기간에 옛 API가 옛 칸(`paid`·`canceled_at`)만 바꾼 주문은 0034 트리거가 같은 트랜잭션에서 `status`를 맞추고, 결제 기한 작업은 옛 칸·결제 행도 본다. 구매확정과 반품 신청은 주문 행 잠금으로 줄을 선다. PG가 거절한 환불은 `POST /admin/orders/:id/refunds/:refundId/retry`가 새 시도 키(`<처음 키>-r<n>`)로 다시 요청한다
 - 매일 04:00(Asia/Seoul) 뒤 리더가 전날 분을 돌리고(`RECONCILE_CHECK_INTERVAL_MS`마다 확인), 손으로는 `npm run payments:reconcile -- --date=YYYY-MM-DD`. provider 하나가 실패해도 나머지는 대사하고 종료 코드는 1. 화면 `/admin/reconciliation`에서 종류별로 보고 해결 표시(메모)한다
 
+## 판매자용 MCP·상품 설명 초안(30)
+
+- MCP 서버는 API 안의 `POST /mcp`(Streamable HTTP, 상태 없는 모드, 공식 `@modelcontextprotocol/sdk`). 도구는 자기 API를 HTTP로 다시 부르지 않고 이행(28 상태 기계·27 환불)·대시보드·대사(29)·검색 통계(26) 서비스를 그대로 부른다
+  - 읽기(`readOnlyHint`): `list_pending_work`, `search_orders`, `get_order`, `list_low_stock`, `list_zero_result_searches`, `list_reconciliation_issues`
+  - 바꾸기: `register_shipment`, `mark_delivered`, `reject_return`, 돈·재고(`destructiveHint`) `approve_return`, `adjust_stock`. 상태 전이가 거부되면 `isError`와 `currentStatus`
+- 인증은 개인 접근 토큰(Bearer, `nop_…`). 화면 `/admin/mcp`나 `npm run mcp:token`으로 발급하고 원문은 그때 한 번만 보인다(DB에는 sha256). 범위 `read`·`write`·`pii`와 만료, 폐기. 없거나 폐기·만료된 토큰은 401. 데모 관리자가 발급하면 `read`만
+- `pii` 범위가 없으면 손님 연락처·주소는 29의 규칙으로 가린다. 모든 도구 호출은 `mcp_audit_log`에 한 행(토큰, 도구, 연락처를 가린 인자, 성공·실패, 시각)이 남고 `/admin/mcp`에서 본다
+- 상품 설명 초안: 상품 수정 화면의 "설명 초안 만들기"가 `POST /admin/products/:id/description-draft`(SSE: `delta`·`done`·`error`)를 읽어 설명 칸에 흘려 넣는다. 저장은 판매자가 누를 때만. 입력은 이름·카테고리 경로·가격·기존 설명·키워드. 연결이 끊기면 공급자 호출도 끊고, 관리자당 분당 5번(`LLM_RATE_LIMIT_PER_MINUTE`), 토큰 수는 `llm_tokens_total`
+- 생성은 `LlmProvider` 뒤의 Anthropic SDK(기본 `claude-haiku-4-5`, `LLM_MODEL`). `LLM_API_KEY`가 없으면 `features.llm`이 false, 버튼이 숨고 엔드포인트는 404. 키 없이 웹 e2e를 돌리면 with-api가 `order-api-nest/scripts/llm-sim.mjs`(4300)를 띄워 `LLM_BASE_URL`로 보낸다
+
+로컬 API에 Claude Code를 붙이는 순서(토큰 발급 → API 기동 → 연결):
+
+```sh
+docker compose up -d
+npm run mcp:token -- --user=kim --scopes=read --days=7 --name=claude-code   # 마지막 줄이 토큰 원문(nop_…). 화면 /admin/mcp에서 발급해도 같다
+npm run dev:api                                                              # 4000. 또는 cd order-api-nest && npm run build && TRUST_PROXY=loopback node --env-file=.env dist/main.js
+MCP_TOKEN=nop_... npm run mcp:check                                          # SDK 클라이언트로 도구 11개를 받고 list_pending_work를 부른다
+claude mcp add --transport http node-order http://localhost:4000/mcp --header "Authorization: Bearer nop_..."
+claude mcp list                                                              # node-order의 연결 상태를 본다
+```
+
+`--header`는 값을 여러 개 받으므로 이름과 주소 뒤에 둔다. Claude Code에서 "오늘 처리할 일 보여 줘"라고 하면 `list_pending_work`를 부르고, `/admin/mcp`의 호출 기록에 한 행이 생긴다. 끝나면 `claude mcp remove node-order`, 화면에서 토큰 폐기.
+
 ## 정리
 
 ```sh
