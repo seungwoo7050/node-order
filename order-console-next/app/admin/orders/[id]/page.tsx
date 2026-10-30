@@ -15,7 +15,7 @@ type AdminReturn = {
   id: number; kind: keyof typeof RETURN_KIND_LABEL; status: keyof typeof RETURN_STATUS_LABEL; reason: keyof typeof RETURN_REASON_LABEL;
   detail: string | null; refundAmount: number | null; rejectReason: string | null;
   items: { productId: number; quantity: number; product: { name: string } }[];
-  refund: { amount: number; status: keyof typeof REFUND_STATUS_LABEL } | null;
+  refund: { id: number; amount: number; status: keyof typeof REFUND_STATUS_LABEL } | null; // 시도가 여럿이면 마지막 시도
   actions: ("approve" | "reject" | "ship")[];
 };
 type AdminOrder = {
@@ -137,6 +137,10 @@ function OrderDetail({ id }: { id: number }) {
                 <p className="text-muted">{r.items.map((i) => `${i.product.name} × ${i.quantity}`).join(", ")}{r.detail && ` - ${r.detail}`}</p>
                 {r.refundAmount !== null && <p>환불 금액 <span className="num">{won(r.refundAmount)}</span>{r.refund && ` · ${REFUND_STATUS_LABEL[r.refund.status]}`}</p>}
                 {r.rejectReason && <p className="text-muted">거절 사유: {r.rejectReason}</p>}
+                {/* PG가 환불을 거절했다: 같은 멱등 키로는 다시 나가지 않아 새 시도 키로 다시 요청한다(API가 누적 한도를 다시 본다) */}
+                {r.refund?.status === "failed" && (
+                  <div className="mt-2">{button("환불 다시 시도", `/admin/orders/${id}/refunds/${r.refund.id}/retry`)}</div>
+                )}
                 {r.actions.length > 0 && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {r.actions.includes("approve") && button(r.kind === "refund" ? "반품 승인(환불)" : "교환 승인", `/admin/returns/${r.id}/approve`)}
