@@ -15,7 +15,7 @@ node-order: 주문 API(`order-api-nest`, NestJS + Prisma + Postgres) + 콘솔(`o
 
 - `verify:fast` = prisma generate + lint + typecheck + test:unit + test:harness
 - `verify` = fast + test:e2e:api + test:e2e:web + test:rules. 결과는 마지막 한 줄 `verify(full): …`, 단계별 로그는 `.harness/logs/`
-- `verify` 전제: compose가 떠 있고, `order-api-nest/.env`, `order-console-next/.env.local`이 있다. 테스트 DB(`order_api_test`)가 있다. 웹 e2e는 4000에 API가 없으면 스스로 띄운다(migrate → seed → build, Stripe 키가 없으면 `scripts/stripe-sim.mjs` 대역)
+- `verify` 전제: compose가 떠 있고, `order-api-nest/.env`, `order-console-next/.env.local`이 있다. 테스트 DB(`order_api_test`)가 있다. 웹 e2e는 4000에 API가 없으면 스스로 띄운다(migrate → seed → build, Stripe 키가 없으면 `scripts/stripe-sim.mjs`(4100), 토스 키가 없으면 `scripts/toss-sim.mjs`(4200) 대역)
 - with-api가 띄우는 API는 `TRUST_PROXY=loopback`이다(웹 e2e가 X-Forwarded-For로 여러 IP를 흉내 냄). 개발 API를 다시 쓰면 같은 값으로 띄운다
 - 3000·4000을 다른 체크아웃(worktree)의 서버가 쥐고 있으면 웹 e2e가 멈춘다. 그 서버를 내리거나 사람에게 알린다
 - CI(`.github/workflows/ci.yml`)도 같은 npm 스크립트를 부른다. 검사를 바꾸면 npm 스크립트를 바꾼다
