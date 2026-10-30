@@ -1,5 +1,5 @@
 import type { INestApplication } from "@nestjs/common";
-import { client, seedPaymentData, startPaymentApp } from "./payment-app.js";
+import { SHIPPING, client, seedPaymentData, startPaymentApp } from "./payment-app.js";
 
 // 키가 있는 결제 수단만 켠다. 키는 환경변수에서만 읽는다(요청마다 다시 본다)
 describe("GET /features - 결제 수단", () => {
@@ -46,10 +46,10 @@ describe("GET /features - 결제 수단", () => {
   it("둘 다 없으면 빈 목록이고, 결제를 시작하면 주문을 만들기 전에 400", async () => {
     expect(await features()).toEqual({ payments: [] });
     const { user } = await seedPaymentData(baseUrl);
-    const res = await client(baseUrl, user).post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }] });
+    const res = await client(baseUrl, user).post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }], shipping: SHIPPING });
     expect(res.status).toBe(400);
     expect(res.body.message).toBe("켜진 결제 수단이 없습니다");
-    const toss = await client(baseUrl, user).post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }], provider: "toss" });
+    const toss = await client(baseUrl, user).post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }], shipping: SHIPPING, provider: "toss" });
     expect(toss.status).toBe(400);
     expect((await client(baseUrl, user).get("/me/orders")).body.items).toEqual([]);
   });

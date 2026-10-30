@@ -6,7 +6,7 @@ import { RefundsService } from "../src/payments/refunds.service.js";
 import { PrismaService } from "../src/prisma/prisma.service.js";
 import { adminDb } from "./admin-db.js";
 import { startSimulator, type Simulator } from "./fake-pg.js";
-import { client, paidNotices, paymentOf, seedPaymentData, startPaymentApp } from "./payment-app.js";
+import { SHIPPING, client, paidNotices, paymentOf, seedPaymentData, startPaymentApp } from "./payment-app.js";
 
 // PaymentGateway 계약: 같은 흐름을 Stripe·토스 두 구현에 대해 시뮬레이터로 돌린다(검색 엔진 계약과 같은 모양)
 //   driver.approve: 구매자가 결제창에서 결제를 끝내고 API가 그것을 알게 되는 PG별 경로
@@ -49,7 +49,7 @@ export function paymentGatewayContract(driver: ContractDriver) {
 
     // 주문 → 결제 완료까지
     const paidOrder = async () => {
-      const started = await client(baseUrl, tokens.user).post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }], provider: driver.provider });
+      const started = await client(baseUrl, tokens.user).post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }], shipping: SHIPPING, provider: driver.provider });
       expect(started.status).toBe(201);
       expect(started.body.provider).toBe(driver.provider);
       const ready = await paymentOf(started.body.id);

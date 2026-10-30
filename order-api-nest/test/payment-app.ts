@@ -16,12 +16,15 @@ export async function startPaymentApp(): Promise<{ app: INestApplication; baseUr
   return { app, baseUrl: (await app.getUrl()).replace("[::1]", "localhost") };
 }
 
-// 10,000원 상품 하나, 구매자 kim, 관리자 boss
-export async function seedPaymentData(baseUrl: string): Promise<{ user: string; admin: string }> {
+// 결제 시작에 필요한 배송지(28). 연락처 원문이 로그에 남지 않는지 보는 테스트도 이 값을 쓴다
+export const SHIPPING = { recipientName: "김구매", recipientPhone: "010-2345-6789", postalCode: "06236", address1: "서울특별시 강남구 테헤란로 123", address2: "4층", deliveryMemo: "문 앞" };
+
+// 7,000원 상품 하나(배송비 3,000원을 더해 1개 결제 금액이 10,000원), 구매자 kim, 관리자 boss
+export async function seedPaymentData(baseUrl: string, price = 7_000): Promise<{ user: string; admin: string }> {
   await adminDb.$executeRaw`TRUNCATE categories, refresh_tokens, outbox_events, idempotency_keys, stripe_events, order_items, orders, products, users RESTART IDENTITY CASCADE`;
   await adminDb.user.create({ data: { id: "kim", name: "김", passwordHash: await hashPassword("pw") } });
   await adminDb.user.create({ data: { id: "boss", name: "관리자", role: "admin", passwordHash: await hashPassword("pw") } });
-  await adminDb.product.create({ data: { name: "마우스", price: 10_000, stock: 10 } });
+  await adminDb.product.create({ data: { name: "마우스", price, stock: 10 } });
   const login = async (id: string) => {
     const res = await fetch(`${baseUrl}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, password: "pw" }) });
     return ((await res.json()) as { accessToken: string }).accessToken;
