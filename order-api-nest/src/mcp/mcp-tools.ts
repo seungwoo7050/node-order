@@ -190,3 +190,6 @@ export const SELLER_TOOL_NAMES = [
   "list_pending_work", "search_orders", "get_order", "register_shipment", "mark_delivered", "approve_return",
   "reject_return", "list_low_stock", "adjust_stock", "list_zero_result_searches", "list_reconciliation_issues",
 ] as const;
+
+// 상태·재고·돈을 바꾸는 도구(write 범위). 감사 기록을 실행 전에 남긴다(mcp.controller.ts). e2e가 annotations와 맞는지 본다
+export const WRITE_TOOL_NAMES = ["register_shipment", "mark_delivered", "approve_return", "reject_return", "adjust_stock"] as const;

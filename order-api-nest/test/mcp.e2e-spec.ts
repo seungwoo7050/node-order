@@ -3,7 +3,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { Redis } from "ioredis";
-import { SELLER_TOOL_NAMES } from "../src/mcp/mcp-tools.js";
+import { AccessTokensService } from "../src/mcp/access-tokens.js";
+import { SELLER_TOOL_NAMES, WRITE_TOOL_NAMES } from "../src/mcp/mcp-tools.js";
 import { adminDb } from "./admin-db.js";
 import { SHIPPING, client, demoAdminToken, seedPaymentData, startPaymentApp } from "./payment-app.js";
 
@@ -84,6 +85,8 @@ describe("MCP /mcp", () => {
     for (const name of ["register_shipment", "mark_delivered", "reject_return"]) {
       expect(byName[name]!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });
     }
+    // 감사를 실행 전에 남기는 쓰기 도구 목록이 readOnlyHint가 아닌 도구와 같다
+    expect(tools.filter((t) => t.annotations?.readOnlyHint !== true).map((t) => t.name).sort()).toEqual([...WRITE_TOOL_NAMES].sort());
     // 입력 스키마는 zod에서 나온 JSON Schema
     expect(byName.register_shipment!.inputSchema).toMatchObject({ type: "object", required: expect.arrayContaining(["orderId", "carrier", "trackingNumber"]) });
   });
@@ -305,6 +308,67 @@ describe("MCP /mcp", () => {
     } finally {
       delete process.env.MCP_RATE_LIMIT_PER_MINUTE;
     }
+  });
+
+  const metricValue = async (name: string, labels: Record<string, string>) => {
+    const text = await (await fetch(`${baseUrl}/metrics`)).text();
+    const want = Object.entries(labels).map(([k, v]) => `${k}="${v}"`);
+    const line = text.split("\n").find((l) => l.startsWith(`${name}{`) && want.every((w) => l.includes(w)));
+    return line ? Number(line.split(" ").pop()) : 0;
+  };
+
+  it("호출 제한(429)에 걸린 도구 호출도 감사 로그 1행(rate_limited)과 호출 지표에 남는다", async () => {
+    process.env.MCP_RATE_LIMIT_PER_MINUTE = "1";
+    try {
+      const a = await issue(["read"]);
+      const before = await metricValue("mcp_tool_calls_total", { tool: "list_low_stock", result: "rate_limited" });
+      expect((await call(await connect(a.token), "list_low_stock")).isError).toBe(false);
+      const over = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", Authorization: `Bearer ${a.token}` },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "list_low_stock", arguments: { threshold: 3 } } }),
+      });
+      expect(over.status).toBe(429);
+      const rows = await adminDb.mcpAuditEntry.findMany({ where: { tokenId: a.id }, orderBy: { id: "asc" } });
+      expect(rows.map((r) => [r.tool, r.result, r.ok])).toEqual([["list_low_stock", "ok", true], ["list_low_stock", "rate_limited", false]]);
+      expect(rows[1]!.args).toEqual({ threshold: 3 });
+      expect(await metricValue("mcp_tool_calls_total", { tool: "list_low_stock", result: "rate_limited" })).toBe(before + 1);
+    } finally {
+      delete process.env.MCP_RATE_LIMIT_PER_MINUTE;
+    }
+  });
+
+  it("감사 기록을 남길 수 없으면 쓰기 도구는 실행하지 않는다(재고가 그대로)", async () => {
+    const c = await connect((await issue(["read", "write"])).token);
+    const spy = vi.spyOn(app.get(AccessTokensService), "audit").mockRejectedValueOnce(new Error("감사 로그 DB에 쓸 수 없다"));
+    try {
+      const res = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", Authorization: `Bearer ${(await issue(["read", "write"])).token}` },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "adjust_stock", arguments: { productId: 1, delta: 5 } } }),
+      });
+      const body = (await res.json()) as { id: number; error?: { message: string } };
+      expect(body.id).toBe(3);
+      expect(body.error?.message).toMatch(/감사/);
+    } finally {
+      spy.mockRestore();
+    }
+    expect((await adminDb.product.findUniqueOrThrow({ where: { id: 1 } })).stock).toBe(10);
+    // 감사를 쓸 수 있으면 그대로 된다
+    expect((await call(c, "adjust_stock", { productId: 1, delta: 5 })).isError).toBe(false);
+    expect((await adminDb.product.findUniqueOrThrow({ where: { id: 1 } })).stock).toBe(15);
+  });
+
+  it("읽기 도구는 감사 기록이 실패해도 결과를 돌려주고, 실패를 지표로 드러낸다", async () => {
+    const c = await connect((await issue(["read"])).token);
+    const before = await metricValue("mcp_audit_failures_total", { tool: "list_low_stock" });
+    const spy = vi.spyOn(app.get(AccessTokensService), "audit").mockRejectedValueOnce(new Error("감사 로그 DB에 쓸 수 없다"));
+    try {
+      expect((await call(c, "list_low_stock")).isError).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await metricValue("mcp_audit_failures_total", { tool: "list_low_stock" })).toBe(before + 1);
   });
 
   it("GET·DELETE /mcp는 405(상태 없는 서버)", async () => {

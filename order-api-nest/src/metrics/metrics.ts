@@ -84,6 +84,14 @@ export const mcpToolCalls = new Counter({
   registers: [registry],
 });
 
+// 감사 로그를 남기지 못한 MCP 도구 호출(쓰기 도구는 이때 실행하지 않는다. 읽기 도구는 결과를 돌려주고 여기서 드러낸다)
+export const mcpAuditFailures = new Counter({
+  name: "mcp_audit_failures_total",
+  help: "MCP 감사 로그 쓰기 실패 수",
+  labelNames: ["tool"] as const,
+  registers: [registry],
+});
+
 // ── 업무 지표(31) ───────────────────────────────────────────────
 // 라벨에 손님 정보나 주문 id를 넣지 않는다(카디널리티와 개인정보). 라벨은 provider·reason 같은 작은 고정 집합만
 

@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { Request, Response } from "express";
 import { DashboardService } from "../admin/dashboard.service.js";
-import { mcpToolCalls } from "../metrics/metrics.js";
+import { mcpAuditFailures, mcpToolCalls } from "../metrics/metrics.js";
 import { StoreSettingsService } from "../admin/store-settings.service.js";
 import { FulfillmentService } from "../fulfillment/fulfillment.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -15,11 +15,13 @@ import { SearchStats } from "../search/search-stats.js";
 import { AccessTokensService, type McpPrincipal } from "./access-tokens.js";
 import { maskArgs, maskText } from "./mask-args.js";
 import { McpRateLimiter } from "./mcp-rate-limit.js";
-import { registerSellerTools, SELLER_TOOL_NAMES, type McpDeps } from "./mcp-tools.js";
+import { registerSellerTools, SELLER_TOOL_NAMES, WRITE_TOOL_NAMES, type McpDeps } from "./mcp-tools.js";
 
 const TOOL_NAMES = new Set<string>(SELLER_TOOL_NAMES);
 
-type ToolCall = { tool: string; args: unknown };
+type ToolCall = { tool: string; args: unknown; auditId?: number };
+const WRITE_TOOLS = new Set<string>(WRITE_TOOL_NAMES);
+const toolLabel = (tool: string) => (TOOL_NAMES.has(tool) ? tool : "unknown");
 
 // tools/call 요청을 id로 모은다(감사 로그를 응답을 보낼 때 쓴다)
 function toolCalls(body: unknown): Map<string | number, ToolCall> {
@@ -86,13 +88,32 @@ export class McpController {
       return;
     }
     const calls = toolCalls(req.body);
+    const id = (req.body as { id?: string | number } | null)?.id ?? null;
     if (calls.size > 0) {
       const rate = await this.limiter.allow(principal.tokenId);
       if (!rate.ok) {
+        // 거절한 호출도 감사 1행(rate_limited)과 호출 지표에 남긴다(누가 한도를 두드리는지 보이게)
+        for (const call of calls.values()) {
+          mcpToolCalls.inc({ tool: toolLabel(call.tool), result: "rate_limited" });
+          await this.tokens.audit({ tokenId: principal.tokenId, tool: call.tool, args: maskArgs(call.args), result: "rate_limited", error: `분당 ${rate.limit}번 초과` })
+            .catch((err: Error) => this.auditFailed(call.tool, err));
+        }
         res.status(429).setHeader("Retry-After", String(rate.retryAfter));
-        const id = (req.body as { id?: string | number }).id ?? null;
         res.json({ jsonrpc: "2.0", error: { code: -32029, message: `도구 호출은 토큰마다 1분에 ${rate.limit}번까지입니다. ${rate.retryAfter}초 뒤에 다시 시도하세요` }, id });
         return;
+      }
+      // 쓰기 도구는 감사 기록(pending)을 먼저 남긴다. 남길 수 없으면 실행하지 않는다(기록 없이 상태·재고·돈이 바뀌지 않게).
+      // 실행 뒤 결과로 고친다. 실행 도중 죽으면 pending이 남아 무엇을 하다 멈췄는지 보인다
+      for (const call of calls.values()) {
+        if (!WRITE_TOOLS.has(call.tool)) continue;
+        try {
+          call.auditId = await this.tokens.audit({ tokenId: principal.tokenId, tool: call.tool, args: maskArgs(call.args), result: "pending" });
+        } catch (err) {
+          this.auditFailed(call.tool, err as Error);
+          mcpToolCalls.inc({ tool: toolLabel(call.tool), result: "error" });
+          res.status(503).json({ jsonrpc: "2.0", error: { code: -32603, message: "감사 기록을 남길 수 없어 도구를 실행하지 않았습니다. 잠시 뒤 다시 시도하세요" }, id });
+          return;
+        }
       }
     }
 
@@ -133,11 +154,20 @@ export class McpController {
       if (call && ("result" in msg || "error" in msg)) {
         calls.delete(id!);
         const { ok, error } = outcome(msg);
-        mcpToolCalls.inc({ tool: TOOL_NAMES.has(call.tool) ? call.tool : "unknown", result: ok ? "ok" : "error" });
-        await this.tokens.audit({ tokenId: principal.tokenId, tool: call.tool, args: maskArgs(call.args), ok, error })
-          .catch((err: Error) => this.logger.error(`MCP 감사 로그를 남기지 못했다: ${err.message}`));
+        const result = ok ? "ok" : "error";
+        mcpToolCalls.inc({ tool: toolLabel(call.tool), result });
+        // 쓰기 도구는 실행 전에 남긴 행을 고치고, 읽기 도구는 지금 남긴다. 읽기 도구의 감사 실패는 결과를 막지 않고 지표·로그로 드러낸다
+        const write = call.auditId !== undefined
+          ? this.tokens.finishAudit(call.auditId, { result, error })
+          : this.tokens.audit({ tokenId: principal.tokenId, tool: call.tool, args: maskArgs(call.args), result, error });
+        await write.catch((err: Error) => this.auditFailed(call.tool, err));
       }
       return send(msg, options);
     };
+  }
+
+  private auditFailed(tool: string, err: Error) {
+    mcpAuditFailures.inc({ tool: toolLabel(tool) });
+    this.logger.error(`MCP 감사 로그를 남기지 못했다(${tool}): ${err.message}`);
   }
 }
