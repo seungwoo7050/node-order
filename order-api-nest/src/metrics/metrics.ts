@@ -20,6 +20,20 @@ export const webhookEvents = new Counter({
   registers: [registry],
 });
 
+export const tossEvents = new Counter({
+  name: "toss_payment_events_total",
+  help: "토스 승인 요청·웹훅 처리 결과 수",
+  labelNames: ["kind", "result"] as const,
+  registers: [registry],
+});
+
+export const refundRequests = new Counter({
+  name: "payment_refunds_total",
+  help: "환불 요청 결과 수(succeeded, failed, requested=결과 모름)",
+  labelNames: ["provider", "result"] as const,
+  registers: [registry],
+});
+
 export const rateLimited = new Counter({
   name: "http_rate_limited_total",
   help: "요청 수 제한으로 거절한 요청 수",
