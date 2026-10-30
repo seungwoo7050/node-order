@@ -237,6 +237,13 @@ claude mcp list                                                              # n
 
 `--header`는 값을 여러 개 받으므로 이름과 주소 뒤에 둔다. Claude Code에서 "오늘 처리할 일 보여 줘"라고 하면 `list_pending_work`를 부르고, `/admin/mcp`의 호출 기록에 한 행이 생긴다. 끝나면 `claude mcp remove node-order`, 화면에서 토큰 폐기.
 
+실제 확인(2026-10-30 15:04 KST, 로컬 API):
+
+- `claude mcp add --scope local --transport http node-order http://localhost:4000/mcp --header "Authorization: Bearer <read 토큰>"` 뒤 `claude mcp list`가 `✔ Connected`
+- 헤드리스 `claude -p ... --allowedTools mcp__node-order__list_pending_work`로 실제 호출: 오늘 주문, 처리 대기, 재고 부족, 0건 검색어, 대사 미해결 값을 받았다
+- `mcp_audit_log`에 그 토큰으로 1행(ok=true, 인자 `{}`)
+- 토큰을 폐기하자 같은 요청이 401
+
 ## 정리
 
 ```sh
