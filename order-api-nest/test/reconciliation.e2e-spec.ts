@@ -281,6 +281,60 @@ describe("PG 대사", () => {
     }
   });
 
+  describe("정기 작업 다시 돌기", () => {
+    const HOUR = 3600_000;
+    const day = () => new Date(`${today}T00:00:00+09:00`).getTime();
+    const yesterdayStart = () => new Date(`${kstDate(new Date(day()), 1)}T00:00:00+09:00`);
+    const runsOf = (provider: "toss" | "stripe") => adminDb.reconciliationRun.findMany({ where: { provider, periodStart: yesterdayStart() }, orderBy: { id: "asc" } });
+    let job: ReconciliationJob;
+
+    beforeEach(() => {
+      job = app.get(ReconciliationJob);
+      vi.spyOn(app.get(LeaderElection), "isLeader", "get").mockReturnValue(true);
+      process.env.RECONCILE_RETRY_INTERVAL_MS = String(HOUR);
+      process.env.RECONCILE_MAX_ATTEMPTS = "3";
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      delete process.env.RECONCILE_RETRY_INTERVAL_MS;
+      delete process.env.RECONCILE_MAX_ATTEMPTS;
+    });
+
+    it("실패한 provider만 간격을 두고 다시 돌고, 성공하면 그만 돈다", async () => {
+      await toss.fault("transactions", "internal", { times: 4 }); // 첫 실행의 토스 거래 조회(재시도 포함)가 모두 500
+      expect(await job.tick(new Date(day() + 4 * HOUR))).toBe(true);
+      expect((await runsOf("toss")).map((r) => r.error !== null)).toEqual([true]);
+      expect(await runsOf("stripe")).toHaveLength(1);
+
+      expect(await job.tick(new Date(day() + 4 * HOUR + 10 * 60_000))).toBe(false); // 간격(1시간) 전에는 다시 돌지 않는다
+      expect(await job.tick(new Date(day() + 5 * HOUR))).toBe(true); // 토스만 다시
+      expect((await runsOf("toss")).map((r) => r.error === null)).toEqual([false, true]);
+      expect(await runsOf("stripe")).toHaveLength(1);
+      expect(await job.tick(new Date(day() + 7 * HOUR))).toBe(false); // 둘 다 성공했다
+    });
+
+    it("도중에 끝난 run(끝 시각 없음)이나 손으로 돌렸다 실패한 날도 다시 돈다", async () => {
+      await adminDb.reconciliationRun.create({ data: { provider: "toss", periodStart: yesterdayStart(), periodEnd: new Date(yesterdayStart().getTime() + 24 * HOUR), startedAt: new Date(day() + 1 * HOUR) } });
+      await adminDb.reconciliationRun.create({ data: { provider: "stripe", periodStart: yesterdayStart(), periodEnd: new Date(yesterdayStart().getTime() + 24 * HOUR), startedAt: new Date(day() + 1 * HOUR), finishedAt: new Date(day() + 1 * HOUR), error: "손으로 돌렸다 실패" } });
+      expect(await job.tick(new Date(day() + 4 * HOUR))).toBe(true);
+      expect((await runsOf("toss")).at(-1)).toMatchObject({ error: null, finishedAt: expect.any(Date) });
+      expect((await runsOf("stripe")).at(-1)).toMatchObject({ error: null });
+    });
+
+    it("계속 실패하면 횟수 상한에서 멈추고, 연속 실패 수를 지표로 드러낸다", async () => {
+      await toss.fault("transactions", "internal", { times: 100 });
+      expect(await job.tick(new Date(day() + 4 * HOUR))).toBe(true);
+      expect(await job.tick(new Date(day() + 5 * HOUR))).toBe(true);
+      expect(await job.tick(new Date(day() + 6 * HOUR))).toBe(true);
+      expect(await job.tick(new Date(day() + 7 * HOUR))).toBe(false); // 3번(상한) 실패했다
+      expect(await runsOf("toss")).toHaveLength(3);
+      const metrics = await (await fetch(`${baseUrl}/metrics`)).text();
+      expect(metrics).toMatch(/reconciliation_consecutive_failures\{provider="toss"\} 3/);
+      expect(metrics).toMatch(/reconciliation_consecutive_failures\{provider="stripe"\} 0/);
+    });
+  });
+
   it("데모 관리자는 불일치 목록과 실행 기록을 읽을 수 있고 해결 표시는 403", async () => {
     const issue = await adminDb.reconciliationIssue.create({ data: { provider: "toss", kind: "missing_in_pg", paymentKey: "pk-x", businessDate: new Date() } });
     const demo = client(baseUrl, await demoAdminToken(baseUrl));
