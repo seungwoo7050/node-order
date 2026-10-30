@@ -23,6 +23,7 @@ model User {
   expiresAt     DateTime?   @map("expires_at")
   orders        Order[]
   refreshTokens RefreshToken[]
+  accessTokens  AccessToken[]
 
   @@index([expiresAt])
   @@map("users")
@@ -422,4 +423,40 @@ model ReconciliationIssue {
   @@unique([provider, kind, paymentKey])
   @@index([resolvedAt])
   @@map("reconciliation_issues")
+}
+
+// MCP 개인 접근 토큰(30). 원문은 발급할 때 한 번만 보이고 sha256 해시만 저장한다.
+// 범위: read(읽기 도구), write(상태·재고를 바꾸는 도구), pii(손님 연락처·주소 원문). 데모 관리자가 발급하면 read만
+model AccessToken {
+  id         Int              @id @default(autoincrement())
+  userId     String           @map("user_id")
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  tokenHash  String           @unique @map("token_hash")
+  prefix     String // 목록에서 알아보게 원문 앞 몇 글자만
+  scopes     String[]
+  expiresAt  DateTime         @map("expires_at")
+  revokedAt  DateTime?        @map("revoked_at")
+  lastUsedAt DateTime?        @map("last_used_at")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  audits     McpAuditEntry[]
+
+  @@index([userId])
+  @@map("access_tokens")
+}
+
+// MCP 도구 호출 감사 로그. 호출 한 번에 한 행. 인자는 연락처를 가린 요약만 남긴다
+model McpAuditEntry {
+  id        Int         @id @default(autoincrement())
+  tokenId   Int         @map("token_id")
+  token     AccessToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  tool      String
+  args      Json
+  ok        Boolean
+  error     String?
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  @@index([tokenId, id])
+  @@index([createdAt])
+  @@map("mcp_audit_log")
 }
