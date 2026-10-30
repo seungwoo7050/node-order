@@ -38,6 +38,24 @@ test("재고보다 많이 담을 수 없다", async ({ page }) => {
   await expect(plus).toBeDisabled();
 });
 
+test("로그인한 손님이 장바구니를 새로고침해도 자기 배송지가 그대로 보이고, 고치면 이어 쓴다", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("아이디").fill("kim");
+  await page.getByLabel("비밀번호").fill("1234");
+  await page.getByRole("button", { name: "로그인", exact: true }).click();
+  await expect(page).toHaveURL(/\/shop$/);
+  await page.getByRole("listitem").filter({ hasText: "마우스" }).getByRole("button", { name: "담기" }).click();
+  await page.getByTestId("cart-count").click();
+  const form = page.getByTestId("shipping-form");
+  await form.getByLabel("받는 분", { exact: true }).fill("김구매");
+  await form.getByLabel("주소", { exact: true }).fill("서울특별시 강남구 테헤란로 123");
+
+  await page.reload(); // 접근 토큰은 메모리에만 있어 사라지고, 화면이 갱신으로 다시 받는다
+  await expect(form.getByLabel("받는 분", { exact: true })).toHaveValue("김구매");
+  await form.getByLabel("받는 분", { exact: true }).fill("김구매자");
+  await expect(form.getByLabel("주소", { exact: true })).toHaveValue("서울특별시 강남구 테헤란로 123");
+});
+
 test("결제를 취소하고 돌아오면 남은 주문이 어떻게 되는지 알려 준다", async ({ page }) => {
   await page.goto("/shop?checkout=canceled&order=8");
   await expect(page.getByRole("status").filter({ hasText: "결제를 취소했습니다" })).toContainText("주문 #8은 결제 대기로 남아");

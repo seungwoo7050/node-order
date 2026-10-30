@@ -66,6 +66,17 @@ describe("배송지 소유자", () => {
     expect(JSON.stringify(cart())).not.toContain(SHIPPING.recipientPhone);
   });
 
+  it("새로고침 직후 인증을 확인하는 동안에는 배송지를 지우지도 덮어쓰지도 않고, 같은 사람으로 확인되면 보인다", () => {
+    login("kim");
+    cart().setShipping(SHIPPING);
+    useAuthStore.setState(useAuthStore.getInitialState()); // 새로고침: 토큰은 메모리에만 있어 사라졌고, 아직 갱신 전
+    cart().setShipping({ deliveryMemo: "경비실" }); // 확인 중에 한 칸을 고친다
+    expect(cart().shipping).toEqual(SHIPPING);
+    expect(cart().shippingOwner).toBe("kim");
+    login("kim"); // 갱신이 끝났다(같은 사람)
+    expect(shippingFor(cart(), useAuthStore.getState().accessToken)).toEqual(SHIPPING);
+  });
+
   it("로그인 전에 쓴 배송지는 로그인한 사람의 것이 된다", () => {
     cart().setShipping(SHIPPING);
     expect(cart().shippingOwner).toBeNull();
