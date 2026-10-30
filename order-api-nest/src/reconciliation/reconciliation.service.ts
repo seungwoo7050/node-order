@@ -3,6 +3,7 @@ import type { ReconciliationIssue, ReconciliationRun } from "../generated/prisma
 import { PrismaService } from "../prisma/prisma.service.js";
 import { PgError, type PgPaymentStatus, type ProviderId } from "../payments/payment-gateway.js";
 import { PaymentGateways } from "../payments/payment-gateways.js";
+import { withPgRetry } from "../payments/pg-retry.js";
 import { resolveStaleRefunds, type ResolveResult } from "../payments/refund-resolver.js";
 import { RefundsService } from "../payments/refunds.service.js";
 import { comparePayment, missingInPg, reconcile, sameValue, type Issue, type IssueKind, type OurPayment } from "./compare.js";
@@ -72,7 +73,7 @@ export class ReconciliationService {
           continue;
         }
         try {
-          issues.push(...comparePayment(o, await gateway.fetchPayment(o.paymentKey)));
+          issues.push(...comparePayment(o, await withPgRetry(() => gateway.fetchPayment(o.paymentKey!))));
         } catch (err) {
           if (err instanceof PgError && err.status === 404) issues.push(missingInPg(o));
           else throw err;

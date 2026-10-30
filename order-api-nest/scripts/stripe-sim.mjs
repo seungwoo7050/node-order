@@ -3,7 +3,7 @@
 //   결제·환불: GET /v1/payment_intents/{id}, POST /v1/refunds, GET /v1/refunds?payment_intent=
 //   목록(대사용): GET /v1/payment_intents, GET /v1/refunds — created[gte|gt|lte|lt], limit(1~100, 기본 10), starting_after,
 //               최신순, 응답 { object: "list", url, has_more, data }
-//   제어(테스트용, /__sim): faults(실패 주입: refund의 timeout·unavailable, list의 internal(500)), calls(호출 수), reset,
+//   제어(테스트용, /__sim): faults(실패 주입: refund의 timeout·unavailable, list의 internal(500)·rate_limited(429 + Retry-After)), calls(호출 수), reset,
 //               대사용 불일치 심기: intents(PG에만 있는 결제), intents/{id}/patch·delete, refunds/{id}/patch
 // 실행: SIM_PORT=4100 SIM_API_URL=http://localhost:4000 node scripts/stripe-sim.mjs  (SIM_PORT=0이면 빈 포트)
 import { createServer } from "node:http";
@@ -152,6 +152,10 @@ const server = createServer(async (req, res) => {
       calls.list++;
       const fault = takeFault("list");
       if (fault?.kind === "internal") return json(res, 500, { error: { type: "api_error", message: "시뮬레이터: 내부 오류" } });
+      if (fault?.kind === "rate_limited") {
+        res.writeHead(429, { "Content-Type": "application/json", "Retry-After": String(fault.retryAfter ?? 1) });
+        return res.end(JSON.stringify({ error: { type: "invalid_request_error", code: "rate_limit", message: "Too many requests" } }));
+      }
     }
     if (url.pathname === "/v1/payment_intents") return json(res, 200, listPage(url, url.pathname, [...intents.values()]));
     const pi = url.searchParams.get("payment_intent");
@@ -177,7 +181,7 @@ const server = createServer(async (req, res) => {
     let raw = "";
     for await (const chunk of req) raw += chunk;
     const b = JSON.parse(raw || "{}");
-    faults.push({ op: b.op, kind: b.kind, delayMs: b.delayMs, times: b.times ?? 1 });
+    faults.push({ op: b.op, kind: b.kind, delayMs: b.delayMs, retryAfter: b.retryAfter, times: b.times ?? 1 });
     return json(res, 200, { faults });
   }
   if (req.method === "GET" && url.pathname === "/__sim/calls") return json(res, 200, calls);

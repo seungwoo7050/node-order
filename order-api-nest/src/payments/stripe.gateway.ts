@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import Stripe from "stripe";
+import { PG_READ_CONCURRENCY, mapLimit, parseRetryAfter, withPgRetry } from "./pg-retry.js";
 import { PAYMENT_TIMEOUT_MS, PgError, type CheckoutOrder, type PaymentGateway, type PgPayment, type PgRefund, type StartedCheckout } from "./payment-gateway.js";
 
 export type CheckoutSession = { id: string; url: string };
@@ -17,8 +18,9 @@ function toPgError(err: unknown): unknown {
   if (err instanceof Stripe.errors.StripeConnectionError) {
     return new PgError(/timeout/i.test(err.message) ? "timeout" : "network", err.message, err.code);
   }
-  if ((err.statusCode ?? 500) >= 500) return new PgError("network", err.message, err.code, err.statusCode);
-  return new PgError("rejected", err.message, err.code, err.statusCode);
+  const retryAfterMs = parseRetryAfter(err.headers?.["retry-after"]);
+  if ((err.statusCode ?? 500) >= 500) return new PgError("network", err.message, err.code, err.statusCode, retryAfterMs);
+  return new PgError("rejected", err.message, err.code, err.statusCode, retryAfterMs);
 }
 
 async function call<T>(fn: () => Promise<T>): Promise<T> {
@@ -116,20 +118,20 @@ export class StripeGateway implements PaymentGateway {
     const ids = new Set<string>();
     let after: string | undefined;
     do {
-      const page = await call(() => this.stripe.paymentIntents.list({ created, limit: 100, ...(after ? { starting_after: after } : {}) }));
+      const page = await withPgRetry(() => call(() => this.stripe.paymentIntents.list({ created, limit: 100, ...(after ? { starting_after: after } : {}) })));
       for (const pi of page.data) if (pi.status === "succeeded" || pi.status === "canceled") ids.add(pi.id);
       after = page.has_more ? page.data.at(-1)?.id : undefined;
     } while (after);
     do {
-      const page = await call(() => this.stripe.refunds.list({ created, limit: 100, ...(after ? { starting_after: after } : {}) }));
+      const page = await withPgRetry(() => call(() => this.stripe.refunds.list({ created, limit: 100, ...(after ? { starting_after: after } : {}) })));
       for (const r of page.data) {
         const pi = typeof r.payment_intent === "string" ? r.payment_intent : r.payment_intent?.id;
         if (pi) ids.add(pi);
       }
       after = page.has_more ? page.data.at(-1)?.id : undefined;
     } while (after);
-    const payments: PgPayment[] = [];
-    for (const id of ids) payments.push(await this.fetchPayment(id));
+    // 결제마다 다시 읽는다: 한 번에 PG_READ_CONCURRENCY개까지, 429·5xx는 Retry-After·지수 백오프로 다시
+    const payments = await mapLimit([...ids], PG_READ_CONCURRENCY, (id) => withPgRetry(() => this.fetchPayment(id)));
     return payments.filter((p) => p.approvedAt); // 결제되지 않고 취소된 PaymentIntent는 빼고
   }
 

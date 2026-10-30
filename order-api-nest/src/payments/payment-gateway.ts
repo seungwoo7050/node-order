@@ -54,6 +54,7 @@ export class PgError extends Error {
     message: string,
     readonly code?: string,
     readonly status?: number,
+    readonly retryAfterMs?: number, // 429 등에서 PG가 준 Retry-After(조회 재시도가 따른다, pg-retry.ts)
   ) {
     super(message);
     this.name = "PgError";
