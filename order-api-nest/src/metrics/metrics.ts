@@ -116,10 +116,28 @@ for (const provider of ["toss", "stripe"]) {
   for (const reason of ["amount_mismatch", "rejected", "unknown_outcome", "pg_mismatch", "not_paid", "canceled_meanwhile"]) paymentConfirmFailed.inc({ provider, reason }, 0);
 }
 
-// 재시도를 다 쓰고 failed로 옮겨진 메일 job
+// 재시도를 다 쓰고 failed로 옮겨진 메일 job과 보낸 job(실패율 경보의 분모)
 export const mailJobsFailed = new Counter({
   name: "mail_jobs_failed_total",
   help: "재시도를 소진해 실패로 끝난 메일 job 수",
+  registers: [registry],
+});
+export const mailJobsCompleted = new Counter({
+  name: "mail_jobs_completed_total",
+  help: "보낸 메일 job 수",
+  registers: [registry],
+});
+
+// 업무 게이지 계산의 상태. 계산이 실패하면 게이지가 NaN이 되어 그 경보들이 꺼지므로, 마지막 성공 시각이
+// 오래되면 BusinessMetricsStale이 울린다. 리더가 아닌 인스턴스는 0(=1970년)을 내므로 규칙은 max()로 본다
+export const businessMetricsLastSuccess = new Gauge({
+  name: "business_metrics_last_success_timestamp_seconds",
+  help: "업무 지표 게이지를 마지막으로 계산한 시각(유닉스 초, 리더만)",
+  registers: [registry],
+});
+export const businessMetricsFailures = new Counter({
+  name: "business_metrics_failures_total",
+  help: "업무 지표 게이지 계산 실패 수",
   registers: [registry],
 });
 

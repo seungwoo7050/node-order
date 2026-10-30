@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { Job, Queue, Worker } from "bullmq";
 import { Redis } from "ioredis";
 import { FakeMailer } from "../mail/fake-mailer.js";
-import { mailJobsFailed } from "../metrics/metrics.js";
+import { mailJobsCompleted, mailJobsFailed } from "../metrics/metrics.js";
 
 // template·subject는 relay가 이벤트 종류로 정한다(src/mail/templates.ts). 28 전에 쌓인 job에는 없다
 export type OrderEmailJob = { to: string; orderId: number; template?: string; subject?: string };
@@ -31,6 +31,7 @@ export class MailQueue implements OnModuleDestroy {
     this.workerConnection.on("error", warn);
     this.queue.on("error", warn);
     this.worker.on("error", warn);
+    this.worker.on("completed", () => mailJobsCompleted.inc());
     this.worker.on("failed", (job, err) => {
       const final = job && job.attemptsMade >= (job.opts.attempts ?? 1);
       if (final) mailJobsFailed.inc();
