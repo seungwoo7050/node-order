@@ -20,6 +20,7 @@
     "verify:fast": "bash scripts/harness/verify.sh fast",
     "verify": "bash scripts/harness/verify.sh full",
     "search:reindex": "npm run search:reindex -w order-api-nest",
-    "payments:resolve-refunds": "npm run payments:resolve-refunds -w order-api-nest --"
+    "payments:resolve-refunds": "npm run payments:resolve-refunds -w order-api-nest --",
+    "payments:reconcile": "npm run payments:reconcile -w order-api-nest --"
   }
 }

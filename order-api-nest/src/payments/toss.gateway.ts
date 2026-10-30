@@ -4,6 +4,7 @@ import { PAYMENT_TIMEOUT_MS, PgError, type CheckoutOrder, type PaymentGateway, t
 
 // 토스페이먼츠 코어 API(https://docs.tosspayments.com/reference)
 //   승인 POST /v1/payments/confirm, 조회 GET /v1/payments/{paymentKey}, 취소 POST /v1/payments/{paymentKey}/cancel
+//   거래 조회 GET /v1/transactions?startDate&endDate&startingAfter&limit (승인 거래와 취소 거래가 따로 한 행씩, transactionKey로 구분)
 //   인증: Authorization: Basic base64("{시크릿 키}:")   멱등: Idempotency-Key 헤더(POST만, 15일 유효)
 // 결제 화면은 브라우저의 결제위젯 SDK(js.tosspayments.com/v2/standard)가 띄운다. 서버는 승인부터 맡는다
 
@@ -11,6 +12,13 @@ export const TOSS_SDK_URL = "https://js.tosspayments.com/v2/standard";
 const TOSS_API_URL = "https://api.tosspayments.com";
 const SIMULATOR_CLIENT_KEY = "test_ck_simulator";
 const SIMULATOR_SECRET_KEY = "test_sk_simulator";
+
+// GET /v1/transactions의 한 행. 날짜 인자는 yyyy-MM-dd'T'HH:mm:ss(시간대 표기 없음, 한국 시각), limit는 1~5000(기본 100)
+type TossTransaction = { transactionKey: string; paymentKey: string; orderId: string; status: TossPayment["status"]; transactionAt: string; amount: number };
+const TRANSACTIONS_PAGE = 5_000;
+const KST_OFFSET_MS = 9 * 3600_000;
+// 2026-10-29T00:00:00 (한국 시각, 시간대 표기 없음)
+const kstLocal = (d: Date) => new Date(d.getTime() + KST_OFFSET_MS).toISOString().slice(0, 19);
 
 type TossCancel = { transactionKey: string; cancelAmount: number; canceledAt: string };
 export type TossPayment = {
@@ -92,6 +100,25 @@ export class TossGateway implements PaymentGateway {
 
   async fetchPayment(paymentKey: string): Promise<PgPayment> {
     return toPgPayment(await this.request<TossPayment>("GET", `/v1/payments/${encodeURIComponent(paymentKey)}`));
+  }
+
+  // 거래 행은 거래 하나(승인 또는 취소)의 금액만 싣는다. 결제의 지금 상태·누적 취소액은 결제 객체가 정본이라
+  // 기간 안에 거래가 있었던 결제 키를 모은 뒤 결제마다 GET /v1/payments/{paymentKey}로 읽는다
+  async listTransactions(period: { from: Date; to: Date }): Promise<PgPayment[]> {
+    const keys = new Set<string>();
+    // endDate는 끝을 포함하는 것으로 보고 1초 앞까지 묻는다([from, to))
+    const base = { startDate: kstLocal(period.from), endDate: kstLocal(new Date(period.to.getTime() - 1000)), limit: String(TRANSACTIONS_PAGE) };
+    let startingAfter: string | undefined;
+    for (;;) {
+      const q = new URLSearchParams({ ...base, ...(startingAfter ? { startingAfter } : {}) });
+      const page = await this.request<TossTransaction[]>("GET", `/v1/transactions?${q}`);
+      for (const t of page) keys.add(t.paymentKey);
+      if (page.length < TRANSACTIONS_PAGE) break;
+      startingAfter = page.at(-1)!.transactionKey;
+    }
+    const payments: PgPayment[] = [];
+    for (const key of keys) payments.push(await this.fetchPayment(key));
+    return payments;
   }
 
   async refund(paymentKey: string, input: { amount: number; reason: string }, idempotencyKey: string): Promise<PgRefund> {

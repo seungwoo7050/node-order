@@ -38,6 +38,9 @@ export interface PaymentGateway {
   findPaymentKey(providerOrderId: string): Promise<string | null>;
   // PG에 다시 묻는다. 웹훅 본문이나 리다이렉트 쿼리 대신 이 결과를 믿는다
   fetchPayment(paymentKey: string): Promise<PgPayment>;
+  // 기간 [from, to) 안에 거래(승인·취소)가 있었던 결제를 PG 쪽 지금 상태로 돌려준다. PG 대사(29)가 우리 payments·refunds와 맞춰 본다
+  // (PG에만 있는 결제를 찾으려면 우리 DB의 키로 하나씩 묻는 것으로는 모자라 PG의 목록이 필요하다)
+  listTransactions(period: { from: Date; to: Date }): Promise<PgPayment[]>;
   // 환불(부분 환불 포함). 같은 멱등 키로 다시 부르면 PG가 첫 결과를 돌려준다
   refund(paymentKey: string, input: { amount: number; reason: string; refundId: number }, idempotencyKey: string): Promise<PgRefund>;
 }
