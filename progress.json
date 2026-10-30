@@ -19,9 +19,9 @@
   },
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
-    "26-search": "implementing",
-    "27-fulfillment": "todo",
-    "28-toss-payments": "todo",
+    "26-search": "implemented (평가 중)",
+    "27-toss-payments": "brief-confirmed",
+    "28-fulfillment": "todo",
     "29-admin": "todo",
     "30-ai-mcp": "todo",
     "31-observability": "todo"
@@ -40,5 +40,8 @@
   ],
   "deferred": [
     "학습 저장소의 질문·답·AI 활용 사례(브랜치마다 쓸 것 중 study/interview 쪽): 그 브랜치 작업 트리에 사람의 커밋 안 한 변경이 있어 건드리지 않았다. 사람이 정리한 뒤 25부터 한꺼번에 옮긴다"
+  ],
+  "side_effects": [
+    "26 verify가 공용 dev DB(order_api)에 0028 마이그레이션을 적용했다. 원본 체크아웃(main=24)에서 prisma migrate dev를 하면 드리프트로 보인다. 26을 합치거나 dev DB를 시드로 다시 만들면 풀린다"
   ]
 }
