@@ -54,6 +54,20 @@ export const catalogLoads = new Counter({
   registers: [registry],
 });
 
+export const llmTokens = new Counter({
+  name: "llm_tokens_total",
+  help: "LLM 공급자가 알려 준 입력·출력 토큰 수",
+  labelNames: ["provider", "model", "direction"] as const,
+  registers: [registry],
+});
+
+export const llmRequests = new Counter({
+  name: "llm_requests_total",
+  help: "LLM 생성 요청 결과 수(ok, error, aborted=손님이 끊음, rate_limited)",
+  labelNames: ["feature", "result"] as const,
+  registers: [registry],
+});
+
 function routeOf(req: Request): string {
   const path = req.route?.path as string | undefined;
   if (!path || path === "{/*splat}") return "unmatched";
