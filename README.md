@@ -246,6 +246,24 @@ claude mcp list                                                              # n
 - `mcp_audit_log`에 그 토큰으로 1행(ok=true, 인자 `{}`)
 - 토큰을 폐기하자 같은 요청이 401
 
+## 관측(31)
+
+- 오류 추적: API `@sentry/nestjs`(`src/observability/sentry.ts`, `main.ts`가 가장 먼저 가져온다), 콘솔 `@sentry/nextjs`(`instrumentation.ts`의 `register`·`onRequestError`). `SENTRY_DSN`이 있을 때만 켜고 release는 `SENTRY_RELEASE`(운영 Compose는 슬롯의 이미지 태그). 처리하지 못한 예외(5xx)만 보내고 4xx(HttpException)는 보내지 않는다
+- 보내기 전에 `scrubEvent`(`src/observability/scrub.ts`, 콘솔도 같은 파일)가 29의 칸 규칙으로 배송지를 가리고, 글 속 전화번호·이메일·도로명 주소, Authorization·Cookie 헤더, 요청 쿠키·본문, 토큰 모양 값(Bearer, JWT, `nop_`, Stripe·토스·GitHub 키)을 지운다. 가짜 수집 서버 `test/fake-sentry.ts`(envelope 엔드포인트)로 API e2e·웹 e2e가 release와 원문 없음을 본다. 연결 확인용 `/ops/error-check`는 `OPS_ERROR_CHECK=1`일 때만 오류를 던진다
+- 업무 지표(`/metrics`): 리더가 `BUSINESS_METRICS_INTERVAL_MS`(30초)마다 계산하는 `reconciliation_open_issues`, `refunds_unresolved_oldest_seconds`, `search_index_lag_seconds`, `outbox_oldest_unpublished_seconds`, `fulfillment_overdue_orders`(`FULFILLMENT_OVERDUE_DAYS`, 3일)와 카운터 `payments_confirm_attempts_total`·`payments_confirm_failed_total{provider,reason}`, `mail_jobs_failed_total`, `mcp_tool_calls_total{tool,result}`, 게이지 `llm_daily_token_budget`. 라벨에 손님 정보·주문 id를 넣지 않는다(e2e가 허용 라벨 목록과 값을 검사)
+- 경보(`monitoring/alert-rules.yml`): ApiDown, HighErrorRate, OutboxBacklog에 ReconciliationMismatch, RefundOutcomeUnknown, PaymentConfirmFailureRate, ReconciliationRetryExhausted, LlmDailyTokenBudgetExceeded, SearchIndexLag, MailJobsFailing, FulfillmentOverdue, Watchdog. 경보마다 [`docs/runbook.md`](docs/runbook.md)의 절(무엇을 보나, 명령, 언제 PG 화면을 보나)이 있고 annotation `runbook`이 가리킨다
+- 알림: Alertmanager 설정은 `monitoring/alertmanager/render.sh`가 `ALERT_WEBHOOK_URL`(Slack 호환, Discord는 `/slack`)과 `DEADMAN_URL`(healthchecks 호환 핑)로 만든다. 없으면 null 수신자. Watchdog은 웹훅이 아니라 dead man's switch로 1분마다 간다
+- 운영 Compose: Prometheus(보존 7일·1GB, 256MB)와 Alertmanager(64MB)를 서버 안 포트(127.0.0.1)로만 연다. 긁을 API는 `release.sh`·`rollback.sh`가 `live/targets.json`에 적는다. 공개 주소의 `/metrics`는 Caddy가 404. Grafana는 개발 PC에서 `ssh -N -L 19090:127.0.0.1:9090 ubuntu@<서버>` 뒤 데이터 원본 "Prometheus (운영, SSH 터널)"
+- 서버에서 결제 손 작업: `bash ops/payments.sh resolve-refunds`, `bash ops/payments.sh reconcile --date=YYYY-MM-DD`
+
+```sh
+npm run test:rules                     # promtool 규칙 테스트 + Prometheus 설정 검사 + render.sh 경우마다 amtool check-config
+deploy/rehearsal-alerts.sh obs1        # 리허설을 띄우고 색인 멈춤·대사 불일치를 넣어 경보가 가짜 수신기(5001)에 오는지 본다
+deploy/rehearsal-alerts.sh down        # 리허설 컨테이너·볼륨을 내린다
+```
+
+실제 Sentry DSN, 알림 웹훅, dead man's switch 주소는 연결해 보지 않았다(사람이 서버 `.env`에 넣는다).
+
 ## 정리
 
 ```sh

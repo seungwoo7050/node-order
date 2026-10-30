@@ -45,5 +45,6 @@ node-order: 주문 API(`order-api-nest`, NestJS + Prisma + Postgres) + 콘솔(`o
 
 - 콘솔(Next.js) 규칙: `order-console-next/AGENTS.md`
 - API e2e 환경: `order-api-nest/test/setup-env.ts` (TEST_DATABASE_URL로 바꿔 돌린다)
-- 배포: `deploy/`, 경보 규칙: `monitoring/`
+- 배포: `deploy/`, 경보 규칙: `monitoring/`. 경보를 더하면 promtool 테스트(`monitoring/alert-rules.test.yml`)와 `docs/runbook.md`의 절을 같이 더한다(`monitoring.test.sh`가 막는다)
+- 웹 e2e의 콘솔 서버는 `SENTRY_DSN`을 가짜 수집 서버(4400)로 띄운다(`playwright.config.ts`)
 - 프로젝트 설명: `README.md`
