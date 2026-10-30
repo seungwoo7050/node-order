@@ -215,7 +215,7 @@ describe("MCP /mcp", () => {
       [writeToken.id, "get_order", false],
       [writeToken.id, "list_low_stock", true],
     ]);
-    expect(rows[3]!.args).toEqual({ returnId: ret.id, reason: "손님(010-****-5432, k***@example.com)과 통화 후 거절" });
+    expect(rows[3]!.args).toEqual({ returnId: ret.id, reason: "[자유 글 43자]" }); // 자유 글은 본문 없이 길이만
     expect(rows[2]!.error).toMatch(/write 범위/);
     const all = JSON.stringify(rows);
     expect(all).not.toContain("010-9876-5432");
