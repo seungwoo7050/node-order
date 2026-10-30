@@ -8,10 +8,12 @@ import { DashboardService } from "../admin/dashboard.service.js";
 import { StoreSettingsService } from "../admin/store-settings.service.js";
 import { FulfillmentService } from "../fulfillment/fulfillment.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { RateLimitStore } from "../rate-limit/rate-limit.middleware.js";
 import { ReconciliationService } from "../reconciliation/reconciliation.service.js";
 import { SearchStats } from "../search/search-stats.js";
 import { AccessTokensService, type McpPrincipal } from "./access-tokens.js";
 import { maskArgs, maskText } from "./mask-args.js";
+import { McpRateLimiter } from "./mcp-rate-limit.js";
 import { registerSellerTools, type McpDeps } from "./mcp-tools.js";
 
 type ToolCall = { tool: string; args: unknown };
@@ -19,7 +21,7 @@ type ToolCall = { tool: string; args: unknown };
 // tools/call 요청을 id로 모은다(감사 로그를 응답을 보낼 때 쓴다)
 function toolCalls(body: unknown): Map<string | number, ToolCall> {
   const calls = new Map<string | number, ToolCall>();
-  for (const msg of Array.isArray(body) ? body : [body]) {
+  for (const msg of [body]) {
     const m = msg as { id?: string | number; method?: string; params?: { name?: unknown; arguments?: unknown } } | null;
     if (m?.method === "tools/call" && m.id !== undefined) calls.set(m.id, { tool: String(m.params?.name ?? ""), args: m.params?.arguments ?? {} });
   }
@@ -43,12 +45,15 @@ function outcome(msg: JSONRPCMessage): { ok: boolean; error: string | null } {
 
 // 판매자용 MCP 서버(Streamable HTTP, POST /mcp). 상태 없는(stateless) 모드: 요청마다 서버와 전송을 새로 만들어
 // 토큰의 범위를 그 요청의 도구에 묶는다(세션을 기억하지 않으니 API를 여러 대로 늘려도 그대로 된다).
-// 인증은 관리자 화면에서 발급한 개인 접근 토큰(Bearer). 없거나 폐기·만료된 토큰은 401
+// 인증은 관리자 화면에서 발급한 개인 접근 토큰(Bearer). 없거나 폐기·만료된 토큰은 401.
+// JSON-RPC 배열(batch)은 받지 않는다(400): 2025-06-18 사양에서 빠졌고, 한 요청에 도구 호출을 수십 개 실어 호출 제한을 비켜 갈 수 있다.
+// 도구 호출(tools/call)은 토큰마다 분당 MCP_RATE_LIMIT_PER_MINUTE(기본 60)번까지, 넘으면 429(mcp-rate-limit.ts)
 @ApiExcludeController()
 @Controller("mcp")
 export class McpController {
   private readonly logger = new Logger(McpController.name);
   private readonly deps: McpDeps;
+  private readonly limiter: McpRateLimiter;
 
   constructor(
     private readonly tokens: AccessTokensService,
@@ -58,8 +63,10 @@ export class McpController {
     searchStats: SearchStats,
     settings: StoreSettingsService,
     prisma: PrismaService,
+    rateStore: RateLimitStore,
   ) {
     this.deps = { fulfillment, dashboard, reconciliation, searchStats, settings, prisma };
+    this.limiter = new McpRateLimiter(rateStore);
   }
 
   @Post()
@@ -71,12 +78,27 @@ export class McpController {
       return;
     }
 
+    if (Array.isArray(req.body)) {
+      res.status(400).json({ jsonrpc: "2.0", error: { code: -32600, message: "JSON-RPC 배열(batch) 요청은 받지 않습니다. 메시지를 하나씩 보내 주세요" }, id: null });
+      return;
+    }
+    const calls = toolCalls(req.body);
+    if (calls.size > 0) {
+      const rate = await this.limiter.allow(principal.tokenId);
+      if (!rate.ok) {
+        res.status(429).setHeader("Retry-After", String(rate.retryAfter));
+        const id = (req.body as { id?: string | number }).id ?? null;
+        res.json({ jsonrpc: "2.0", error: { code: -32029, message: `도구 호출은 토큰마다 1분에 ${rate.limit}번까지입니다. ${rate.retryAfter}초 뒤에 다시 시도하세요` }, id });
+        return;
+      }
+    }
+
     const server = new McpServer({ name: "node-order-seller", version: "1.0.0" }, {
       instructions: "1인 상점 판매자의 주문·배송·반품·재고 도구. 바꾸는 도구(write)는 사람이 확인한 뒤 부른다.",
     });
     registerSellerTools(server, principal, this.deps);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-    this.auditResponses(transport, principal, toolCalls(req.body));
+    this.auditResponses(transport, principal, calls);
     res.on("close", () => {
       void transport.close();
       void server.close();
