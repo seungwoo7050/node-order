@@ -15,13 +15,13 @@
   "current": {
     "branch": "29-admin",
     "stage": "implement",
-    "note": "구현은 포트를 써서 한 번에 하나만 돌린다. 26·27·28 가이드는 31 구현이 끝난 뒤 차례로 한다(시작 기준점이 고정이라 내용이 달라지지 않는다). 29 구현과 28 devlog를 같이 돌린다"
+    "note": "29 구현 중. 28 devlog가 찾은 결함 4건은 29 구현이 끝나면 후속 수정으로 넘긴다(queued_fixes)"
   },
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
     "26-search": "implemented @ bfb0840 (devlog 완료, 가이드 대기)",
     "27-toss-payments": "implemented @ 2558cde (verify 통과, devlog 완료, 가이드 대기)",
-    "28-fulfillment": "implemented @ 90d0278 (verify 통과, devlog 진행, 가이드 대기)",
+    "28-fulfillment": "implemented @ 90d0278 (verify 통과, devlog 완료, 가이드 대기)",
     "29-admin": "implementing",
     "30-ai-mcp": "todo",
     "31-observability": "todo"
@@ -65,5 +65,11 @@
   "known_risks": [
     "토스 환불 확정은 금액으로 짝을 지어 같은 금액 환불 두 건이 동시에 결과 미상이면 짝이 바뀔 수 있다(작음)",
     "seed가 견본 사용자의 PG 결제 주문을 남겨 e2e를 돌릴 때마다 주문이 늘어난다"
+  ],
+  "queued_fixes": [
+    "결제 기한 작업이 status만 본다: paid=false·canceled_at IS NULL·payments 상태까지 조건에 넣고, expand 기간에 옛 칸으로 쓴 행의 status를 맞춘다(blue/green 사이 오취소·재고 이중 복구)",
+    "demo_admin이 배송지 원문(연락처·주소)을 읽는다: 데모 관리자 응답에서 마스킹",
+    "구매확정과 반품 신청 경합: 주문 행 잠금으로 직렬화. PG가 환불을 거절하면 새 시도 키로 다시 요청하는 관리자 동작",
+    "로그아웃 뒤 장바구니 저장소에 배송지 원문이 남는다: 로그아웃 때 지운다"
   ]
 }
