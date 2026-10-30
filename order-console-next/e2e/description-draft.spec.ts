@@ -66,6 +66,28 @@ test.describe("LLM이 켜져 있을 때", () => {
     expect(await savedDescription(page)).toBe(before);
   });
 
+  test("저장하지 않은 손 편집이 있으면 덮어쓰기 전에 묻고, 취소하면 편집이 그대로 남는다", async ({ page }) => {
+    await loginAsKim(page);
+    await page.goto(`/admin/products/${PRODUCT}`);
+    const textarea = page.getByLabel("설명");
+    await textarea.fill("손으로 고친 설명(아직 저장 안 함)");
+    let drafts = 0;
+    page.on("request", (r) => { if (r.url().includes("/description-draft")) drafts++; });
+
+    await page.getByRole("button", { name: "설명 초안 만들기" }).click();
+    const confirm = page.getByRole("alertdialog", { name: "저장하지 않은 설명" });
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole("button", { name: "취소" }).click();
+    await expect(confirm).toHaveCount(0);
+    await expect(textarea).toHaveValue("손으로 고친 설명(아직 저장 안 함)");
+    expect(drafts).toBe(0);
+
+    await page.getByRole("button", { name: "설명 초안 만들기" }).click();
+    await page.getByRole("alertdialog", { name: "저장하지 않은 설명" }).getByRole("button", { name: "덮어쓰기" }).click();
+    await expect(textarea).toHaveValue(CHUNKS.join(""), { timeout: 10_000 });
+    expect(drafts).toBe(1);
+  });
+
   test("중간에 오류가 나면 받은 글은 남고 오류 문구가 보이며 저장되지 않는다", async ({ page }) => {
     await loginAsKim(page);
     const before = await savedDescription(page);
