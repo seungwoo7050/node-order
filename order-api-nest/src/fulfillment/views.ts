@@ -32,13 +32,20 @@ const shipmentView = (s: Row["shipments"][number]) => ({
   trackingUrl: trackingUrl(s.carrier, s.trackingNumber),
 });
 
-// 반품 환불은 refunds의 멱등 키(return-<id>)로 찾는다
+// 반품 환불은 refunds의 멱등 키(return-<id>, 관리자가 다시 시도하면 return-<id>-r<n>)로 찾는다. 시도가 여럿이면 마지막 시도
+export const RETURN_REFUND_KEY = /^return-(\d+)(?:-r\d+)?$/;
 async function returnRefunds(tx: Tx, orderId: number) {
   const refunds = await tx.refund.findMany({
     where: { payment: { orderId }, idempotencyKey: { startsWith: "return-" } },
-    select: { idempotencyKey: true, amount: true, status: true },
+    select: { id: true, idempotencyKey: true, amount: true, status: true },
+    orderBy: { id: "asc" },
   });
-  return new Map(refunds.map((r) => [r.idempotencyKey, { amount: r.amount, status: r.status }]));
+  const byReturn = new Map<number, { id: number; amount: number; status: (typeof refunds)[number]["status"] }>();
+  for (const r of refunds) {
+    const m = r.idempotencyKey.match(RETURN_REFUND_KEY);
+    if (m) byReturn.set(Number(m[1]), { id: r.id, amount: r.amount, status: r.status });
+  }
+  return byReturn;
 }
 
 // 반품할 수 있는 수량: 주문 수량 - (거절되지 않은 반품 요청의 수량)
@@ -67,7 +74,7 @@ async function baseView(tx: Tx, row: Row, now: Date) {
     subtotal: totalAmount - row.shippingFee,
     shipping: recipientName ? { recipientName, recipientPhone, postalCode, address1, address2, deliveryMemo } : null,
     shipments: row.shipments.map(shipmentView),
-    returns: row.returns.map((r) => ({ ...r, refund: refunds.get(`return-${r.id}`) ?? null })),
+    returns: row.returns.map((r) => ({ ...r, refund: refunds.get(r.id) ?? null })),
     returnDeadline: deadline,
     returnable: row.items.map((i) => ({ productId: i.product.id, name: i.product.name, quantity: Math.max(0, left.get(i.product.id) ?? 0) })),
     canReturn,

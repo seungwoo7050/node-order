@@ -1,7 +1,7 @@
-import { Body, Controller, Get, HttpCode, Param, ParseIntPipe, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, ParseIntPipe, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { AdminGuard } from "../auth/admin.guard.js";
 import { AdminViewGuard } from "../auth/admin-view.guard.js";
 import { PAGE_QUERY } from "../pagination/page-query.pipe.js";
@@ -56,6 +56,15 @@ export class AdminFulfillmentController {
   @UseGuards(AdminGuard)
   cancel(@Param("id", ParseIntPipe) id: number, @Body() dto: CancelOrderDto, @Req() req: Request) {
     return this.fulfillment.cancel(id, userIdOf(req), dto.reason?.trim() || undefined);
+  }
+
+  // PG가 거절한 환불을 새 시도 키로 다시 요청한다(201 환불됨 · 202 결과 모름 · 409 이미 시도 중이거나 한도 초과)
+  @Post("orders/:id/refunds/:refundId/retry")
+  @UseGuards(AdminGuard)
+  async retryRefund(@Param("id", ParseIntPipe) id: number, @Param("refundId", ParseIntPipe) refundId: number, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const { httpStatus, ...body } = await this.fulfillment.retryRefund(id, refundId, userIdOf(req));
+    res.status(httpStatus);
+    return body;
   }
 
   @Post("returns/:id/approve")

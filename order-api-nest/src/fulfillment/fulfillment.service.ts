@@ -14,7 +14,7 @@ import {
   AUTO_CONFIRM_DAYS, AUTO_DELIVER_DAYS, DAY_MS, UNPAID_ORDER_TTL_HOURS, returnDeadline, returnRefundAmount, type ReturnReason,
 } from "./policy.js";
 import { TransitionConflict, attemptTransition, restoreOrderStock, transitionOrder, type ActorRef } from "./transitions.js";
-import { adminOrderView, customerOrderView, returnableQuantities } from "./views.js";
+import { RETURN_REFUND_KEY, adminOrderView, customerOrderView, returnableQuantities } from "./views.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -166,6 +166,28 @@ export class FulfillmentService {
     return this.adminDetail(orderId);
   }
 
+  // PG가 거절한(failed) 환불 다시 시도. 같은 멱등 키로는 PG가 첫 결과(거절)를 돌려주므로 새 시도 키를 쓴다:
+  //   <처음 키>-r<n> (n = 지금까지의 시도 수). 두 번 눌러도 같은 n이라 같은 키가 되어 한 번만 나간다.
+  //   이미 진행 중(requested)이거나 성공한 시도가 있으면 409. 누적 환불 한도는 RefundsService가 그대로 검사한다
+  //   반품 환불(return-<id>)이 성공하면 반품을 완료한다
+  async retryRefund(orderId: number, refundId: number, adminId: string) {
+    const failed = await this.prisma.asAdmin((tx) => tx.refund.findFirst({ where: { id: refundId, payment: { orderId } } }));
+    if (!failed) throw new NotFoundException(`주문 ${orderId}의 환불 #${refundId}가 없습니다`);
+    if (failed.status !== "failed") throw new ConflictException(`실패한 환불만 다시 시도할 수 있습니다(지금 ${failed.status})`);
+    const base = failed.idempotencyKey.replace(/-r\d+$/, "");
+    const attempts = (await this.prisma.asAdmin((tx) => tx.refund.findMany({
+      where: { paymentId: failed.paymentId, idempotencyKey: { startsWith: base } }, select: { id: true, idempotencyKey: true, status: true },
+    }))).filter((r) => r.idempotencyKey === base || (r.idempotencyKey.startsWith(`${base}-r`) && /^\d+$/.test(r.idempotencyKey.slice(base.length + 2))));
+    const live = attempts.find((r) => r.status !== "failed");
+    if (live) throw new ConflictException(`이미 다시 시도한 환불이 있습니다(#${live.id} ${live.status})`);
+    const key = `${base}-r${attempts.length}`;
+    this.logger.log(`환불 재시도: 주문 #${orderId} 환불 #${refundId} → ${key} (관리자 ${adminId})`);
+    const { httpStatus, refund } = await this.refunds.request(orderId, { amount: failed.amount, reason: failed.reason }, key);
+    const returnId = base.match(RETURN_REFUND_KEY)?.[1];
+    if (returnId && refund.status === "succeeded") await this.completeReturn(Number(returnId), admin(adminId));
+    return { httpStatus, refund, order: await this.adminDetail(orderId) };
+  }
+
   // ── 손님 ──────────────────────────────────────────────
 
   async customerDetail(userId: string, orderId: number) {
@@ -174,9 +196,12 @@ export class FulfillmentService {
     return view;
   }
 
+  // 구매확정과 반품 신청은 같은 주문 행 잠금(FOR UPDATE)으로 줄을 선다: 반품 신청이 먼저 커밋하면 여기서 그 요청을 보고 409,
+  // 구매확정이 먼저면 반품 신청이 confirmed를 보고 409. 잠그지 않으면 둘 다 "아직 없음"을 읽고 둘 다 성공한다
   async confirm(userId: string, orderId: number) {
     await this.prisma.asUser(userId, async (tx) => {
-      const order = await tx.order.findFirst({ where: { id: orderId, userId }, select: { status: true } });
+      const [order] = await tx.$queryRaw<{ status: OrderStatus }[]>`
+        SELECT status::text AS status FROM orders WHERE id = ${orderId} AND user_id = ${userId} FOR UPDATE`;
       if (!order) throw new NotFoundException(`order ${orderId} not found`);
       if (await tx.return.count({ where: { orderId, status: "requested" } })) {
         throw new TransitionConflict(order.status, "처리 중인 반품·교환 요청이 있어 구매확정할 수 없습니다");
@@ -245,6 +270,7 @@ export class FulfillmentService {
     }
     for (const { id } of toConfirm) {
       const moved = await this.prisma.asAdmin(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`; // 손님 구매확정과 같은 잠금(반품 신청과 줄 세우기)
         if (await tx.return.count({ where: { orderId: id, status: "requested" } })) return { ok: false };
         return attemptTransition(tx, id, "confirm", system, { now, reason: `배송 완료 ${AUTO_CONFIRM_DAYS}일 경과` });
       });
@@ -252,11 +278,14 @@ export class FulfillmentService {
     }
     const approved = await this.prisma.asAdmin((tx) => tx.return.findMany({ where: { status: "approved", kind: "refund" }, select: { id: true }, take: limit }));
     if (approved.length > 0) {
+      // 첫 시도(return-<id>)든 관리자의 재시도(return-<id>-r<n>)든 성공한 환불이 있으면 완료
+      const ids = new Set(approved.map((r) => r.id));
       const settled = await this.prisma.asAdmin((tx) => tx.refund.findMany({
-        where: { idempotencyKey: { in: approved.map((r) => `return-${r.id}`) }, status: "succeeded" }, select: { idempotencyKey: true },
+        where: { OR: approved.map((r) => ({ idempotencyKey: { startsWith: `return-${r.id}` } })), status: "succeeded" }, select: { idempotencyKey: true },
       }));
-      for (const { idempotencyKey } of settled) {
-        if (await this.completeReturn(Number(idempotencyKey.slice("return-".length)), system, now)) result.returnsCompleted++;
+      const done = new Set(settled.map((r) => Number(r.idempotencyKey.match(RETURN_REFUND_KEY)?.[1])).filter((id) => ids.has(id)));
+      for (const id of done) {
+        if (await this.completeReturn(id, system, now)) result.returnsCompleted++;
       }
     }
     if (Object.values(result).some((n) => n > 0)) this.logger.log(`자동 전이: ${JSON.stringify(result)}`);
@@ -267,7 +296,11 @@ export class FulfillmentService {
   // 취소하기 전에 PG에 다시 묻는다: 승인돼 있으면(승인 응답·웹훅을 잃었다) 결제 완료로 반영하고, PG에 묻지 못하면 다음 회차로 미룬다
   private async expireUnpaid(now: Date, limit: number, result: AutoAdvanceResult): Promise<void> {
     const stale = await this.prisma.asAdmin((tx) => tx.order.findMany({
-      where: { status: "pending_payment", createdAt: { lte: new Date(now.getTime() - UNPAID_ORDER_TTL_HOURS * 60 * 60 * 1000) } },
+      // 옛 칸과 결제 행도 본다(expand 기간에 옛 API가 결제·취소한 주문은 status가 늦을 수 있다. 0034 트리거와 cancelUnpaidOrder가 한 번 더 막는다)
+      where: {
+        status: "pending_payment", paid: false, canceledAt: null, OR: [{ payment: null }, { payment: { status: "ready" } }],
+        createdAt: { lte: new Date(now.getTime() - UNPAID_ORDER_TTL_HOURS * 60 * 60 * 1000) },
+      },
       select: { id: true, payment: { select: { id: true, provider: true, providerOrderId: true, providerPaymentKey: true, amount: true, status: true } } },
       orderBy: { id: "asc" }, take: limit,
     }));
