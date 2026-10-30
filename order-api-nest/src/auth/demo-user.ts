@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { Prisma } from "../generated/prisma/client.js";
 import { cancelUnpaidOrder, manualPayment } from "../payments/cancel-unpaid-order.js";
+import { deleteDemoUserOrders } from "../orders/delete-orders.js";
 
 export const DEMO_USER_TTL_MS = Number(process.env.DEMO_USER_TTL_SECONDS ?? 24 * 60 * 60) * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -48,8 +49,7 @@ export async function deleteUsers(tx: Prisma.TransactionClient, ids: string[]): 
   if (ids.length === 0) return 0;
   const pending = await tx.order.findMany({ where: { userId: { in: ids }, paid: false, canceledAt: null }, select: { id: true } });
   for (const o of pending) await cancelUnpaidOrder(tx, o.id);
-  await tx.orderItem.deleteMany({ where: { order: { userId: { in: ids } } } });
-  await tx.order.deleteMany({ where: { userId: { in: ids } } });
+  await deleteDemoUserOrders(tx, ids); // 데모 사용자의 결제·환불 기록도 명시적으로 지운다
   await tx.refreshToken.deleteMany({ where: { userId: { in: ids } } });
   await tx.idempotencyKey.deleteMany({ where: { userId: { in: ids } } });
   await tx.outboxEvent.deleteMany({ where: { userId: { in: ids } } });

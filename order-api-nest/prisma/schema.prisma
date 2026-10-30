@@ -70,7 +70,7 @@ enum RefundStatus {
 model Payment {
   id                 Int             @id @default(autoincrement())
   orderId            Int             @unique @map("order_id")
-  order              Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order              Order           @relation(fields: [orderId], references: [id], onDelete: Restrict) // 0031: 주문을 지워도 결제 기록은 남는다
   provider           PaymentProvider
   providerOrderId    String          @map("provider_order_id")
   providerPaymentKey String?         @map("provider_payment_key")
@@ -90,7 +90,7 @@ model Payment {
 model Refund {
   id                Int          @id @default(autoincrement())
   paymentId         Int          @map("payment_id")
-  payment           Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  payment           Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   amount            Int
   reason            String
   idempotencyKey    String       @unique @map("idempotency_key")
