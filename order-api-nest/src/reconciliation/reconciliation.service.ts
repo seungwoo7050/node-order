@@ -45,7 +45,12 @@ export class ReconciliationService {
     private readonly refunds: RefundsService,
   ) {}
 
-  async run(date: string, options: { refundsOlderThanMs?: number } = {}): Promise<ReconcileResult> {
+  configuredProviders(): ProviderId[] {
+    return this.gateways.configured();
+  }
+
+  // providers를 주면 그 PG만(정기 작업이 실패한 provider만 다시 돌 때), startedAt을 주면 run의 시작 시각으로 쓴다(정기 작업의 확인 시각)
+  async run(date: string, options: { refundsOlderThanMs?: number; providers?: ProviderId[]; startedAt?: Date } = {}): Promise<ReconcileResult> {
     const period = periodOf(date);
     let refunds: ResolveResult | null = null;
     try {
@@ -54,14 +59,15 @@ export class ReconciliationService {
       this.logger.warn(`환불 확정을 돌리지 못했다(대사는 계속한다): ${(err as Error).message}`);
     }
     const runs: ProviderRun[] = [];
-    for (const provider of this.gateways.configured()) runs.push(await this.runProvider(provider, date, period));
+    const providers = this.gateways.configured().filter((p) => !options.providers || options.providers.includes(p));
+    for (const provider of providers) runs.push(await this.runProvider(provider, date, period, options.startedAt));
     const failed = runs.some((r) => r.error);
     this.logger.log(`대사 ${date}: ${runs.map((r) => `${r.provider} ${r.error ? `실패(${r.error})` : `PG ${r.pgCount}건 · 우리 ${r.dbCount}건 · 불일치 ${r.issueCount}건`}`).join(", ") || "켜진 PG 없음"}`);
     return { date, refunds, runs, failed };
   }
 
-  private async runProvider(provider: ProviderId, date: string, period: { from: Date; to: Date }): Promise<ProviderRun> {
-    const run = await this.prisma.reconciliationRun.create({ data: { provider, periodStart: period.from, periodEnd: period.to } });
+  private async runProvider(provider: ProviderId, date: string, period: { from: Date; to: Date }, startedAt?: Date): Promise<ProviderRun> {
+    const run = await this.prisma.reconciliationRun.create({ data: { provider, periodStart: period.from, periodEnd: period.to, ...(startedAt ? { startedAt } : {}) } });
     try {
       const gateway = this.gateways.get(provider);
       const pgPayments = await gateway.listTransactions(period);

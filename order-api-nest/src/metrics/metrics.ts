@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { Counter, Histogram, Registry, collectDefaultMetrics } from "prom-client";
+import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from "prom-client";
 
 export const registry = new Registry();
 
@@ -51,6 +51,14 @@ export const catalogCacheRequests = new Counter({
 export const catalogLoads = new Counter({
   name: "catalog_loads_total",
   help: "카탈로그를 DB에서 읽은 횟수",
+  registers: [registry],
+});
+
+// 정기 대사가 provider별로 마지막 성공 뒤 연속으로 실패한 run 수(31에서 경보를 건다)
+export const reconciliationFailures = new Gauge({
+  name: "reconciliation_consecutive_failures",
+  help: "PG 대사 run이 마지막 성공 뒤 연속으로 실패한 수(provider별)",
+  labelNames: ["provider"] as const,
   registers: [registry],
 });
 
