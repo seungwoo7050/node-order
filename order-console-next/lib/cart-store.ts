@@ -2,10 +2,15 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export type CartItem = { productId: number; name: string; price: number; quantity: number };
+// 배송지. 다음 주문에 다시 쓰도록 이 브라우저에 남긴다(주문에는 사본이 붙는다)
+export type ShippingInput = { recipientName: string; recipientPhone: string; postalCode: string; address1: string; address2: string; deliveryMemo: string };
+export const EMPTY_SHIPPING: ShippingInput = { recipientName: "", recipientPhone: "", postalCode: "", address1: "", address2: "", deliveryMemo: "" };
 
 type CartState = {
   items: CartItem[];
   checkoutKey: string | null;
+  shipping: ShippingInput;
+  setShipping: (patch: Partial<ShippingInput>) => void;
   add: (item: Omit<CartItem, "quantity">) => void;
   remove: (productId: number) => void;
   setQuantity: (productId: number, quantity: number) => void;
@@ -18,6 +23,9 @@ export const useCartStore = create<CartState>()(
     (set, get) => ({
       items: [],
       checkoutKey: null,
+      shipping: EMPTY_SHIPPING,
+      // 배송지가 바뀌면 다른 요청이므로 멱등 키를 새로 만든다(같은 키로 다른 내용을 보내면 422)
+      setShipping: (patch) => set((state) => ({ checkoutKey: null, shipping: { ...state.shipping, ...patch } })),
       add: (item) =>
         set((state) => {
           const found = state.items.find((i) => i.productId === item.productId);
