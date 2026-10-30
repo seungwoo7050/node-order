@@ -27,7 +27,8 @@
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
     "start:traced": "node --env-file=.env --import ./dist/instrumentation.js dist/main.js",
     "search:reindex": "tsx scripts/search-reindex.ts",
-    "search:bench": "tsx scripts/search-bench.ts"
+    "search:bench": "tsx scripts/search-bench.ts",
+    "payments:resolve-refunds": "tsx scripts/resolve-refunds.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1149.0",

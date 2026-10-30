@@ -5,7 +5,7 @@ import { rateLimited } from "../metrics/metrics.js";
 
 const WINDOW_SECONDS = 60;
 const AUTH_PATHS = new Set(["/auth/login", "/auth/demo", "/auth/exchange", "/auth/refresh"]);
-const SKIP_PREFIXES = ["/health", "/metrics", "/payments/webhook"];
+const SKIP_PREFIXES = ["/health", "/metrics", "/payments/webhook", "/payments/toss/webhook"];
 
 const limitOf = (name: string) => Number(process.env[name] ?? 0) || 0;
 const ipsOf = (name: string) => new Set((process.env[name] ?? "").split(",").map((s) => s.trim()).filter(Boolean));

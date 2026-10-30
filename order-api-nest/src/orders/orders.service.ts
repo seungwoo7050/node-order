@@ -4,13 +4,14 @@ import { Prisma } from "../generated/prisma/client.js";
 import { NotificationsGateway } from "../notifications/notifications.gateway.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type { CheckoutItemDto } from "./dto/checkout.dto.js";
-import { cancelUnpaidOrder } from "../payments/cancel-unpaid-order.js";
-import { StripeGateway } from "../payments/stripe.gateway.js";
+import { cancelUnpaidOrder, manualPayment } from "../payments/cancel-unpaid-order.js";
+import type { ProviderId } from "../payments/payment-gateway.js";
+import { PaymentGateways } from "../payments/payment-gateways.js";
 import { afterOrder, encodeOrderCursor, orderListOrder, toPage, type Page } from "../pagination/cursor.js";
 
 export type Order = { id: number; user: string; price: number; paid: boolean; }
 export type CheckoutResult = Order & { items: { productId: number; quantity: number; unitPrice: number }[] };
-export type CheckoutResponse = CheckoutResult & { checkoutUrl: string };
+export type CheckoutResponse = CheckoutResult & { checkoutUrl: string; provider: ProviderId };
 
 const orderSelect = { id: true, userId: true, totalAmount: true, paid: true } as const;
 const listSelect = { ...orderSelect, createdAt: true } as const; // 다음 cursor를 만들려면 정렬 키도 읽어야 한다
@@ -25,7 +26,7 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsGateway,
-    private readonly stripe: StripeGateway,
+    private readonly gateways: PaymentGateways,
   ) {}
 
   async list(query: { limit: number; cursor?: string; offset?: number; paid?: boolean }): Promise<Page<Order & { createdAt: Date }>> {
@@ -50,6 +51,7 @@ export class OrdersService {
     const { user, price, ...rest } = input; // 입력 이름은 price 그대로, DB에는 total_amount에만 쓴다
     const order = await this.prisma.asAdmin(async (tx) => {
       const created = toOrder(await tx.order.create({ data: { ...rest, totalAmount: price, userId: user }, select: orderSelect }));
+      if (created.paid) await tx.payment.create({ data: manualPayment(created.id, created.price) });
       await tx.outboxEvent.create({ data: { type: "order.created", userId: creatorId, payload: created } });
       return created;
     });
@@ -64,22 +66,33 @@ export class OrdersService {
     return Object.fromEntries(rows.map((r) => [r.userId, r._sum.totalAmount ?? 0]));
   }
 
-  async checkout(userId: string, items: CheckoutItemDto[], idempotencyKey?: string): Promise<CheckoutResponse> {
+  async checkout(userId: string, items: CheckoutItemDto[], idempotencyKey?: string, provider?: ProviderId): Promise<CheckoutResponse> {
+    const gateway = this.gateways.pick(provider); // 쓸 수 없는 결제 수단이면 주문을 만들기 전에 400
     const placed = await this.placeOrReplay(userId, items, idempotencyKey);
     const attemptKey = idempotencyKey && createHash("sha256").update(`${userId}:${idempotencyKey}:${placed.id}`).digest("hex");
     try {
-      const session = await this.stripe.createCheckoutSession(placed, attemptKey);
-      const { count } = await this.prisma.asUser(userId, (tx) =>
-        tx.order.updateMany({ where: { id: placed.id, canceledAt: null }, data: { stripeSessionId: session.id } }),
-      );
+      const started = await gateway.startCheckout({ id: placed.id, price: placed.price, name: `주문 #${placed.id}` }, attemptKey);
+      const count = await this.prisma.asUser(userId, async (tx) => {
+        const { count } = await tx.order.updateMany({
+          where: { id: placed.id, canceledAt: null },
+          data: gateway.id === "stripe" ? { stripeSessionId: started.providerOrderId } : {}, // expand 동안 옛 칸도 채운다
+        });
+        if (count === 0) return 0;
+        // 결제 행: 같은 주문을 다시 결제하면(멱등 재요청) 아직 ready일 때만 새 시도로 바꾼다
+        const existing = await tx.payment.findUnique({ where: { orderId: placed.id }, select: { status: true } });
+        const attempt = { provider: gateway.id, providerOrderId: started.providerOrderId, amount: placed.price };
+        if (!existing) await tx.payment.create({ data: { orderId: placed.id, ...attempt } });
+        else if (existing.status === "ready") await tx.payment.update({ where: { orderId: placed.id }, data: attempt });
+        return count;
+      });
       if (count === 0) throw new ConflictException("결제 시도가 취소됐습니다 - 다시 결제합니다");
-      return { ...placed, checkoutUrl: session.url };
+      return { ...placed, checkoutUrl: started.checkoutUrl, provider: gateway.id };
     } catch (err) {
       await this.prisma.asUser(userId, async (tx) => {
         await cancelUnpaidOrder(tx, placed.id);
         if (idempotencyKey) await tx.idempotencyKey.deleteMany({ where: { userId, key: idempotencyKey } });
       });
-      this.logger.warn(`결제 세션 생성 실패 → 주문 #${placed.id} 취소, 재고 복구: ${(err as Error).message}`);
+      this.logger.warn(`결제 시작 실패(${gateway.id}) → 주문 #${placed.id} 취소, 재고 복구: ${(err as Error).message}`);
       throw err;
     }
   }

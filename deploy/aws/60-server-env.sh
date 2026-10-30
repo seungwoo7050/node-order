@@ -36,7 +36,7 @@ has_kv AUTH_SECRET   || set_kv AUTH_SECRET "$(rand base64 32)"
 has_kv DEMO_PASSWORD || set_kv DEMO_PASSWORD "$(rand hex 8)"
 
 step "외부 서비스 값(환경 변수로 준 것만 바꾼다)"
-for k in GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET; do
+for k in GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET TOSS_CLIENT_KEY TOSS_SECRET_KEY; do
   if [ -n "${!k:-}" ]; then set_kv "$k" "$(unquote "${!k}")"; echo "바꿈  $k"
   elif ! grep -q "^$k=" "$ENV_FILE"; then set_kv "$k" ""; fi
 done

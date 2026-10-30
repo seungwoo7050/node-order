@@ -30,6 +30,8 @@ x-api: &api
     GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
     STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
     STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+    TOSS_CLIENT_KEY: ${TOSS_CLIENT_KEY:-}
+    TOSS_SECRET_KEY: ${TOSS_SECRET_KEY:-}
   volumes:
     - ./rds-ca.pem:/certs/rds-ca.pem:ro
   healthcheck:
