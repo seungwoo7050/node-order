@@ -72,4 +72,20 @@ describe("동시성 상한", () => {
     expect(results).toEqual([10, 20, 30, 40, 50, 60, 70, 80, 90, 100]);
     expect(await mapLimit([], 4, async () => 1)).toEqual([]);
   });
+
+  it("하나가 실패하면 남은 항목을 더 보내지 않고, 진행 중인 것에 취소 신호를 준다", async () => {
+    const started: number[] = [];
+    const signals: AbortSignal[] = [];
+    const failing = mapLimit([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 2, async (n, signal) => {
+      started.push(n);
+      signals.push(signal);
+      if (n === 2) throw new Error("PG 500");
+      await new Promise((r) => setTimeout(r, 20));
+      return n;
+    });
+    await expect(failing).rejects.toThrow("PG 500");
+    await new Promise((r) => setTimeout(r, 60)); // 남은 작업이 이어서 나가는지 지켜본다
+    expect(started).toEqual([1, 2]);
+    expect(signals.every((s) => s.aborted)).toBe(true);
+  });
 });

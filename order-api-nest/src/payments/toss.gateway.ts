@@ -118,7 +118,7 @@ export class TossGateway implements PaymentGateway {
       startingAfter = page.at(-1)!.transactionKey;
     }
     // 결제마다 다시 읽는다: 한 번에 PG_READ_CONCURRENCY개까지, 429·5xx는 Retry-After·지수 백오프로 다시
-    return mapLimit([...keys], PG_READ_CONCURRENCY, (key) => withPgRetry(() => this.fetchPayment(key)));
+    return mapLimit([...keys], PG_READ_CONCURRENCY, (key, signal) => withPgRetry(() => (signal.throwIfAborted(), this.fetchPayment(key))));
   }
 
   async refund(paymentKey: string, input: { amount: number; reason: string }, idempotencyKey: string): Promise<PgRefund> {
