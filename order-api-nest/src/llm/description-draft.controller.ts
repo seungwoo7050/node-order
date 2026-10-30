@@ -48,7 +48,10 @@ export class DescriptionDraftController {
     private readonly prisma: PrismaService,
     private readonly categories: CategoriesService,
     private readonly rate: RateLimitStore,
-  ) {}
+  ) {
+    // 토큰 카운터를 0으로 미리 만든다(첫 요청의 토큰도 경보의 increase()에 잡히게. 처음 생긴 시계열의 첫 값은 increase가 세지 않는다)
+    for (const direction of ["input", "output"]) llmTokens.inc({ provider: provider.name, model: provider.model, direction }, 0);
+  }
 
   @Post()
   async draft(@Param("id", ParseIntPipe) id: number, @Body() dto: DescriptionDraftDto, @Req() req: Request, @Res() res: Response): Promise<void> {

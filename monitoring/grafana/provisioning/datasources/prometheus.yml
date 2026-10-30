@@ -5,3 +5,9 @@ datasources:
     type: prometheus
     url: http://prometheus:9090
     isDefault: true
+  # 운영 Prometheus(운영에는 Grafana를 두지 않는다). 쓰기 전에 개발 PC에서 터널을 연다:
+  #   ssh -N -L 19090:127.0.0.1:9090 ubuntu@<서버>
+  - name: Prometheus (운영, SSH 터널)
+    uid: prod-prometheus
+    type: prometheus
+    url: http://host.docker.internal:19090

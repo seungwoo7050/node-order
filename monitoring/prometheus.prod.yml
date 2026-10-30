@@ -1,0 +1,28 @@
+# 운영(deploy/compose.yml)과 리허설의 Prometheus. 개발용은 prometheus.yml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  # 활성(트래픽을 받는) API만 긁는다. release.sh가 트래픽을 넘길 때 live/targets.json을 바꾸고,
+  # Prometheus는 파일이 바뀌면 다시 읽는다(재시작 없음). 대상에 slot(blue/green)과 release(이미지 태그) 라벨이 붙는다
+  - job_name: order-api
+    file_sd_configs:
+      - files: ["/etc/prometheus/live/targets.json"]
+        refresh_interval: 30s
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: alertmanager
+    static_configs:
+      - targets: ["alertmanager:9093"]
