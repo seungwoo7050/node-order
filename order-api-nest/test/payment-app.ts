@@ -49,6 +49,7 @@ export function client(baseUrl: string, token: string) {
     post: (path: string, body?: unknown, headers?: Record<string, string>) => call("POST", path, body, headers),
     put: (path: string, body?: unknown, headers?: Record<string, string>) => call("PUT", path, body, headers),
     patch: (path: string, body?: unknown, headers?: Record<string, string>) => call("PATCH", path, body, headers),
+    delete: (path: string) => call("DELETE", path),
   };
 }
 
