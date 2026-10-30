@@ -453,6 +453,8 @@ model McpAuditEntry {
   tool      String
   args      Json
   ok        Boolean
+  // 0036: ok | error | rate_limited | pending(쓰기 도구 실행 전에 남긴 행). CHECK는 마이그레이션 SQL에만 있다
+  result    String      @default("ok")
   error     String?
   createdAt DateTime    @default(now()) @map("created_at")
 

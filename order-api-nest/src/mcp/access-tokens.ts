@@ -14,6 +14,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const hashToken = (raw: string) => createHash("sha256").update(raw).digest("hex");
 
 // 이 토큰으로 MCP를 부르는 사람. scopes는 역할까지 반영한 실제 범위(데모 관리자는 read만)
+export type AuditResult = "ok" | "error" | "rate_limited" | "pending";
 export type McpPrincipal = { tokenId: number; userId: string; role: "admin" | "demo_admin"; scopes: Scope[] };
 
 export type TokenView = {
@@ -81,17 +82,24 @@ export class AccessTokensService {
     return { tokenId: row.id, userId: row.userId, role, scopes: effectiveScopes(role, row.scopes) };
   }
 
-  async audit(entry: { tokenId: number; tool: string; args: unknown; ok: boolean; error?: string | null }): Promise<void> {
-    await this.prisma.mcpAuditEntry.create({
-      data: { tokenId: entry.tokenId, tool: entry.tool, args: (entry.args ?? {}) as object, ok: entry.ok, error: entry.error ?? null },
+  // 감사 한 행을 남기고 id를 돌려준다. pending은 쓰기 도구를 실행하기 전에 남기는 행(끝나면 finishAudit)
+  async audit(entry: { tokenId: number; tool: string; args: unknown; result: AuditResult; error?: string | null }): Promise<number> {
+    const row = await this.prisma.mcpAuditEntry.create({
+      data: { tokenId: entry.tokenId, tool: entry.tool, args: (entry.args ?? {}) as object, result: entry.result, ok: entry.result === "ok", error: entry.error ?? null },
+      select: { id: true },
     });
+    return row.id;
+  }
+
+  async finishAudit(id: number, outcome: { result: "ok" | "error"; error?: string | null }): Promise<void> {
+    await this.prisma.mcpAuditEntry.update({ where: { id }, data: { result: outcome.result, ok: outcome.result === "ok", error: outcome.error ?? null } });
   }
 
   // 감사 로그 보기: 진짜 관리자는 모든 토큰, 데모 관리자는 자기 토큰 것만
   async auditLog(user: { userId: string; role: string }, query: { tokenId?: number; limit?: number }) {
     const rows = await this.prisma.mcpAuditEntry.findMany({
       where: { tokenId: query.tokenId, ...(user.role === "admin" ? {} : { token: { userId: user.userId } }) },
-      select: { id: true, tool: true, args: true, ok: true, error: true, createdAt: true, token: { select: { id: true, name: true, prefix: true } } },
+      select: { id: true, tool: true, args: true, ok: true, result: true, error: true, createdAt: true, token: { select: { id: true, name: true, prefix: true } } },
       orderBy: { id: "desc" },
       take: query.limit ?? 50,
     });
