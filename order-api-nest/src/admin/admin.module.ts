@@ -8,5 +8,6 @@ import { DashboardService } from "./dashboard.service.js";
   imports: [SearchModule],
   controllers: [DashboardController],
   providers: [DashboardService],
+  exports: [DashboardService], // MCP list_pending_work(30)가 같은 타일을 읽는다
 })
 export class AdminModule {}
