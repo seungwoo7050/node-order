@@ -56,7 +56,7 @@ describe("상품 설명 초안 - 대역 공급자", () => {
     // 입력: 상품 이름·카테고리 경로·가격·기존 설명·키워드
     const { input } = llm.calls[0]!;
     expect(input.prompt).toContain("마우스");
-    expect(input.prompt).toContain("전자기기 > 주변기기");
+    expect(input.prompt).toContain("전자기기 / 주변기기");
     expect(input.prompt).toContain("7,000원");
     expect(input.prompt).toContain("기존 설명");
     expect(input.prompt).toContain("조용한 클릭, 무선");

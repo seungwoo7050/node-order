@@ -89,7 +89,7 @@ describe("AnthropicProvider (가짜 HTTP 서버)", () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]!.role).toBe("user");
     expect(messages[0]!.content).toContain("무선 마우스");
-    expect(messages[0]!.content).toContain("전자기기 > 주변기기");
+    expect(messages[0]!.content).toContain("전자기기 / 주변기기");
     expect(messages[0]!.content).toContain("조용한 클릭");
   });
 
