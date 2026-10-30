@@ -52,7 +52,11 @@ test("Esc는 추천을 닫고, 추천을 고르지 않고 Enter만 누르면 결
 });
 
 test("결과가 없으면 안내와 인기 검색어 칩이 보이고, 칩을 누르면 그 검색어로 찾는다", async ({ page, request }) => {
-  expect((await request.get(`${API}/products/search?q=${encodeURIComponent("헤드폰")}`)).ok()).toBe(true); // 인기 검색어에 하나는 있게
+  // 인기 검색어는 서로 다른 IP 3곳 이상이 찾은 것만 공개된다. API는 루프백 프록시를 믿는다(with-api.sh의 TRUST_PROXY)
+  for (const ip of ["192.0.2.31", "192.0.2.32", "192.0.2.33"]) {
+    const res = await request.get(`${API}/products/search?q=${encodeURIComponent("헤드폰")}`, { headers: { "X-Forwarded-For": ip } });
+    expect(res.ok()).toBe(true);
+  }
 
   await page.goto(`/shop/search?q=${encodeURIComponent("없는상품zz")}`);
   await expect(page.getByText("‘없는상품zz’에 맞는 상품이 없습니다.", { exact: false })).toBeVisible();

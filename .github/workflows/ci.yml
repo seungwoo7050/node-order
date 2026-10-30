@@ -89,6 +89,8 @@ jobs:
         working-directory: order-api-nest
         env:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          # 웹 e2e가 X-Forwarded-For로 서로 다른 IP를 흉내 낸다(인기 검색어는 IP 3곳 이상만 공개). with-api.sh와 같다
+          TRUST_PROXY: loopback
         run: |
           npx prisma generate
           npx prisma migrate deploy
