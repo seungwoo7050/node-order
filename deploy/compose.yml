@@ -4,12 +4,19 @@ x-logging: &logging
   driver: json-file
   options: { max-size: "10m", max-file: "3" }
 
+# 메모리 상한(31 후속). 서버는 t3.small(2GB). 전환 순간에는 api·web가 두 벌씩 함께 뜬다:
+#   OS·도커 256 + caddy 64 + redis 128 + prometheus 256 + alertmanager 64 = 768MB
+#   남은 1280MB / 두 벌 = 640MB → api 448MB(관찰 약 380MiB) + web 192MB
+# V8 힙 상한(--max-old-space-size)을 컨테이너 상한보다 낮게 두어, 힙이 차면 OOM kill 전에 GC가 먼저 돈다.
+# 합계는 monitoring/test.sh가 docker compose config로 다시 센다(check-memory-budget.mjs)
 x-api: &api
   logging: *logging
   restart: unless-stopped
   init: true
   stop_grace_period: 30s
+  mem_limit: 448m
   environment: &api-env
+    NODE_OPTIONS: --max-old-space-size=320
     PORT: "4000"
     JWT_SECRET: ${JWT_SECRET:?}
     DEMO_LOGIN: ${DEMO_LOGIN:-0}
@@ -53,6 +60,7 @@ x-web: &web
   restart: unless-stopped
   init: true
   stop_grace_period: 30s
+  mem_limit: 192m
   healthcheck:
     test: ["CMD", "node", "-e", "fetch('http://localhost:3000/login').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
     interval: 5s
@@ -64,6 +72,7 @@ services:
     logging: *logging
     image: caddy:2
     restart: unless-stopped
+    mem_limit: 64m
     ports:
       - "80:80"
       - "443:443"
@@ -79,6 +88,7 @@ services:
     logging: *logging
     image: redis:7
     restart: unless-stopped
+    mem_limit: 128m
     command: ["redis-server", "--save", "", "--appendonly", "no"]
 
   migrate:
@@ -121,6 +131,7 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:?}
       AUTH_GITHUB_ID: ${GITHUB_CLIENT_ID:-}
       AUTH_GITHUB_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      NODE_OPTIONS: --max-old-space-size=128
       SENTRY_DSN: ${SENTRY_WEB_DSN:-${SENTRY_DSN:-}}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
       SENTRY_RELEASE: ${BLUE_TAG:-}
@@ -134,6 +145,7 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:?}
       AUTH_GITHUB_ID: ${GITHUB_CLIENT_ID:-}
       AUTH_GITHUB_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      NODE_OPTIONS: --max-old-space-size=128
       SENTRY_DSN: ${SENTRY_WEB_DSN:-${SENTRY_DSN:-}}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
       SENTRY_RELEASE: ${GREEN_TAG:-}
