@@ -30,12 +30,30 @@ describe("scrubEvent", () => {
     }
   });
 
-  it("헤더의 비밀 칸은 지우고, 요청 쿠키와 본문은 버리고, 사용자는 id만 남긴다", () => {
+  it("헤더는 허용 목록만 남기고, 요청 쿠키와 본문은 버리고, 사용자는 id만 남긴다", () => {
     const out = scrubEvent(structuredClone(event));
-    expect(out.request.headers).toEqual({ authorization: FILTERED, cookie: FILTERED, "set-cookie": FILTERED, "user-agent": "vitest" });
+    expect(out.request.headers).toEqual({ "user-agent": "vitest" }); // 허용 목록 밖(Authorization·Cookie·Set-Cookie)은 지운다
     expect(out.request.cookies).toBeUndefined();
     expect(out.request.data).toBe(FILTERED);
     expect(out.user).toEqual({ id: "kim" });
+  });
+
+  it("요청 헤더는 허용 목록만 남긴다(손님 IP가 든 X-Forwarded-For·Forwarded·X-Real-IP는 대소문자와 상관없이 지운다)", () => {
+    const out = scrubEvent({
+      request: {
+        headers: {
+          "X-Forwarded-For": "203.0.113.7, 10.0.0.1", forwarded: "for=203.0.113.7", "x-real-ip": "203.0.113.7", "CF-Connecting-IP": "203.0.113.7",
+          "x-request-id": "req-1", "content-type": "application/json", "User-Agent": "vitest", host: "api.local",
+        },
+      },
+    });
+    expect(JSON.stringify(out)).not.toContain("203.0.113.7");
+    expect(out.request.headers).toEqual({ "x-request-id": "req-1", "content-type": "application/json", "User-Agent": "vitest", host: "api.local" });
+  });
+
+  it("시·구 없이 쓴 주소도 주소 칸이면 칸 이름으로 지운다", () => {
+    const out = scrubEvent({ extra: { address: "테헤란로 123", shippingAddress: "테헤란로 123 4층", addressLine1: "테헤란로 123", roadAddress: "테헤란로 123" } });
+    expect(JSON.stringify(out)).not.toContain("테헤란로");
   });
 
   it("배송지 칸은 29의 규칙으로 가리고, 이메일 칸은 지운다", () => {
