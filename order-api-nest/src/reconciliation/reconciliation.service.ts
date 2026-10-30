@@ -6,10 +6,11 @@ import { PaymentGateways } from "../payments/payment-gateways.js";
 import { withPgRetry } from "../payments/pg-retry.js";
 import { resolveStaleRefunds, type ResolveResult } from "../payments/refund-resolver.js";
 import { RefundsService } from "../payments/refunds.service.js";
-import { comparePayment, missingInPg, reconcile, sameValue, type Issue, type IssueKind, type OurPayment } from "./compare.js";
+import { comparePayment, missingInPg, naturalKey, reconcile, sameValue, type Issue, type IssueKind, type OurPayment } from "./compare.js";
 
 const KST_OFFSET_MS = 9 * 3600_000;
 const DAY_MS = 24 * 3600_000;
+export const AUTO_RESOLVED_NOTE = "자동: 다음 대사에서 일치";
 
 // 대사 기준일(YYYY-MM-DD, Asia/Seoul)의 [자정, 다음 자정)
 export function periodOf(date: string): { from: Date; to: Date } {
@@ -32,7 +33,8 @@ export type ReconcileResult = { date: string; refunds: ResolveResult | null; run
 //   1. 27의 결과 미상 환불 확정을 먼저 돌린다(확정 전 환불이 refund_mismatch로 보이지 않게)
 //   2. provider마다 따로: 하나가 실패해도 나머지는 진행하고, 실패는 그 provider의 run에 남는다
 // 다시 돌려도 같은 결과다: (provider, 종류, 결제 키)가 같으면 같은 행을 고친다.
-// 해결 표시한 행은 값이 그대로면 해결 상태를 유지하고, 값이 바뀌면 다시 연다
+// 해결 표시한 행은 값이 그대로면 해결 상태를 유지하고, 값이 바뀌면 다시 연다.
+// 열린 불일치의 결제를 이번 실행에서 다시 봤는데 일치하면(PG나 우리 쪽이 정정됐다) 자동 해결로 표시하고, 다시 어긋나면 다시 연다
 @Injectable()
 export class ReconciliationService {
   private readonly logger = new Logger(ReconciliationService.name);
@@ -80,6 +82,8 @@ export class ReconciliationService {
         }
       }
       await this.upsertIssues(provider, date, issues);
+      const checked = new Set([...pgPayments.map((p) => p.paymentKey), ...ours.map((o) => naturalKey(o))]);
+      await this.resolveHealed(provider, checked, issues);
       const finished = { pgCount: pgPayments.length, dbCount: ours.length, issueCount: issues.length };
       await this.prisma.reconciliationRun.update({ where: { id: run.id }, data: { ...finished, finishedAt: new Date() } });
       return { provider, runId: run.id, ...finished, error: null };
@@ -126,13 +130,26 @@ export class ReconciliationService {
         });
         continue;
       }
+      // 사람이 해결한 행은 값이 바뀌어야 다시 열고, 자동 해결한 행은 다시 어긋나기만 해도 연다
       const changed = !sameValue(existing.ourValue, issue.ourValue) || !sameValue(existing.pgValue, issue.pgValue);
+      const reopen = !!existing.resolvedAt && (changed || existing.resolutionNote === AUTO_RESOLVED_NOTE);
       await this.prisma.reconciliationIssue.update({
         where: { id: existing.id },
-        data: { ...values, lastSeenAt: now, ...(changed && existing.resolvedAt ? { resolvedAt: null } : {}) },
+        data: { ...values, lastSeenAt: now, ...(reopen ? { resolvedAt: null, resolutionNote: existing.resolutionNote === AUTO_RESOLVED_NOTE ? null : existing.resolutionNote } : {}) },
       });
-      if (changed && existing.resolvedAt) this.logger.warn(`해결했던 불일치가 값이 바뀌어 다시 열림: #${existing.id} ${issue.kind} ${issue.paymentKey}`);
+      if (reopen) this.logger.warn(`해결했던 불일치가 다시 어긋나 다시 열림: #${existing.id} ${issue.kind} ${issue.paymentKey}`);
     }
+  }
+
+  // 이번 실행에서 다시 본 결제(checked)에 열려 있던 불일치가 이번에는 나오지 않았으면 자동 해결. 보지 않은 결제의 행은 건드리지 않는다
+  private async resolveHealed(provider: ProviderId, checked: Set<string>, issues: Issue[]) {
+    if (checked.size === 0) return;
+    const still = new Set(issues.map((i) => `${i.kind}:${i.paymentKey}`));
+    const open = await this.prisma.reconciliationIssue.findMany({ where: { provider, resolvedAt: null, paymentKey: { in: [...checked] } }, select: { id: true, kind: true, paymentKey: true } });
+    const healed = open.filter((i) => !still.has(`${i.kind}:${i.paymentKey}`));
+    if (healed.length === 0) return;
+    await this.prisma.reconciliationIssue.updateMany({ where: { id: { in: healed.map((i) => i.id) }, resolvedAt: null }, data: { resolvedAt: new Date(), resolutionNote: AUTO_RESOLVED_NOTE } });
+    this.logger.log(`대사 ${provider}: 다시 맞춰 보니 일치해 자동 해결 ${healed.length}건(${healed.map((i) => `#${i.id} ${i.kind}`).join(", ")})`);
   }
 
   // ── 관리자 화면 ─────────────────────────────────────

@@ -155,6 +155,29 @@ describe("PG 대사", () => {
     expect(await adminDb.reconciliationIssue.count()).toBe(1);
   });
 
+  it("저절로 풀린 불일치는 다음 대사에서 같은 키가 일치하면 자동 해결되고, 이번에 보지 않은 키는 그대로 열려 있다", async () => {
+    const a = await paidToss();
+    await toss.post(`/__sim/payments/${a.paymentKey}/patch`, { totalAmount: 12_000, balanceAmount: 12_000 });
+    await service.run(today);
+    const issue = await adminDb.reconciliationIssue.findFirstOrThrow({ where: { kind: "amount_mismatch", paymentKey: a.paymentKey } });
+    expect(issue.resolvedAt).toBeNull();
+    // 이번 대사 기간에 나오지 않는 다른 날의 불일치(보지 않았으니 건드리지 않는다)
+    const other = await adminDb.reconciliationIssue.create({ data: { provider: "toss", kind: "missing_in_db", paymentKey: "pk-other-day", businessDate: new Date("2026-01-02") } });
+
+    await toss.post(`/__sim/payments/${a.paymentKey}/patch`, { totalAmount: 10_000, balanceAmount: 10_000 }); // PG 쪽이 정정됐다
+    await service.run(today);
+    const healed = await adminDb.reconciliationIssue.findUniqueOrThrow({ where: { id: issue.id } });
+    expect(healed.resolvedAt).not.toBeNull();
+    expect(healed.resolutionNote).toBe("자동: 다음 대사에서 일치");
+    expect((await adminDb.reconciliationIssue.findUniqueOrThrow({ where: { id: other.id } })).resolvedAt).toBeNull();
+    expect((await admin().get("/admin/reconciliation/issues")).body.counts.open).toBe(1);
+
+    // 다시 어긋나면 다시 열린다
+    await toss.post(`/__sim/payments/${a.paymentKey}/patch`, { totalAmount: 11_000, balanceAmount: 11_000 });
+    await service.run(today);
+    expect((await adminDb.reconciliationIssue.findUniqueOrThrow({ where: { id: issue.id } })).resolvedAt).toBeNull();
+  });
+
   it("먼저 결과 미상 환불을 확정한 뒤 대사한다(시간 초과 환불이 refund_mismatch로 남지 않는다)", async () => {
     const a = await paidToss();
     await toss.fault("cancel", "timeout", { delayMs: 1_500 });
