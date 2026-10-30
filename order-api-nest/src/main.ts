@@ -1,3 +1,4 @@
+import './instrument-sentry.js'; // 가장 먼저(오류 추적. SENTRY_DSN이 없으면 켜지 않는다)
 import { ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';

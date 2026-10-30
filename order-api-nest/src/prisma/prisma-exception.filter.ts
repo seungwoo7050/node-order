@@ -1,5 +1,6 @@
 import { ArgumentsHost, Catch, ConflictException, BadRequestException, NotFoundException } from "@nestjs/common";
 import { BaseExceptionFilter } from "@nestjs/core";
+import { captureException } from "@sentry/nestjs";
 import { Prisma } from "../generated/prisma/client.js";
 
 @Catch(Prisma.PrismaClientKnownRequestError)
@@ -13,6 +14,8 @@ export class PrismaExceptionFilter extends BaseExceptionFilter {
       case "P2025":
         return super.catch(new NotFoundException("대상을 찾을 수 없다"), host);
       default:
+        // 이 필터가 먼저 잡으므로 SentryGlobalFilter까지 가지 않는다. 처리하지 못한 DB 오류(500)는 여기서 보낸다
+        captureException(err, { mechanism: { handled: false, type: "auto.http.nestjs.prisma_filter" } });
         return super.catch(err, host);
     }
   }
