@@ -93,12 +93,16 @@ jobs:
           TRUST_PROXY: loopback
           # 토스 키는 CI에 두지 않는다: 토스 시뮬레이터(테스트 대역)로 승인·위젯을 돌린다. with-api.sh와 같다
           TOSS_SIMULATOR_URL: http://localhost:4200
+          # LLM 키도 CI에 두지 않는다: 상품 설명 초안은 LLM 시뮬레이터(테스트 대역)로 스트리밍한다. with-api.sh와 같다
+          LLM_API_KEY: sim-key
+          LLM_BASE_URL: http://localhost:4300
         run: |
           npx prisma generate
           npx prisma migrate deploy
           npx prisma db seed
           npm run build
           SIM_PORT=4200 node scripts/toss-sim.mjs > toss-sim.log 2>&1 &
+          SIM_PORT=4300 node scripts/llm-sim.mjs > llm-sim.log 2>&1 &
           node --env-file=.env dist/main.js > api.log 2>&1 &
           # 준비될 때까지 최대 60초 기다린다(러너에 이미 있는 curl만 쓴다 - 실행 중에 패키지를 내려받지 않는다)
           for _ in $(seq 1 60); do curl -sf localhost:4000/health/ready > /dev/null && exit 0; sleep 1; done
@@ -124,6 +128,7 @@ jobs:
           path: |
             order-api-nest/api.log
             order-api-nest/toss-sim.log
+            order-api-nest/llm-sim.log
             order-console-next/test-results/
           retention-days: 7
 

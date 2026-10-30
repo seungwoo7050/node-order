@@ -3,7 +3,8 @@
 #   - 4000에서 /health/ready가 이미 응답하면(개발 서버나 CI가 띄운 API) 그대로 쓴다.
 #   - 아니면 CI test-web 잡과 같은 순서로 준비한다: migrate deploy → seed → build → 실행 → 준비 대기.
 #     Stripe 키가 없으면 order-api-nest/scripts/stripe-sim.mjs(4100)를, 토스 키가 없으면
-#     order-api-nest/scripts/toss-sim.mjs(4200)를 테스트 대역으로 함께 띄운다.
+#     order-api-nest/scripts/toss-sim.mjs(4200)를, LLM 키가 없으면 order-api-nest/scripts/llm-sim.mjs(4300)를
+#     테스트 대역으로 함께 띄운다.
 #     직접 띄운 프로세스는 명령이 끝나면 내린다. 로그는 .harness/logs/.
 # 전제: compose의 db·redis·storage가 떠 있고 order-api-nest/.env, order-console-next/.env.local이 있다.
 set -uo pipefail
@@ -58,10 +59,19 @@ else
     (cd "$root/order-api-nest" && SIM_PORT=$toss_port exec node scripts/toss-sim.mjs) >"$logs/toss-sim.log" 2>&1 &
     toss_pid=$!
   fi
+  # LLM 키가 없으면 상품 설명 초안을 Anthropic 시뮬레이터(테스트 대역, 4300)로 돌린다(실제 API를 부르지 않는다)
+  llm_pid=
+  if [[ -z ${LLM_API_KEY:-} ]] && ! grep -qE '^LLM_API_KEY=.+' "$root/order-api-nest/.env"; then
+    export LLM_BASE_URL=${LLM_BASE_URL:-http://localhost:4300} LLM_API_KEY=sim-key
+    llm_port=${LLM_BASE_URL##*:}
+    echo "with-api: LLM_API_KEY가 없어 LLM 시뮬레이터($LLM_BASE_URL)를 쓴다"
+    (cd "$root/order-api-nest" && SIM_PORT=$llm_port exec node scripts/llm-sim.mjs) >"$logs/llm-sim.log" 2>&1 &
+    llm_pid=$!
+  fi
   # TRUST_PROXY=loopback: 웹 e2e가 X-Forwarded-For로 서로 다른 IP를 흉내 낸다(인기 검색어는 IP 3곳 이상만 공개)
   (cd "$root/order-api-nest" && TRUST_PROXY=${TRUST_PROXY:-loopback} exec node --env-file=.env dist/main.js) >"$logs/api.log" 2>&1 &
   pid=$!
-  trap 'kill $pid $sim_pid $toss_pid 2>/dev/null; wait $pid $sim_pid $toss_pid 2>/dev/null' EXIT
+  trap 'kill $pid $sim_pid $toss_pid $llm_pid 2>/dev/null; wait $pid $sim_pid $toss_pid $llm_pid 2>/dev/null' EXIT
   for _ in $(seq 1 60); do
     ready && break
     kill -0 "$pid" 2>/dev/null || break
