@@ -203,6 +203,15 @@ Execution Time: 5.082 ms
 - 알림 메일은 outbox 이벤트 종류별 템플릿(`src/mail/templates.ts`)
 - 화면: 장바구니 배송지, 내 주문 상세(타임라인·송장 조회 링크·반품 신청·구매확정), 관리자 `/admin/orders`
 
+## 관리자·PG 대사(29)
+
+- 대시보드 `GET /admin/dashboard`(화면 `/admin`): 오늘(Asia/Seoul 자정 기준, 쿼리에 시간대를 적는다) 결제된 주문 수와 순매출(결제액 − 성공 환불액), 처리 대기, 재고 부족, 0건 검색어 상위 10, 미해결 대사 불일치. 캐시하지 않는다
+- 상점 설정 `store_settings` 한 행(`GET/PUT /admin/settings`, 화면 `/admin/settings`): 사업자 정보·배송비·재고 부족 기준. 저장은 `If-Match: <version>`이 같을 때만(다르면 409). 사업자등록번호는 10자리 체크섬. API는 메모리에 캐시하고 저장하면 버린다(인스턴스가 둘이면 Redis pub/sub). 배송비는 주문에 저장하므로 지난 주문은 그대로다
+- 비밀값(PG 키, `SENTRY_DSN`, `LLM_API_KEY`)은 환경변수에만 둔다. 설정 화면은 `GET /features`의 `integrations`(연결됨·없음)만 보인다
+- 법적 고지 `legal_documents`(약관·개인정보처리방침·청약철회 안내): 고치면 새 판, `/legal/terms`·`/legal/privacy`·`/legal/refund`에서 지난 판도 열람. 결제는 지금 개인정보처리방침 판에 동의해야 하고(`privacyConsentVersion`), 주문에 판과 시각이 남는다. 모든 페이지 바닥글에 사업자 정보. 콘솔은 태그 캐시로 받고 저장하면 태그를 버려 배포 없이 바뀐다
+- PG 대사: `PaymentGateway.listTransactions`(토스 거래 조회, Stripe PaymentIntent·환불 목록)로 기간 안의 PG 결제와 우리 payments·refunds를 양쪽에서 맞춘다. 불일치(amount_mismatch, status_mismatch, missing_in_db, missing_in_pg, refund_mismatch)는 (provider, 종류, 결제 키)로 upsert해 다시 돌려도 같다. 먼저 결과 미상 환불을 확정한다
+- 매일 04:00(Asia/Seoul) 뒤 리더가 전날 분을 돌리고(`RECONCILE_CHECK_INTERVAL_MS`마다 확인), 손으로는 `npm run payments:reconcile -- --date=YYYY-MM-DD`. provider 하나가 실패해도 나머지는 대사하고 종료 코드는 1. 화면 `/admin/reconciliation`에서 종류별로 보고 해결 표시(메모)한다
+
 ## 정리
 
 ```sh
