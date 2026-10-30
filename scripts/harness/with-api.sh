@@ -18,22 +18,11 @@ need order-console-next/.env.local "order-console-next/.env.example을 복사해
 ready() { curl -sf "$api_url" >/dev/null 2>&1; }
 
 # Playwright는 3000에 떠 있는 서버를 다시 쓰고(reuseExistingServer), 아래는 4000의 API를 다시 쓴다.
-# 다른 체크아웃이나 worktree의 서버를 쓰면 이 코드가 아닌 것을 검사하게 되므로,
-# 포트를 쥔 프로세스의 cwd가 이 저장소 밖이면 멈춘다(lsof가 없으면 건너뛴다).
-check_owner() {
-  local port=$1 owner dir
-  owner=$(lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -1)
-  [[ -n $owner ]] || return 0
-  dir=$(lsof -a -p "$owner" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
-  [[ -n $dir ]] || return 0
-  # worktree가 원본 체크아웃 아래에 있을 수 있어 경로 접두어가 아니라 git 루트로 비교한다
-  if [[ $(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) != "$root" ]]; then
-    echo "with-api: $port 포트에 다른 체크아웃의 서버가 있다(pid $owner, $dir). 그 서버를 내리고 다시 돌려라." >&2
-    exit 1
-  fi
-}
-check_owner 3000
-check_owner 4000
+# 포트를 쥔 프로세스의 cwd가 이 저장소 밖이면 멈춘다(port-owner.sh, 테스트는 port-owner.test.sh).
+# shellcheck source=port-owner.sh
+source "$root/scripts/harness/port-owner.sh"
+check_owner 3000 "$root" || exit 1
+check_owner 4000 "$root" || exit 1
 
 pid=
 if ready; then
