@@ -5,7 +5,8 @@
 
 {$PUBLIC_SCHEME:https}://{$API_HOST} {
 	encode zstd gzip
-	# 지표는 서버 안의 Prometheus만 긁는다(업무 지표를 밖에 보이지 않는다)
-	respond /metrics 404
+	# 지표는 서버 안의 Prometheus만 긁는다(업무 지표를 밖에 보이지 않는다). 접두 매칭(/metrics, /metrics/, /metrics?x, /metricsx)이고
+	# Caddy의 path 매처는 대소문자를 가리지 않고 퍼센트 인코딩을 풀어 비교한다. API도 프록시를 거친 /metrics를 404로 막는다(metrics.module.ts)
+	respond /metrics* 404
 	import /etc/caddy/live/api.caddy
 }
