@@ -66,7 +66,7 @@
     "과잉 차단: 저장소 밖 임시 디렉터리 rm -rf도 막는다. 기존 경고가 있는 파일을 고치면 PostToolUse가 exit 2를 낸다",
     "훅은 세션을 연 체크아웃의 .claude/settings.json을 따른다. 원본 체크아웃이 main(24)에 있으면 훅이 꺼진 채로 세션이 열린다",
     "verify의 포트 점유 검사에 가드 테스트가 없다(ORCHESTRATION 6절). 26 구현 때 같이 더한다",
-    "마이그레이션 가드가 `prisma migrate dev --create-only`로 방금 만든(아직 적용 안 된) SQL을 고치는 것도 '기존 마이그레이션 수정'으로 막는다. 적용 기록(_prisma_migrations)이나 git 추적 여부로 '기존'을 판단해야 한다"
+    "(정정) 28 가이드 검증에서 guard.sh는 create-only로 만든 마이그레이션 SQL의 Edit를 막지 않았다(27 가이드 보고의 추정은 틀렸다). 막힌 것은 파일 통째 쓰기 스크립트를 우회로 본 auto-mode 분류기였다"
   ],
   "deferred": [
     "학습 저장소의 질문·답·AI 활용 사례(브랜치마다 쓸 것 중 study/interview 쪽): 그 브랜치 작업 트리에 사람의 커밋 안 한 변경이 있어 건드리지 않았다. 사람이 정리한 뒤 25부터 한꺼번에 옮긴다"
@@ -87,7 +87,7 @@
     "25-harness": "done",
     "26-search": "done",
     "27-toss-payments": "done",
-    "28-fulfillment": "todo",
+    "28-fulfillment": "done",
     "29-admin": "skip (집계·CRUD·폼 위주, 대사 멱등성은 devlog로)",
     "30-ai-mcp": "todo",
     "31-observability": "skip (설정 파일 위주)"
