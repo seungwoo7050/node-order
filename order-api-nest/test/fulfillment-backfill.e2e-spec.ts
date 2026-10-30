@@ -13,7 +13,13 @@ describe("0032 백필 - paid·canceled_at → orders.status", () => {
     expect(backfill).toMatch(/^-- backfill[\s\S]*UPDATE "orders"/);
   });
 
+  // 0034 트리거가 생기기 전의 옛 모양 행을 만들려고 픽스처를 넣는 동안 트리거를 끈다(트리거는 test/fulfillment-hardening.e2e-spec.ts가 본다)
+  afterEach(async () => {
+    await adminDb.$executeRaw`ALTER TABLE orders ENABLE TRIGGER orders_sync_legacy_status`;
+  });
+
   beforeEach(async () => {
+    await adminDb.$executeRaw`ALTER TABLE orders DISABLE TRIGGER orders_sync_legacy_status`;
     await adminDb.$executeRaw`TRUNCATE categories, refresh_tokens, outbox_events, idempotency_keys, stripe_events, order_items, orders, products, users RESTART IDENTITY CASCADE`;
     await adminDb.user.create({ data: { id: "kim", name: "김" } });
     const created = new Date("2026-10-01T00:00:00Z");
