@@ -7,6 +7,9 @@
 monitoring
 scripts
 order-api-nest
+# 오류 추적의 지우기 규칙(31)은 API와 같은 두 파일을 쓴다(의존성 없음)
+!order-api-nest/src/fulfillment/mask.ts
+!order-api-nest/src/observability/scrub.ts
 order-console-next/e2e
 order-console-next/test-results
 order-console-next/playwright-report

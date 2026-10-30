@@ -1,7 +1,7 @@
-import { maskContacts, PERSONAL_DATA_MASKERS } from "../fulfillment/mask.js";
+import { maskContacts, PERSONAL_DATA_MASKERS } from "../fulfillment/mask.ts"; // .ts로 적는다(콘솔 번들러가 .js→.ts를 풀지 못한다. tsc가 빌드 때 .js로 바꾼다)
 
 // 오류 추적 이벤트(Sentry 호환)를 보내기 전에 개인정보와 비밀값을 지운다(beforeSend, beforeBreadcrumb).
-// API와 콘솔이 같은 함수를 쓴다(콘솔은 order-api-nest/observability/scrub으로 가져간다). 그래서 이 파일은
+// API와 콘솔이 같은 함수를 쓴다(콘솔은 order-console-next/lib/sentry-server.ts가 상대 경로로 가져간다). 그래서 이 파일은
 // 다른 모듈을 가져오지 않는 fulfillment/mask.ts만 쓴다.
 //   1. 칸 이름: 배송지 칸은 29의 규칙(PERSONAL_DATA_MASKERS)으로 가리고, 연락처·이메일·주소 칸은 통째로 가린다.
 //      비밀 칸(토큰, 비밀번호, 쿠키, Authorization …)은 값을 지운다

@@ -7,6 +7,9 @@ RUN npm ci -w order-console-next
 
 FROM deps AS build
 COPY order-console-next/ order-console-next/
+# 오류 추적 이벤트를 지우는 규칙은 API와 같은 파일이다(lib/sentry-server.ts가 상대 경로로 가져간다)
+COPY order-api-nest/src/fulfillment/mask.ts order-api-nest/src/fulfillment/
+COPY order-api-nest/src/observability/scrub.ts order-api-nest/src/observability/
 WORKDIR /app/order-console-next
 ARG NEXT_PUBLIC_API_URL=http://localhost:4000
 ARG NEXT_PUBLIC_STORAGE_URL=http://localhost:9000
