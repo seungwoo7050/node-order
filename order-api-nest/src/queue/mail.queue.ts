@@ -3,9 +3,11 @@ import { Job, Queue, Worker } from "bullmq";
 import { Redis } from "ioredis";
 import { FakeMailer } from "../mail/fake-mailer.js";
 
-export type OrderEmailJob = { to: string; orderId: number };
+// template·subject는 relay가 이벤트 종류로 정한다(src/mail/templates.ts). 28 전에 쌓인 job에는 없다
+export type OrderEmailJob = { to: string; orderId: number; template?: string; subject?: string };
 
-const QUEUE_NAME = "mail";
+// 테스트는 다른 이름(test/setup-env.ts)을 써서 개발 API의 워커가 테스트 메일을 가져가지 않게 한다
+const QUEUE_NAME = process.env.MAIL_QUEUE_NAME ?? "mail";
 
 @Injectable()
 export class MailQueue implements OnModuleDestroy {
@@ -17,7 +19,10 @@ export class MailQueue implements OnModuleDestroy {
   constructor(private readonly mailer: FakeMailer) {
     this.worker = new Worker<OrderEmailJob>(
       QUEUE_NAME,
-      (job: Job<OrderEmailJob>) => this.mailer.send(job.data.to, `주문 #${job.data.orderId} 확인`, job.attemptsMade + 1),
+      (job: Job<OrderEmailJob>) => this.mailer.send(
+        { to: job.data.to, orderId: job.data.orderId, template: job.data.template ?? "generic", subject: job.data.subject ?? `주문 #${job.data.orderId} 확인` },
+        job.attemptsMade + 1,
+      ),
       { connection: this.workerConnection, concurrency: Number(process.env.MAIL_CONCURRENCY ?? 5) },
     );
     const warn = (err: Error) => this.logger.warn(`Redis 연결 오류: ${err.message}`);
@@ -31,9 +36,11 @@ export class MailQueue implements OnModuleDestroy {
     });
   }
 
-  async enqueueOrderEmail(eventId: number, data: OrderEmailJob) {
+  // jobId가 이벤트마다 하나라 relay가 같은 이벤트를 다시 넣어도 메일은 한 통이다.
+  // 이벤트 시각을 붙인다: 테스트가 DB를 비우면 이벤트 id가 1부터 다시 시작해, 남아 있던 완료 job과 겹치지 않게
+  async enqueueOrderEmail(event: { id: number; createdAt: Date }, data: OrderEmailJob) {
     await this.queue.add("order-email", data, {
-      jobId: `order-email-${eventId}`,
+      jobId: `order-email-${event.id}-${event.createdAt.getTime()}`,
       attempts: 4, 
       backoff: { type: "exponential", delay: 500 }, 
     });

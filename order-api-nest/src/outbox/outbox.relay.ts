@@ -1,12 +1,14 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from "@nestjs/common";
 import { NotificationsGateway } from "../notifications/notifications.gateway.js";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { mailFor } from "../mail/templates.js";
 import { MailQueue } from "../queue/mail.queue.js";
 
-type PendingEvent = { id: number; type: string; user_id: string; payload: Record<string, unknown> };
+type PendingEvent = { id: number; type: string; user_id: string; payload: Record<string, unknown>; created_at: Date };
 
 export function orderIdOf(e: Pick<PendingEvent, "type" | "payload">): number {
-  return Number(e.type === "order.paid" ? e.payload.orderId : e.payload.id);
+  // order.created는 주문 자체를 싣고(id), 상태 전이·반품 알림은 orderId를 싣는다
+  return Number(e.type === "order.created" ? e.payload.id : (e.payload.orderId ?? e.payload.id));
 }
 
 @Injectable()
@@ -45,11 +47,12 @@ export class OutboxRelay implements OnApplicationBootstrap, OnModuleDestroy {
   async publishBatch(): Promise<number> {
     return this.prisma.$transaction(async (tx) => {
       const events = await tx.$queryRaw<PendingEvent[]>`
-        SELECT id, type, user_id, payload FROM outbox_events
+        SELECT id, type, user_id, payload, created_at FROM outbox_events
         WHERE published_at IS NULL ORDER BY id LIMIT 20 FOR UPDATE SKIP LOCKED`;
       for (const e of events) {
         this.notifications.notifyUser(e.user_id, e.type, { eventId: e.id, ...e.payload });
-        await this.mailQueue.enqueueOrderEmail(e.id, { to: `${e.user_id}@example.com`, orderId: orderIdOf(e) });
+        const orderId = orderIdOf(e);
+        await this.mailQueue.enqueueOrderEmail({ id: e.id, createdAt: e.created_at }, { to: `${e.user_id}@example.com`, orderId, ...mailFor(e.type, orderId, e.payload) });
       }
       if (events.length > 0) {
         await tx.outboxEvent.updateMany({
