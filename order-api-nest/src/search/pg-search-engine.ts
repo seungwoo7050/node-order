@@ -1,4 +1,4 @@
-import type { PrismaClient } from "../generated/prisma/client.js";
+import { Prisma, type PrismaClient } from "../generated/prisma/client.js";
 import { categoryPaths } from "../products/product-list.js";
 import { bigrams, normalizeQuery, toTsQuery, toTsVector, words } from "./bigram.js";
 import { SEARCH_MAX_PAGES, type SearchEngine, type SearchHit, type SearchPage } from "./search-engine.js";
@@ -13,6 +13,30 @@ export const RANK = {
 
 const BATCH = 500;
 type Row = { id: number; name: string };
+
+// 검색 쿼리. 측정 스크립트(scripts/search-bench.ts)가 같은 SQL을 EXPLAIN하도록 밖에 둔다
+export const SEARCH_SQL = {
+  // 2-gram AND 일치(GIN tokens). 순위 = ts_rank × tsRank + 이름 word_similarity × nameSimilarity
+  token: (text: string, tsq: string, limit: number) => Prisma.sql`
+    SELECT s.product_id AS id, s.name
+    FROM product_search s, CAST(${tsq} AS tsquery) AS q
+    WHERE s.tokens @@ q
+    ORDER BY ts_rank(s.tokens, q) * ${RANK.tsRank}::float8 + word_similarity(${text}, s.name) * ${RANK.nameSimilarity}::float8 DESC, s.product_id
+    LIMIT ${limit}`,
+  // 오타 보충(GIN trgm name). pg_trgm.word_similarity_threshold를 같은 트랜잭션에서 먼저 정한다
+  // word_similarity는 검색어의 한 단어만 맞아도 같은 값이 나오므로("블르투스 이어폰" → "… 이어폰 …") 이름 전체 similarity로 동점을 가른다
+  similar: (text: string, seen: number[], limit: number) => Prisma.sql`
+    SELECT product_id AS id, name FROM product_search
+    WHERE ${text} <% name AND product_id <> ALL(${seen}::int[])
+    ORDER BY word_similarity(${text}, name) DESC, similarity(${text}, name) DESC, product_id
+    LIMIT ${limit}`,
+  // 1글자 검색어의 이름 접두 일치(text_pattern_ops)
+  prefix: (pattern: string, seen: number[], limit: number) => Prisma.sql`
+    SELECT product_id AS id, name FROM product_search
+    WHERE name LIKE ${pattern} AND product_id <> ALL(${seen}::int[])
+    ORDER BY name, product_id LIMIT ${limit}`,
+  threshold: () => Prisma.sql`SELECT set_config('pg_trgm.word_similarity_threshold', ${String(RANK.fuzzyThreshold)}, true)`,
+};
 
 export class PgSearchEngine implements SearchEngine {
   constructor(private readonly db: PrismaClient) {}
@@ -37,32 +61,20 @@ export class PgSearchEngine implements SearchEngine {
     const tokens = bigrams(text);
     if (tokens.length === 0) return [];
     const tsq = toTsQuery(tokens, nameOnly ? "A" : "");
-    const exact = await this.db.$queryRaw<Row[]>`
-      SELECT s.product_id AS id, s.name
-      FROM product_search s, CAST(${tsq} AS tsquery) AS q
-      WHERE s.tokens @@ q
-      ORDER BY ts_rank(s.tokens, q) * ${RANK.tsRank}::float8 + word_similarity(${text}, s.name) * ${RANK.nameSimilarity}::float8 DESC, s.product_id
-      LIMIT ${limit}`;
+    const exact = await this.db.$queryRaw<Row[]>(SEARCH_SQL.token(text, tsq, limit));
     const hits: SearchHit[] = exact.map((r) => ({ ...r, match: "token" }));
     if (hits.length >= Math.min(limit, RANK.fuzzyWhenFewerThan)) return hits;
 
     const seen = hits.map((h) => h.id);
     const singleChar = words(text).every((w) => Array.from(w).length === 1);
     if (singleChar) {
-      const prefix = `${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-      const rows = await this.db.$queryRaw<Row[]>`
-        SELECT product_id AS id, name FROM product_search
-        WHERE name LIKE ${prefix} AND product_id <> ALL(${seen}::int[])
-        ORDER BY name, product_id LIMIT ${limit - hits.length}`;
+      const pattern = `${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      const rows = await this.db.$queryRaw<Row[]>(SEARCH_SQL.prefix(pattern, seen, limit - hits.length));
       return [...hits, ...rows.map((r) => ({ ...r, match: "prefix" as const }))];
     }
     const similar = await this.db.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT set_config('pg_trgm.word_similarity_threshold', ${String(RANK.fuzzyThreshold)}, true)`;
-      return tx.$queryRaw<Row[]>`
-        SELECT product_id AS id, name FROM product_search
-        WHERE ${text} <% name AND product_id <> ALL(${seen}::int[])
-        ORDER BY word_similarity(${text}, name) DESC, product_id
-        LIMIT ${limit - hits.length}`;
+      await tx.$executeRaw(SEARCH_SQL.threshold());
+      return tx.$queryRaw<Row[]>(SEARCH_SQL.similar(text, seen, limit - hits.length));
     });
     return [...hits, ...similar.map((r) => ({ ...r, match: "similar" as const }))];
   }
