@@ -20,13 +20,29 @@
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
     "26-search": "implemented @ bfb0840 (verify 통과, devlog 진행·가이드 대기)",
-    "27-toss-payments": "implementing",
+    "27-toss-payments": "implemented @ d6554d8 (평가 중)",
     "28-fulfillment": "todo",
     "29-admin": "todo",
     "30-ai-mcp": "todo",
     "31-observability": "todo"
   },
-  "blocked": [],
+  "blocked": [
+    {
+      "branch": "27-toss-payments",
+      "what": "토스 문서용 공개 테스트 키 확인",
+      "why": "공식 문서에서 자리표시자만 확인됨. .env.example은 비워 둠"
+    },
+    {
+      "branch": "27-toss-payments",
+      "what": "실제 토스 샌드박스·위젯 결제 확인, 결제창 CSP 도메인 확인",
+      "why": "테스트 키가 없고 시뮬레이터로만 검증함"
+    },
+    {
+      "branch": "27-toss-payments",
+      "what": "토스 웹훅 서명(tosspayments-webhook-signature) 검증",
+      "why": "보안 키가 있어야 검증 가능. 지금은 재조회로만 막음"
+    }
+  ],
   "push_policy": "로컬 커밋만. 원격 푸시는 사람에게 묻는다.",
   "needs_human": [
     "운영 서버의 웹 이미지가 Next 16.4.0이다(critical 권고). 패치는 25에 들어가지만 운영 배포는 사람이 정한다"
@@ -42,6 +58,7 @@
     "학습 저장소의 질문·답·AI 활용 사례(브랜치마다 쓸 것 중 study/interview 쪽): 그 브랜치 작업 트리에 사람의 커밋 안 한 변경이 있어 건드리지 않았다. 사람이 정리한 뒤 25부터 한꺼번에 옮긴다"
   ],
   "side_effects": [
-    "26 verify가 공용 dev DB(order_api)에 0028 마이그레이션을 적용했다. 원본 체크아웃(main=24)에서 prisma migrate dev를 하면 드리프트로 보인다. 26을 합치거나 dev DB를 시드로 다시 만들면 풀린다"
+    "26 verify가 공용 dev DB(order_api)에 0028 마이그레이션을 적용했다. 원본 체크아웃(main=24)에서 prisma migrate dev를 하면 드리프트로 보인다. 26을 합치거나 dev DB를 시드로 다시 만들면 풀린다",
+    "27 verify가 공용 dev DB에 payments 백필 마이그레이션을 적용했다(결제 완료 52건 = payments 52건)"
   ]
 }
