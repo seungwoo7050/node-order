@@ -86,6 +86,24 @@ export function paymentGatewayContract(driver: ContractDriver) {
       expect((await sim.calls())[driver.refundOp]).toBe(2);
     });
 
+    it.each([
+      [49_000, 52_000], // 5만 원 미만: 배송비 3,000원
+      [50_000, 50_000], // 5만 원 이상: 무료
+    ])("배송비: 상품 합계 %i원이면 PG 승인 금액이 %i원(주문 total과 같다)", async (price, total) => {
+      await adminDb.product.update({ where: { id: 1 }, data: { price } });
+      const started = await client(baseUrl, tokens.user).post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }], shipping: SHIPPING, provider: driver.provider });
+      expect(started.status).toBe(201);
+      expect(started.body).toMatchObject({ price: total, shippingFee: total - price });
+      const ready = await paymentOf(started.body.id);
+      expect(ready.amount).toBe(total);
+      await driver.approve({ sim, baseUrl, userToken: tokens.user, providerOrderId: ready.providerOrderId, amount: total });
+      const paid = await paymentOf(started.body.id);
+      expect(paid.status).toBe("paid");
+      const pg = await app.get(PaymentGateways).get(driver.provider).fetchPayment(paid.providerPaymentKey!);
+      expect(pg.totalAmount).toBe(total);
+      expect(await adminDb.order.findUniqueOrThrow({ where: { id: started.body.id } })).toMatchObject({ totalAmount: total, shippingFee: total - price, status: "paid" });
+    });
+
     it("남은 금액을 모두 환불하면 refunded, 그 뒤 환불은 409", async () => {
       const { orderId } = await paidOrder();
       expect((await refund(orderId, 10_000, "all")).body.payment).toMatchObject({ status: "refunded", remaining: 0 });
