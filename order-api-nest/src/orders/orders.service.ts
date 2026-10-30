@@ -3,14 +3,16 @@ import { ConflictException, Injectable, Logger, NotFoundException, Unprocessable
 import { Prisma } from "../generated/prisma/client.js";
 import { NotificationsGateway } from "../notifications/notifications.gateway.js";
 import { PrismaService } from "../prisma/prisma.service.js";
-import type { CheckoutItemDto } from "./dto/checkout.dto.js";
+import type { CheckoutItemDto, ShippingAddressDto } from "./dto/checkout.dto.js";
+import { maskShipping } from "../fulfillment/mask.js";
+import { shippingFeeFor } from "../fulfillment/policy.js";
 import { cancelUnpaidOrder, manualPayment } from "../payments/cancel-unpaid-order.js";
 import type { ProviderId } from "../payments/payment-gateway.js";
 import { PaymentGateways } from "../payments/payment-gateways.js";
 import { afterOrder, encodeOrderCursor, orderListOrder, toPage, type Page } from "../pagination/cursor.js";
 
 export type Order = { id: number; user: string; price: number; paid: boolean; }
-export type CheckoutResult = Order & { items: { productId: number; quantity: number; unitPrice: number }[] };
+export type CheckoutResult = Order & { shippingFee: number; items: { productId: number; quantity: number; unitPrice: number }[] };
 export type CheckoutResponse = CheckoutResult & { checkoutUrl: string; provider: ProviderId };
 
 const orderSelect = { id: true, userId: true, totalAmount: true, paid: true } as const;
@@ -50,7 +52,7 @@ export class OrdersService {
   async create(input: Omit<Order, "id">, creatorId: string): Promise<Order> {
     const { user, price, ...rest } = input; // 입력 이름은 price 그대로, DB에는 total_amount에만 쓴다
     const order = await this.prisma.asAdmin(async (tx) => {
-      const created = toOrder(await tx.order.create({ data: { ...rest, totalAmount: price, userId: user }, select: orderSelect }));
+      const created = toOrder(await tx.order.create({ data: { ...rest, status: rest.paid ? "paid" : "pending_payment", totalAmount: price, userId: user }, select: orderSelect }));
       if (created.paid) await tx.payment.create({ data: manualPayment(created.id, created.price) });
       await tx.outboxEvent.create({ data: { type: "order.created", userId: creatorId, payload: created } });
       return created;
@@ -66,9 +68,9 @@ export class OrdersService {
     return Object.fromEntries(rows.map((r) => [r.userId, r._sum.totalAmount ?? 0]));
   }
 
-  async checkout(userId: string, items: CheckoutItemDto[], idempotencyKey?: string, provider?: ProviderId): Promise<CheckoutResponse> {
+  async checkout(userId: string, items: CheckoutItemDto[], shipping: ShippingAddressDto, idempotencyKey?: string, provider?: ProviderId): Promise<CheckoutResponse> {
     const gateway = this.gateways.pick(provider); // 쓸 수 없는 결제 수단이면 주문을 만들기 전에 400
-    const placed = await this.placeOrReplay(userId, items, idempotencyKey);
+    const placed = await this.placeOrReplay(userId, items, trimShipping(shipping), idempotencyKey);
     const attemptKey = idempotencyKey && createHash("sha256").update(`${userId}:${idempotencyKey}:${placed.id}`).digest("hex");
     try {
       const started = await gateway.startCheckout({ id: placed.id, price: placed.price, name: `주문 #${placed.id}` }, attemptKey);
@@ -97,14 +99,14 @@ export class OrdersService {
     }
   }
 
-  private async placeOrReplay(userId: string, items: CheckoutItemDto[], idempotencyKey?: string): Promise<CheckoutResult> {
-    const requestHash = createHash("sha256").update(JSON.stringify(items)).digest("hex");
+  private async placeOrReplay(userId: string, items: CheckoutItemDto[], shipping: ShippingAddressDto, idempotencyKey?: string): Promise<CheckoutResult> {
+    const requestHash = createHash("sha256").update(JSON.stringify({ items, shipping })).digest("hex");
     try {
       const result = await this.prisma.asUser(userId, async (tx) => {
         if (idempotencyKey) {
           await tx.idempotencyKey.create({ data: { userId, key: idempotencyKey, requestHash } });
         }
-        const placed = await this.placeOrder(tx, userId, items);
+        const placed = await this.placeOrder(tx, userId, items, shipping);
         await tx.outboxEvent.create({ data: { type: "order.created", userId, payload: placed } });
         if (idempotencyKey) {
           await tx.idempotencyKey.update({
@@ -113,7 +115,8 @@ export class OrdersService {
         }
         return placed;
       });
-      this.logger.log(`주문 접수(결제 대기): #${result.id} (${result.user}) ${result.price}원`);
+      // 배송지는 마스킹해서만 남긴다(연락처·상세주소 원문은 로그에 없다)
+      this.logger.log(`주문 접수(결제 대기): #${result.id} (${result.user}) ${result.price}원(배송비 ${result.shippingFee}원) 배송지 ${maskShipping(shipping)}`);
       return result;
     } catch (err) {
       if (idempotencyKey && err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
@@ -130,7 +133,7 @@ export class OrdersService {
     }
   }
 
-  private async placeOrder(tx: Prisma.TransactionClient, userId: string, items: CheckoutItemDto[]): Promise<CheckoutResult> {
+  private async placeOrder(tx: Prisma.TransactionClient, userId: string, items: CheckoutItemDto[], shipping: ShippingAddressDto): Promise<CheckoutResult> {
     const ids = [...new Set(items.map((i) => i.productId))];
     const products = await tx.$queryRaw<{ id: number; name: string; price: number; stock: number }[]>`
       SELECT id, name, price, stock FROM products WHERE id = ANY(${ids}) ORDER BY id FOR UPDATE`;
@@ -142,15 +145,25 @@ export class OrdersService {
       await tx.product.update({ where: { id: product.id }, data: { stock: { decrement: item.quantity } } });
       total += product.price * item.quantity;
     }
+    // 배송비는 주문에 따로 저장하고 total_amount에 더한다. PG 승인 금액 대조(27)는 이 total과 비교한다
+    const shippingFee = shippingFeeFor(total);
     const order = await tx.order.create({
       data: {
-        userId, totalAmount: total, paid: false,
+        userId, totalAmount: total + shippingFee, shippingFee, paid: false, status: "pending_payment", ...shipping,
         items: { create: items.map((i) => ({
           productId: i.productId, quantity: i.quantity, unitPrice: products.find((p) => p.id === i.productId)!.price,
         })) },
       },
-      select: { ...orderSelect, items: { select: { productId: true, quantity: true, unitPrice: true } } },
+      select: { ...orderSelect, shippingFee: true, items: { select: { productId: true, quantity: true, unitPrice: true } } },
     });
-    return { ...toOrder(order), items: order.items };
+    return { ...toOrder(order), shippingFee: order.shippingFee, items: order.items };
   }
+}
+
+function trimShipping(s: ShippingAddressDto): ShippingAddressDto {
+  const opt = (v?: string) => (v?.trim() ? v.trim() : undefined);
+  return {
+    recipientName: s.recipientName.trim(), recipientPhone: s.recipientPhone.trim(), postalCode: s.postalCode, address1: s.address1.trim(),
+    address2: opt(s.address2), deliveryMemo: opt(s.deliveryMemo),
+  };
 }

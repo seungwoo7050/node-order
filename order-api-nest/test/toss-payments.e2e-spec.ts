@@ -1,7 +1,7 @@
 import type { INestApplication } from "@nestjs/common";
 import { adminDb } from "./admin-db.js";
 import { startSimulator, type Simulator } from "./fake-pg.js";
-import { client, paidNotices, paymentOf, seedPaymentData, startPaymentApp } from "./payment-app.js";
+import { SHIPPING, client, paidNotices, paymentOf, seedPaymentData, startPaymentApp } from "./payment-app.js";
 
 describe("토스 결제 - 승인·웹훅", () => {
   let app: INestApplication;
@@ -29,7 +29,7 @@ describe("토스 결제 - 승인·웹훅", () => {
   const user = () => client(baseUrl, tokens.user);
   // 주문을 만들고 위젯 인증까지(승인 전)
   const authorized = async () => {
-    const started = await user().post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }], provider: "toss" });
+    const started = await user().post("/orders/checkout", { items: [{ productId: 1, quantity: 1 }], shipping: SHIPPING, provider: "toss" });
     expect(started.status).toBe(201);
     const payment = await paymentOf(started.body.id);
     const { paymentKey } = await sim.post<{ paymentKey: string }>("/__sim/authorize", { orderId: payment.providerOrderId, amount: payment.amount });

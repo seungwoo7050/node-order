@@ -6,6 +6,7 @@ import { hashPassword } from "../src/auth/password.js";
 import { StripeGateway } from "../src/payments/stripe.gateway.js";
 import { adminDb } from "./admin-db.js";
 import { FakeStripeGateway } from "./fake-stripe.js";
+import { SHIPPING } from "./payment-app.js";
 
 const WEBHOOK_SECRET = "whsec_test_secret";
 
@@ -44,7 +45,7 @@ describe("Stripe 결제 - 회귀 테스트", () => {
     const res = await fetch(`${baseUrl}/orders/checkout`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ items: [{ productId: 1, quantity }] }),
+      body: JSON.stringify({ items: [{ productId: 1, quantity }], shipping: SHIPPING }),
     });
     return (await res.json()) as { id: number; paid: boolean; checkoutUrl: string };
   };
