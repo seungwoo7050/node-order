@@ -28,11 +28,12 @@ import { SettingsModule } from './admin/settings.module.js';
 import { AdminModule } from './admin/admin.module.js';
 import { ReconciliationModule } from './reconciliation/reconciliation.module.js';
 import { McpModule } from './mcp/mcp.module.js';
+import { LlmModule } from './llm/llm.module.js';
 
 @Module({
   imports: [
     LoggerModule.forRoot(loggerOptions),
-    MetricsModule, RateLimitModule, PrismaModule, StorageModule, CatalogCacheModule, HealthModule, OrdersModule, UsersModule, ProductsModule, OutboxModule, MeModule, LeaderModule, AuthModule, NotificationsModule, CategoriesModule, TrpcModule, PaymentsModule, FulfillmentModule, SettingsModule, ReconciliationModule, AdminModule, McpModule],
+    MetricsModule, RateLimitModule, PrismaModule, StorageModule, CatalogCacheModule, HealthModule, OrdersModule, UsersModule, ProductsModule, OutboxModule, MeModule, LeaderModule, AuthModule, NotificationsModule, CategoriesModule, TrpcModule, PaymentsModule, FulfillmentModule, SettingsModule, ReconciliationModule, AdminModule, McpModule, LlmModule],
   controllers: [AppController],
   // 데모 관리자에게 가는 관리자 API 응답의 배송지·연락처를 가린다(모든 /admin 경로에 한 번에)
   providers: [AppService, ShutdownLogger, { provide: APP_INTERCEPTOR, useClass: DemoAdminMaskInterceptor }],

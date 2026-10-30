@@ -1,5 +1,6 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, Inject, Optional } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
+import { LLM_PROVIDER, type LlmProvider } from "../llm/llm-provider.js";
 import { PaymentGateways } from "./payment-gateways.js";
 
 // 키가 있으면 켜지는 기능 목록. 콘솔은 여기 있는 결제 수단만 보인다(둘 다 없으면 결제 버튼을 끈다)
@@ -9,7 +10,11 @@ import { PaymentGateways } from "./payment-gateways.js";
 @ApiTags("features")
 @Controller("features")
 export class FeaturesController {
-  constructor(private readonly gateways: PaymentGateways) {}
+  constructor(
+    private readonly gateways: PaymentGateways,
+    // LLM_API_KEY가 있을 때만 만들어진다(llm.module.ts). 콘솔은 이것으로 "설명 초안 만들기" 버튼을 보인다
+    @Optional() @Inject(LLM_PROVIDER) private readonly llm: LlmProvider | null = null,
+  ) {}
 
   @Get()
   features() {
@@ -20,7 +25,7 @@ export class FeaturesController {
         toss: payments.includes("toss"),
         stripe: payments.includes("stripe"),
         errorTracking: Boolean(process.env.SENTRY_DSN), // 31에서 쓴다
-        llm: Boolean(process.env.LLM_API_KEY), // 30에서 쓴다
+        llm: Boolean(this.llm),
       },
       ...(payments.includes("toss") ? { toss: this.gateways.toss.widgetConfig() } : {}),
     };
