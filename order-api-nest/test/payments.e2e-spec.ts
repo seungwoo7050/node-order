@@ -101,6 +101,38 @@ describe("Stripe 결제 - 회귀 테스트", () => {
     expect(await stock()).toBe(10);
   });
 
+  // blue/green 전환 사이 옛 API가 만든 주문: 세션은 orders.stripe_session_id에만 있고 payments 행이 없다
+  const legacyOrder = async (sessionId: string) => {
+    await adminDb.product.update({ where: { id: 1 }, data: { stock: { decrement: 2 } } });
+    return adminDb.order.create({
+      data: { userId: "kim", totalAmount: 60_000, paid: false, stripeSessionId: sessionId, items: { create: [{ productId: 1, quantity: 2, unitPrice: 30_000 }] } },
+    });
+  };
+
+  it("결제 행이 없는 옛 세션의 completed 웹훅도 주문을 찾아 결제 행을 만들고 결제 완료로 반영한다(동시에·다시 와도 한 번)", async () => {
+    const order = await legacyOrder("cs_old_api_1");
+    const event = { id: "evt_old_1", type: "checkout.session.completed", session: { id: "cs_old_api_1", payment_status: "paid", amount_total: 60_000, payment_intent: "pi_old_1" } };
+    const results = await Promise.all([sendWebhook(event), sendWebhook(event), sendWebhook({ ...event, id: "evt_old_1b" })]);
+    expect(results.every((r) => r.status === 200)).toBe(true);
+    expect((await (await sendWebhook(event)).json()).result).toBe("duplicate");
+    expect(await adminDb.payment.findMany({ where: { orderId: order.id } })).toMatchObject([
+      { provider: "stripe", providerOrderId: "cs_old_api_1", providerPaymentKey: "pi_old_1", amount: 60_000, status: "paid" },
+    ]);
+    expect(await adminDb.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({ paid: true, status: "paid" });
+    expect(await paidNotices()).toBe(1);
+  });
+
+  it("결제 행이 없는 옛 세션이 만료되면 결제 행을 만들고 주문 취소·재고 복구를 한 번 한다", async () => {
+    const order = await legacyOrder("cs_old_api_2");
+    expect(await stock()).toBe(8);
+    const expired = { id: "evt_old_2", type: "checkout.session.expired", session: { id: "cs_old_api_2", payment_status: "unpaid" } };
+    expect((await (await sendWebhook(expired)).json()).result).toBe("processed");
+    expect((await (await sendWebhook({ ...expired, id: "evt_old_2b" })).json()).result).toBe("processed");
+    expect(await stock()).toBe(10);
+    expect((await adminDb.payment.findUniqueOrThrow({ where: { orderId: order.id } })).status).toBe("canceled");
+    expect(await adminDb.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({ status: "canceled", canceledAt: expect.any(Date) });
+  });
+
   it("우리가 만들지 않은 세션의 이벤트는 무시한다(200)", async () => {
     const res = await sendWebhook({ id: "evt_other", type: "checkout.session.completed", session: { id: "cs_test_someone_else", payment_status: "paid" } });
     expect(res.status).toBe(200);
