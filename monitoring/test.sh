@@ -22,5 +22,9 @@ done
 echo "## Caddy: 공개 API 주소의 /metrics 변형 경로"
 bash "$here/../deploy/check-caddy-metrics.sh"
 
+echo "## 운영 Compose 메모리 상한 합계(블루·그린 두 벌 포함)"
+docker compose --env-file "$here/../deploy/rehearsal.env" -f "$here/../deploy/compose.yml" --profile blue --profile green config --format json \
+  | node "$here/check-memory-budget.mjs"
+
 echo "## alertmanager"
 docker run --rm -v "$here:/m:ro" --entrypoint sh "$am" /m/alertmanager/check.sh
