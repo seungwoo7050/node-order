@@ -12,7 +12,11 @@ import { maskContacts, PERSONAL_DATA_MASKERS } from "../fulfillment/mask.ts"; //
 export const FILTERED = "[Filtered]";
 
 const SECRET_KEY = /(authorization|cookie|token|secret|password|passwd|api[-_]?key|session|signature|dsn)/i;
-const CONTACT_KEY = /^(email|e-mail|phone|mobile|tel|contact|address|recipient|ip_address)$/i;
+// 연락처·주소 칸: 이름에 들어 있으면 지운다(address, shippingAddress, addressLine1, roadAddress, phoneNumber …).
+// 시·구 없이 쓴 주소("테헤란로 123")는 글 규칙(ROAD_ADDRESS)으로 못 잡으므로 칸 이름으로 지운다
+const CONTACT_KEY = /(e-?mail|phone|mobile|^tel$|contact|address|^addr|recipient|postal|zip)/i;
+// 요청 헤더는 허용 목록만 남긴다(지우는 목록은 X-Forwarded-For·X-Real-IP·CF-Connecting-IP처럼 손님 IP가 든 헤더를 빠뜨린다)
+const ALLOWED_HEADERS = new Set(["host", "user-agent", "content-type", "content-length", "accept", "accept-language", "accept-encoding", "x-request-id", "sentry-trace", "baggage"]);
 const KEEP_KEYS = new Set(["modules", "event_id", "trace_id", "span_id", "parent_span_id", "release", "environment", "timestamp", "start_timestamp", "platform", "level", "type", "filename", "abs_path", "module", "function", "lineno", "colno", "in_app"]);
 
 const TOKEN_PATTERNS: RegExp[] = [
@@ -65,6 +69,9 @@ export function scrubEvent<T>(event: T): T {
   const e = scrubValue(event, undefined, 0) as Scrubbable;
   if (e.request) {
     delete e.request.cookies;
+    if (e.request.headers && typeof e.request.headers === "object") {
+      e.request.headers = Object.fromEntries(Object.entries(e.request.headers as Record<string, unknown>).filter(([k]) => ALLOWED_HEADERS.has(k.toLowerCase())));
+    }
     // 요청 본문은 칸 규칙으로 가린 뒤에도 남기지 않는다: 손님이 쓴 자유 글(배송 메모 등)이 칸 이름 밖에 있을 수 있다
     if (e.request.data !== undefined) e.request.data = FILTERED;
   }
