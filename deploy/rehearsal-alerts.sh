@@ -62,12 +62,20 @@ if [ "$active_tag" != "$TAG" ]; then
 else
   "${DC[@]}" up -d --wait --no-recreate
 fi
+# Alertmanager 상태를 비운다: 알림 기록(nflog)이 볼륨에 남아 있으면 앞 실행에서 보낸 같은 경보를
+# repeat_interval(4h) 동안 다시 보내지 않아, 같은 스택에서 다시 돌리면 시간 초과로 실패한다
+"${DC[@]}" rm -sf alertmanager > /dev/null
+docker volume rm -f "${COMPOSE_PROJECT_NAME:-node-order-rehearsal}_alertmanager_data" > /dev/null
 "${DC[@]}" up -d --no-deps --wait alertmanager prometheus
 
 say "Prometheus가 활성 API를 긁을 때까지"
 api_up() { local r; r=$(curl -sf 'http://127.0.0.1:9190/api/v1/query?query=up%7Bjob%3D%22order-api%22%7D' || true); [[ $r =~ \"value\":\[[^]]*,\"1\"\] ]]; }
 for _ in $(seq 1 60); do api_up && break; sleep 2; done
 api_up || { echo "Prometheus가 order-api를 긁지 못한다(live/targets.json 확인)"; exit 1; }
+
+say "공개 API 주소(:8081)에서 /metrics 변형 경로가 보이지 않는지"
+bash ./check-metrics-exposure.sh http://localhost:8081 | grep -v '^ok' || true
+bash ./check-metrics-exposure.sh http://localhost:8081 > /dev/null || { echo "공개 주소로 지표가 보인다"; exit 1; }
 
 say "장애 1: 색인 작업 멈춤(search_dirty UPDATE 권한 회수, 11분 전 행)"
 sql "REVOKE UPDATE ON search_dirty FROM order_app"
