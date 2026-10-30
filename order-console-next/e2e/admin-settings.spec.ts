@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import pg from "pg";
+import { assertDisposableDatabase } from "./support/db-guard";
 
 // 상점 설정·법적 고지·대시보드·대사 화면. 설정을 저장하면 배포 없이 바닥글과 /legal/*가 새 값을 보인다(태그 캐시 무효화)
 test.use({ serviceWorkers: "block" });
@@ -36,7 +37,8 @@ function adminDatabaseUrl(): string {
   return url;
 }
 async function deleteE2eLegalVersions(): Promise<number> {
-  const db = new pg.Client({ connectionString: adminDatabaseUrl() });
+  // 이 컴퓨터의 개발·테스트 DB가 아니면 지우지 않고 실패한다
+  const db = new pg.Client({ connectionString: assertDisposableDatabase(adminDatabaseUrl()) });
   await db.connect();
   try {
     return (await db.query("DELETE FROM legal_documents WHERE body LIKE $1 AND version > 1", [`${E2E_MARK}%`])).rowCount ?? 0;
