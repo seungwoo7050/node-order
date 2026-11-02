@@ -1,6 +1,33 @@
 import { cacheLife, cacheTag } from "next/cache";
 
-export type CatalogProduct = { id: number; name: string; price: number; description: string; imageUrl: string | null; categoryPath: string[] };
+export type ProductVariant = {
+  id: number;
+  name: string;
+  sku: string;
+  priceDelta: number;
+  stock: number;
+  sortOrder: number;
+};
+
+export type ProductImage = {
+  id: number;
+  imageUrl: string;
+  sortOrder: number;
+};
+
+export type CatalogProduct = {
+  id: number;
+  name: string;
+  price: number;
+  description: string;
+  imageUrl: string | null;
+  categoryPath: string[];
+  materialInfo?: string;
+  sizeGuide?: string;
+  isVisible?: boolean;
+  variants?: ProductVariant[];
+  images?: ProductImage[];
+};
 export type CatalogListItem = Omit<CatalogProduct, "description">;
 
 export const PRODUCTS_TAG = "products";
@@ -17,7 +44,19 @@ export async function getProduct(id: number): Promise<CatalogProduct | null> {
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`상품을 받지 못했다(${res.status})`);
   const p = (await res.json()) as CatalogProduct & { stock: number };
-  return { id: p.id, name: p.name, price: p.price, description: p.description, imageUrl: p.imageUrl, categoryPath: p.categoryPath };
+  return {
+    id: p.id,
+    name: p.name,
+    price: p.price,
+    description: p.description,
+    imageUrl: p.imageUrl,
+    categoryPath: p.categoryPath,
+    materialInfo: p.materialInfo,
+    sizeGuide: p.sizeGuide,
+    isVisible: p.isVisible,
+    variants: p.variants,
+    images: p.images,
+  };
 }
 
 export async function getProducts(): Promise<CatalogListItem[]> {

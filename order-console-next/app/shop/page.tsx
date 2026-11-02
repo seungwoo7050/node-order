@@ -43,7 +43,9 @@ function AddedToast({ name, onDone }: { name: string; onDone: () => void }) {
   );
 }
 
-function ProductList() {
+import { CategoryFilterBar } from "./category-filter-bar";
+
+function ProductList({ categoryName }: { categoryName?: string | null }) {
   const trpc = useTRPC();
   const { data, isPending, error, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = useInfiniteQuery(productListOptions(trpc));
   const add = useCartStore((s) => s.add);
@@ -59,7 +61,10 @@ function ProductList() {
         <span className="block text-sm text-muted">잠시 뒤 새로 고침해 주세요. ({error.message})</span>
       </p>
     );
-  const products = data.pages.flatMap((page) => page.items);
+  const allProducts = data.pages.flatMap((page) => page.items);
+  const products = categoryName
+    ? allProducts.filter((p) => p.categoryPath.includes(categoryName))
+    : allProducts;
   return (
     <>
       <ul className="border-t border-line">
@@ -129,12 +134,23 @@ function CheckoutNotice() {
 }
 
 export default function ShopPage() {
+  const [selectedCatId, setSelectedCatId] = useState<number | null>(null);
+  const [selectedCatName, setSelectedCatName] = useState<string | null>(null);
+
+  const onSelectCategory = (id: number | null, name: string | null) => {
+    setSelectedCatId(id);
+    setSelectedCatName(name);
+  };
+
   return (
     <>
       <main className="page flex-1 pb-12 pt-2">
         <Suspense><CheckoutNotice /></Suspense>
-        <h1 className="title mb-8">상품</h1>
-        <section aria-label="상품 목록"><ProductList /></section>
+        <h1 className="title mb-4">상품</h1>
+        <CategoryFilterBar selectedId={selectedCatId} onSelect={onSelectCategory} />
+        <section aria-label="상품 목록">
+          <ProductList categoryName={selectedCatName} />
+        </section>
       </main>
       <CartDock />
     </>

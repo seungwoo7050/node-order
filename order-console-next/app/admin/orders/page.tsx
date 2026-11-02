@@ -4,7 +4,8 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { authFetch } from "@/lib/api-client";
+import { API_URL, authFetch, refreshAccessToken } from "@/lib/api-client";
+import { useAuthStore } from "@/lib/auth-store";
 import { ORDER_STATUS_CODES, ORDER_STATUS_LABEL, won, type OrderStatusCode } from "@/lib/orders";
 import { LoadMore } from "../../load-more";
 import { AdminOnly } from "../products/admin-only";
@@ -23,13 +24,17 @@ function OrderTable() {
   const [status, setStatus] = useState<OrderStatusCode | "">(isStatus(initialStatus) ? initialStatus : search.get("returns") ? "" : "paid");
   const [returnsOnly, setReturnsOnly] = useState(search.get("returns") === "requested");
   const [guestFilter, setGuestFilter] = useState<string>(search.get("guest") ?? "");
+  const [q, setQ] = useState("");
+  const [exporting, setExporting] = useState(false);
+
   const query = useInfiniteQuery({
-    queryKey: ["admin-orders", status, returnsOnly, guestFilter],
+    queryKey: ["admin-orders", status, returnsOnly, guestFilter, q],
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({ limit: "20" });
       if (status) params.set("status", status);
       if (returnsOnly) params.set("returns", "requested");
       if (guestFilter) params.set("guest", guestFilter);
+      if (q.trim()) params.set("q", q.trim());
       if (pageParam) params.set("cursor", pageParam);
       return authFetch<Page>(`/admin/orders?${params}`);
     },
@@ -38,29 +43,76 @@ function OrderTable() {
   });
   const rows = query.data?.pages.flatMap((p) => p.items) ?? [];
 
+  const handleExportCsv = async () => {
+    setExporting(true);
+    try {
+      const token = useAuthStore.getState().accessToken ?? (await refreshAccessToken());
+      const res = await fetch(`${API_URL}/admin/orders/export.csv`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("CSV 내보내기 실패");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `orders_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      alert("주문 내역 CSV 다운로드에 실패했습니다.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <>
-      <div className="mb-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-        <label className="flex items-center gap-3">
-          <span className="label">상태</span>
-          <select className="border border-line px-2 py-1" value={status} onChange={(e) => setStatus(e.target.value as OrderStatusCode | "")} data-testid="status-filter">
-            <option value="">전체</option>
-            {ORDER_STATUS_CODES.map((s) => <option key={s} value={s}>{ORDER_STATUS_LABEL[s]}</option>)}
-          </select>
-        </label>
-        <label className="flex items-center gap-3">
-          <span className="label">주문 구분</span>
-          <select className="border border-line px-2 py-1" value={guestFilter} onChange={(e) => setGuestFilter(e.target.value)} data-testid="guest-filter">
-            <option value="">전체</option>
-            <option value="false">회원 주문만</option>
-            <option value="true">비회원 주문만</option>
-          </select>
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={returnsOnly} onChange={(e) => setReturnsOnly(e.target.checked)} data-testid="returns-filter" />
-          반품·교환 요청이 있는 주문만
-        </label>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 text-sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <label className="flex items-center gap-2">
+            <span className="label">상태</span>
+            <select className="border border-line px-2 py-1" value={status} onChange={(e) => setStatus(e.target.value as OrderStatusCode | "")} data-testid="status-filter">
+              <option value="">전체</option>
+              {ORDER_STATUS_CODES.map((s) => <option key={s} value={s}>{ORDER_STATUS_LABEL[s]}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-2">
+            <span className="label">구분</span>
+            <select className="border border-line px-2 py-1" value={guestFilter} onChange={(e) => setGuestFilter(e.target.value)} data-testid="guest-filter">
+              <option value="">전체</option>
+              <option value="false">회원만</option>
+              <option value="true">비회원만</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={returnsOnly} onChange={(e) => setReturnsOnly(e.target.checked)} data-testid="returns-filter" />
+            반품·교환만
+          </label>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <input
+            type="search"
+            data-testid="order-search-input"
+            placeholder="주문번호, 주문자, 수령인 검색"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="border border-line px-2.5 py-1 text-xs rounded w-48"
+          />
+          <button
+            type="button"
+            data-testid="export-csv-btn"
+            onClick={handleExportCsv}
+            disabled={exporting}
+            className="btn btn-sm text-xs"
+          >
+            {exporting ? "다운로드 중…" : "CSV 다운로드"}
+          </button>
+        </div>
       </div>
+
       {query.isPending ? (
         <p role="status" className="text-sm text-muted">주문을 불러오는 중입니다.</p>
       ) : query.error && rows.length === 0 ? (

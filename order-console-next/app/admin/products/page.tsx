@@ -14,39 +14,52 @@ async function ProductTable() {
   const products = await getProducts();
   return (
     <>
-    <table className="w-full border-collapse text-left">
-      <thead>
-        <tr className="border-b border-line-strong">
-          <th scope="col" className="label py-3 font-normal">상품</th>
-          <th scope="col" className="label hidden py-3 font-normal sm:table-cell">가격</th>
-          <th scope="col" className="label hidden py-3 font-normal sm:table-cell">재고</th>
-          <th scope="col" className="label hidden py-3 font-normal sm:table-cell">입고·조정</th>
-          <th scope="col" className="label py-3 font-normal">이미지</th>
-          <th scope="col" className="sr-only">수정</th>
-        </tr>
-      </thead>
-      <tbody>
-        {products.map((p) => (
-          <tr key={p.id} className="border-b border-line">
-            <td className="py-3">
-              <span className="flex items-center gap-3">
-                {p.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.imageUrl} alt="" width={36} height={36} className="size-9 object-cover" data-testid={`image-${p.id}`} />
-                ) : (
-                  <span aria-hidden="true" className="grid size-9 place-items-center bg-surface font-serif text-sm text-faint">{p.name.slice(0, 1)}</span>
-                )}
-                {p.name}
-              </span>
-            </td>
-            <td className="num hidden py-3 sm:table-cell" data-testid={`price-${p.id}`}>{won(p.price)}</td>
-            <StockCell productId={p.id} name={p.name} />
-            <td className="py-3"><ProductImageUploader productId={p.id} hasImage={p.imageUrl !== null} /></td>
-            <td className="py-3 text-right"><Link href={`/admin/products/${p.id}`} aria-label={`${p.name} 수정`}>수정</Link></td>
+      <table className="w-full border-collapse text-left">
+        <thead>
+          <tr className="border-b border-line-strong">
+            <th scope="col" className="label py-3 font-normal">상품</th>
+            <th scope="col" className="label hidden py-3 font-normal sm:table-cell">카테고리</th>
+            <th scope="col" className="label hidden py-3 font-normal sm:table-cell">가격</th>
+            <th scope="col" className="label hidden py-3 font-normal sm:table-cell">재고</th>
+            <th scope="col" className="label hidden py-3 font-normal sm:table-cell">입고·조정</th>
+            <th scope="col" className="label py-3 font-normal">이미지</th>
+            <th scope="col" className="sr-only">수정</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {products.map((p) => (
+            <tr key={p.id} className="border-b border-line">
+              <td className="py-3">
+                <span className="flex items-center gap-3">
+                  {p.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.imageUrl} alt="" width={36} height={36} className="size-9 object-cover" data-testid={`image-${p.id}`} />
+                  ) : (
+                    <span aria-hidden="true" className="grid size-9 place-items-center bg-surface font-serif text-sm text-faint">{p.name.slice(0, 1)}</span>
+                  )}
+                  <div>
+                    <span className="font-medium text-fg block">{p.name}</span>
+                    {p.variants && p.variants.length > 0 && (
+                      <span className="text-[11px] text-muted">옵션 {p.variants.length}개</span>
+                    )}
+                  </div>
+                </span>
+              </td>
+              <td className="hidden py-3 text-xs text-muted sm:table-cell">
+                {p.categoryPath.length > 0 ? p.categoryPath.join(" > ") : "-"}
+              </td>
+              <td className="num hidden py-3 sm:table-cell" data-testid={`price-${p.id}`}>{won(p.price)}</td>
+              <StockCell productId={p.id} name={p.name} />
+              <td className="py-3"><ProductImageUploader productId={p.id} hasImage={p.imageUrl !== null} /></td>
+              <td className="py-3 text-right">
+                <Link href={`/admin/products/${p.id}`} aria-label={`${p.name} 수정`} className="link-quiet">
+                  수정
+                </Link>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </>
   );
 }
@@ -54,7 +67,16 @@ async function ProductTable() {
 export default function AdminProductsPage() {
   return (
     <main className="page flex-1 pb-12 pt-2">
-      <h1 className="title mb-8">상품 관리</h1>
+      <div className="mb-8 flex items-center justify-between">
+        <h1 className="title">상품 관리</h1>
+        <Link
+          href="/admin/products/new"
+          data-testid="new-product-link"
+          className="btn btn-primary no-underline text-sm font-medium"
+        >
+          + 새 상품 등록
+        </Link>
+      </div>
       <AdminOnly>
         <LoadError what="상품 목록">
           <Suspense fallback={<p role="status" className="text-sm text-muted">상품을 불러오는 중입니다.</p>}>
