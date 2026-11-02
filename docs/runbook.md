@@ -28,7 +28,7 @@
 - **무엇을 보나**: Prometheus에 긁을 order-api 대상이 2분 넘게 없다(`up{job="order-api"}` 시계열이 없음). 대상이 없으면 [ApiDown](#apidown)도 울리지 않으므로 이 경보가 대신 알린다. 대개 `live/targets.json`이 `[]`(첫 배포 뒤 `switch`가 안 돌았음)이거나 지워졌다
 - **명령**
   - `cat live/targets.json`, `sed -n 's/^ACTIVE=//p' .env`
-  - 활성 슬롯이 떠 있으면 `bash release.sh switch` 대신 대상만 고친다: `printf '[{"targets":["api-%s:4000"],"labels":{"slot":"%s"}}]\n' blue blue > live/targets.json`(blue 자리에 활성 슬롯)
+  - 활성 슬롯이 떠 있으면 `bash release.sh switch` 대신 대상만 고친다: `SLOT=$(sed -n 's/^ACTIVE=//p' .env); TAG=$(sed -n "s/^$(echo $SLOT | tr 'a-z' 'A-Z')_TAG=//p" .env); printf '[{"targets":["api-%s:4000"],"labels":{"slot":"%s","release":"%s"}}]\n' "$SLOT" "$SLOT" "$TAG" > live/targets.json.tmp && mv live/targets.json.tmp live/targets.json`
   - `docker compose logs --tail 20 prometheus | grep -i file_sd`
 - **PG 화면**: 보지 않는다
 
