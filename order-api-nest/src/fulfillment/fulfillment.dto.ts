@@ -1,6 +1,6 @@
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
-  ArrayMinSize, ArrayUnique, IsArray, IsIn, IsInt, IsOptional, IsPositive, IsString, Matches, MaxLength, ValidateNested,
+  ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsPositive, IsString, Matches, MaxLength, ValidateNested,
 } from "class-validator";
 import { PageQueryDto } from "../pagination/page-query.dto.js";
 import { CARRIER_CODES, type CarrierCode } from "./carriers.js";
@@ -11,6 +11,10 @@ export class AdminFulfillmentQueryDto extends PageQueryDto {
   @IsOptional() @IsIn(ORDER_STATUSES) status?: OrderStatus;
   // 대시보드의 "반품 요청" 타일: 처리하지 않은 반품·교환 요청이 있는 주문만
   @IsOptional() @IsIn(["requested"]) returns?: "requested";
+  @IsOptional()
+  @Transform(({ value }) => (value === "true" || value === true ? true : value === "false" || value === false ? false : undefined))
+  @IsBoolean()
+  guest?: boolean;
 }
 
 // 목록에 없는 택배사 코드는 400

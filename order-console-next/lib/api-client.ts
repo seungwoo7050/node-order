@@ -76,12 +76,15 @@ export function refreshAccessToken(): Promise<string | null> {
     try {
       const res = await fetch(`${API_URL}/auth/refresh`, { method: "POST", credentials: "include" });
       if (!res.ok) {
-        useAuthStore.getState().clear();
+        useAuthStore.getState().setAccessToken(null);
         return null;
       }
       const { accessToken } = (await res.json()) as { accessToken: string };
       useAuthStore.getState().setAccessToken(accessToken);
       return accessToken;
+    } catch {
+      useAuthStore.getState().setAccessToken(null);
+      return null;
     } finally {
       refreshing = null;
     }

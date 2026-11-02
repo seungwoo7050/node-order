@@ -61,6 +61,19 @@ describe("scrubEvent", () => {
     expect(out.extra.shipping).toEqual({ recipientName: "홍*동", recipientPhone: "010-****-6789", address1: "서울특별시 강남구 ***", email: FILTERED });
   });
 
+  it("주소 관련 키의 값이 객체나 배열이어도 [Filtered]로 지운다", () => {
+    const out = scrubEvent({
+      extra: {
+        address: { road: "테헤란로 123", detail: "4층" },
+        addresses: ["테헤란로 123", "판교역로 4"],
+        postalInfo: { zip: "12345" },
+      },
+    });
+    expect(out.extra.address).toBe(FILTERED);
+    expect(out.extra.addresses).toBe(FILTERED);
+    expect(out.extra.postalInfo).toBe(FILTERED);
+  });
+
   it("식별자와 release는 그대로 둔다(문제를 찾을 수 있게)", () => {
     const out = scrubEvent(structuredClone(event));
     expect(out.event_id).toBe(event.event_id);
@@ -98,5 +111,13 @@ describe("scrubText", () => {
     ["경기도 성남시 분당구 판교역로 4", "경기도 성남시 분당구 ***"],
   ])("글에 섞인 도로명 주소 %s를 시·구까지만 남긴다", (raw, masked) => {
     expect(scrubText(`배송지(${raw}) 저장 실패`)).toBe(`배송지(${masked}) 저장 실패`);
+  });
+
+  it.each([
+    ["테헤란로 123"],
+    ["성수이로 51"],
+    ["판교역로 10-2"],
+  ])("시·구 없이 쓴 도로명 주소 %s는 [주소]로 가린다", (road) => {
+    expect(scrubText(`배송지: ${road} 문 앞`)).toBe(`배송지: [주소] 문 앞`);
   });
 });

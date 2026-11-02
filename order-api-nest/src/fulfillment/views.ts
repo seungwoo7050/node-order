@@ -9,6 +9,7 @@ type Tx = Prisma.TransactionClient;
 export const fulfillmentSelect = {
   id: true, userId: true, totalAmount: true, shippingFee: true, paid: true, canceledAt: true, createdAt: true,
   status: true, statusChangedAt: true, deliveredAt: true,
+  isGuest: true, returnShippingFee: true,
   recipientName: true, recipientPhone: true, postalCode: true, address1: true, address2: true, deliveryMemo: true,
   items: { select: { quantity: true, unitPrice: true, product: { select: { id: true, name: true } } }, orderBy: { productId: "asc" } },
   history: { select: { fromStatus: true, toStatus: true, actorType: true, reason: true, createdAt: true }, orderBy: { id: "asc" } },

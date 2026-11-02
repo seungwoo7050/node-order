@@ -8,14 +8,14 @@ export type AuthStatus = "checking" | "authenticated" | "anonymous";
 type AuthState = {
   accessToken: string | null;
   status: AuthStatus;
-  setAccessToken: (token: string) => void;
+  setAccessToken: (token: string | null) => void;
   clear: () => void;
 };
 
 export const useAuthStore = create<AuthState>()((set) => ({
   accessToken: null,
   status: "checking",
-  setAccessToken: (accessToken) => set({ accessToken, status: "authenticated" }),
+  setAccessToken: (accessToken) => set({ accessToken, status: accessToken ? "authenticated" : "anonymous" }),
   clear: () => set({ accessToken: null, status: "anonymous" }),
 }));
 
