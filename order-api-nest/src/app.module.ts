@@ -30,11 +30,12 @@ import { AdminModule } from './admin/admin.module.js';
 import { ReconciliationModule } from './reconciliation/reconciliation.module.js';
 import { McpModule } from './mcp/mcp.module.js';
 import { LlmModule } from './llm/llm.module.js';
+import { AddressesModule } from './addresses/addresses.module.js';
 
 @Module({
   imports: [
     LoggerModule.forRoot(loggerOptions), SentryModule.forRoot(),
-    MetricsModule, RateLimitModule, PrismaModule, StorageModule, CatalogCacheModule, HealthModule, OrdersModule, UsersModule, ProductsModule, OutboxModule, MeModule, LeaderModule, AuthModule, NotificationsModule, CategoriesModule, TrpcModule, PaymentsModule, FulfillmentModule, SettingsModule, ReconciliationModule, AdminModule, McpModule, LlmModule],
+    MetricsModule, RateLimitModule, PrismaModule, StorageModule, CatalogCacheModule, HealthModule, OrdersModule, UsersModule, ProductsModule, OutboxModule, MeModule, LeaderModule, AuthModule, NotificationsModule, CategoriesModule, TrpcModule, PaymentsModule, FulfillmentModule, SettingsModule, ReconciliationModule, AdminModule, McpModule, LlmModule, AddressesModule],
   controllers: [AppController],
   // 데모 관리자에게 가는 관리자 API 응답의 배송지·연락처를 가린다(모든 /admin 경로에 한 번에)
   // 처리하지 못한 예외(5xx)를 오류 추적으로 보낸다. HttpException(4xx)은 보내지 않는다. SENTRY_DSN이 없으면 보내지 않는다
