@@ -41,10 +41,15 @@ export class FulfillmentService {
 
   // ── 관리자 ────────────────────────────────────────────
 
-  async list(query: { limit: number; cursor?: string; status?: OrderStatus; returns?: "requested" }) {
+  async list(query: { limit: number; cursor?: string; status?: OrderStatus; returns?: "requested"; guest?: boolean }) {
     const rows = await this.prisma.asAdmin((tx) => tx.order.findMany({
-      where: { status: query.status, ...(query.returns ? { returns: { some: { status: query.returns } } } : {}), ...afterOrder(query.cursor) },
-      select: { id: true, userId: true, status: true, totalAmount: true, shippingFee: true, recipientName: true, createdAt: true, statusChangedAt: true },
+      where: {
+        status: query.status,
+        ...(query.returns ? { returns: { some: { status: query.returns } } } : {}),
+        ...(query.guest !== undefined ? { isGuest: query.guest } : {}),
+        ...afterOrder(query.cursor),
+      },
+      select: { id: true, userId: true, status: true, totalAmount: true, shippingFee: true, recipientName: true, createdAt: true, statusChangedAt: true, isGuest: true },
       orderBy: [...orderListOrder],
       take: query.limit + 1,
     }));
@@ -100,13 +105,22 @@ export class FulfillmentService {
 
   async approveReturn(returnId: number, adminId: string) {
     const now = new Date();
-    // 반품 왕복 배송비는 승인하는 시점의 상점 설정 값(주문에는 따로 저장하지 않는다)
-    const { returnShippingFee } = await this.settings.shippingPolicy();
     let replayed = false;
     try {
       await this.prisma.asAdmin(async (tx) => {
         const r = await this.lockedReturn(tx, returnId);
         if (!nextReturnStatus(r.status, "approve", "admin").ok) throw returnConflict(r.status, "승인");
+        // 동일 주문에서 이미 승인·완료된 단순변심(change_of_mind) 환불 반품이 있으면 왕복 배송비는 중복 차감하지 않는다(0원)
+        const priorChangeOfMind = await tx.return.findFirst({
+          where: {
+            orderId: r.orderId,
+            id: { not: returnId },
+            kind: "refund",
+            reason: "change_of_mind",
+            status: { in: ["approved", "completed"] },
+          },
+        });
+        const returnShippingFee = priorChangeOfMind ? 0 : r.order.returnShippingFee;
         const refundAmount = r.kind === "refund" ? returnRefundAmount(r.items, r.reason, returnShippingFee) : null;
         const { count } = await tx.return.updateMany({ where: { id: returnId, status: "requested" }, data: { status: "approved", decidedAt: now, refundAmount } });
         if (count === 0) throw returnConflict(r.status, "승인");
@@ -339,7 +353,7 @@ export class FulfillmentService {
     if (!locked) throw new NotFoundException(`return ${returnId} not found`);
     return tx.return.findUniqueOrThrow({
       where: { id: returnId },
-      include: { items: { orderBy: { productId: "asc" } }, order: { select: { userId: true } } },
+      include: { items: { orderBy: { productId: "asc" } }, order: { select: { userId: true, returnShippingFee: true } } },
     });
   }
 

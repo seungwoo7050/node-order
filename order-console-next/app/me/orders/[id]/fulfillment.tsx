@@ -94,7 +94,7 @@ export function ConfirmButton({ orderId }: { orderId: number }) {
 
 type Returnable = { productId: number; name: string; quantity: number };
 
-export function ReturnForm({ orderId, returnable, deadline }: { orderId: number; returnable: Returnable[]; deadline: string }) {
+export function ReturnForm({ orderId, returnable, deadline, returnShippingFee }: { orderId: number; returnable: Returnable[]; deadline: string; returnShippingFee?: number }) {
   const [kind, setKind] = useState<"refund" | "exchange">("refund");
   const [reason, setReason] = useState<keyof typeof RETURN_REASON_LABEL>("change_of_mind");
   const [detail, setDetail] = useState("");
@@ -110,7 +110,7 @@ export function ReturnForm({ orderId, returnable, deadline }: { orderId: number;
   return (
     <form className="grid max-w-md gap-3 text-sm" data-testid="return-form"
       onSubmit={(e) => { e.preventDefault(); if (items.length > 0) request.mutate(undefined, { onSuccess: () => setQuantities({}) }); }}>
-      <p className="text-muted">{dateTime(deadline)}까지 신청할 수 있습니다. 단순변심 반품은 왕복 배송비 6,000원을 빼고 환불합니다.</p>
+      <p className="text-muted">{dateTime(deadline)}까지 신청할 수 있습니다. 단순변심 반품은 왕복 배송비 {won(returnShippingFee ?? 6000)}을 빼고 환불합니다.</p>
       <fieldset className="flex gap-4">
         <legend className="sr-only">종류</legend>
         {(["refund", "exchange"] as const).map((k) => (

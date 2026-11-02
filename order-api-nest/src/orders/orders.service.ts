@@ -167,6 +167,7 @@ export class OrdersService {
       data: {
         userId, totalAmount: total + shippingFee, shippingFee, paid: false, status: "pending_payment", ...shipping,
         privacyConsentVersion: consent.version, privacyConsentedAt: consent.at,
+        returnShippingFee: policy.returnShippingFee,
         items: { create: items.map((i) => ({
           productId: i.productId, quantity: i.quantity, unitPrice: products.find((p) => p.id === i.productId)!.price,
         })) },

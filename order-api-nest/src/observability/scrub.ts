@@ -32,16 +32,22 @@ const TOKEN_PATTERNS: RegExp[] = [
 // 글에 섞인 도로명 주소: "서울특별시 강남구 테헤란로 123 101동 202호" → "서울특별시 강남구 ***"(maskAddress처럼 시·구까지만).
 // 앞에 시·도·구·군 낱말이 있어야 한다("무선 이어폰 프로 2" 같은 상품 이름을 가리지 않게)
 const ROAD_ADDRESS = /((?:[가-힣]+(?:특별시|광역시|특별자치시|특별자치도|시|도|구|군)\s+){1,3})[가-힣\d]+(?:로|길)(?:\s?\d+(?:-\d+)?)?(?:,?\s?[\d가-힣-]*\d[\d가-힣-]*(?:동|호|층))*/g;
+const STANDALONE_ROAD_ADDRESS = /(?<![가-힣])(?!프로\s)[가-힣0-9]+(대로|번길|로|길)\s*\d+(?:-\d+)?/g;
+const ADDRESS_OBJECT_KEY = /(address|postal|zip)/i;
 
 export function scrubText(text: string): string {
   let out = text; // 토큰을 먼저 지운다(토큰 속 숫자가 전화번호처럼 반만 가려지지 않게)
   for (const re of TOKEN_PATTERNS) out = out.replace(re, FILTERED);
-  return maskContacts(out).replace(ROAD_ADDRESS, (_m, head: string) => `${head}***`);
+  out = maskContacts(out).replace(ROAD_ADDRESS, (_m, head: string) => `${head}***`);
+  return out.replace(STANDALONE_ROAD_ADDRESS, "[주소]");
 }
 
 function scrubValue(value: unknown, key: string | undefined, depth: number): unknown {
   if (depth > 12) return FILTERED; // 순환·아주 깊은 값은 버린다
   if (key !== undefined && KEEP_KEYS.has(key)) return value;
+  if (key !== undefined && ADDRESS_OBJECT_KEY.test(key) && (Array.isArray(value) || (value !== null && typeof value === "object" && !(value instanceof Date)))) {
+    return FILTERED;
+  }
   if (typeof value === "string") {
     if (key !== undefined) {
       if (SECRET_KEY.test(key)) return FILTERED;
@@ -57,6 +63,7 @@ function scrubValue(value: unknown, key: string | undefined, depth: number): unk
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
     // 비밀 칸은 문자열이 아니어도(객체·배열로 온 쿠키 등) 통째로 지운다
     if (SECRET_KEY.test(k) && v !== null && v !== undefined && typeof v !== "boolean" && typeof v !== "number") out[k] = FILTERED;
+    else if (ADDRESS_OBJECT_KEY.test(k) && (Array.isArray(v) || (v !== null && typeof v === "object" && !(v instanceof Date)))) out[k] = FILTERED;
     else out[k] = scrubValue(v, k, depth + 1);
   }
   return out;

@@ -1,4 +1,5 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
+import { SmtpMailer } from "./smtp-mailer.js";
 
 export type SentMail = { to: string; orderId: number; template: string; subject: string };
 
@@ -10,7 +11,16 @@ export class FakeMailer {
   // 보낸 메일(최근 1,000통). 테스트가 템플릿별로 몇 통 갔는지 센다
   readonly sent: SentMail[] = [];
 
+  constructor(@Optional() private readonly smtpMailer?: SmtpMailer) {}
+
   async send(mail: SentMail, attempt = 1): Promise<void> {
+    if (process.env.SMTP_HOST) {
+      const mailer = this.smtpMailer ?? new SmtpMailer();
+      await mailer.send(mail, attempt);
+      this.sent.push(mail);
+      if (this.sent.length > 1000) this.sent.shift();
+      return;
+    }
     await new Promise((r) => setTimeout(r, this.delayMs));
     if (Math.random() < this.failRate) throw new Error(`메일 서버 일시 오류(${mail.to})`);
     this.sent.push(mail);

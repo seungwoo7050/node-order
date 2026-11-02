@@ -97,7 +97,7 @@ function MyOrderDetail({ id }: { id: number }) {
           {data.canReturn && data.returnDeadline && (
             <section>
               <h2 className="subtitle mb-3">반품·교환 신청</h2>
-              <ReturnForm orderId={data.id} returnable={data.returnable} deadline={data.returnDeadline} />
+              <ReturnForm orderId={data.id} returnable={data.returnable} deadline={data.returnDeadline} returnShippingFee={data.returnShippingFee} />
             </section>
           )}
         </div>

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { logout } from "./api-client";
+import { logout, refreshAccessToken } from "./api-client";
 import { useAuthStore } from "./auth-store";
 import { EMPTY_SHIPPING, useCartStore } from "./cart-store";
 
@@ -28,5 +28,14 @@ describe("로그아웃", () => {
     useCartStore.setState({ shipping: SHIPPING });
     await logout().catch(() => {});
     expect(useCartStore.getState().shipping).toEqual(EMPTY_SHIPPING);
+  });
+
+  it("refreshAccessToken이 네트워크 예외로 실패해도 status가 anonymous로 바뀐다", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("failed to fetch"); }));
+    useAuthStore.setState({ accessToken: null, status: "checking" });
+    const token = await refreshAccessToken();
+    expect(token).toBeNull();
+    expect(useAuthStore.getState().status).toBe("anonymous");
+    expect(useAuthStore.getState().accessToken).toBeNull();
   });
 });
