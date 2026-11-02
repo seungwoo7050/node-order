@@ -13,9 +13,9 @@
     "note": "Next 16.4.0 빌드가 보안 업그레이드 안내로 불규칙하게 실패한다(재시도하면 통과). 25 첫 커밋에서 16.4.3으로 올린다"
   },
   "current": {
-    "branch": "33-member-guest",
-    "stage": "implementing",
-    "note": "33~36 설계 브리프 확정 및 ai-work 선행 커밋 완료. 33-member-guest 구현 시작"
+    "branch": "34-catalog-admin",
+    "stage": "ready",
+    "note": "33-member-guest(@ 69f3b22) 구현·검증(verify)·독립 평가(8/8)·DocsArchive(devlog/guide) 완료. 다음 세션에서 34-catalog-admin 구현 시작"
   },
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
@@ -26,7 +26,7 @@
     "30-ai-mcp": "implemented @ b1584e0 (verify 통과, 실제 Claude Code 연결 확인, devlog 완료)",
     "31-observability": "implemented @ f6b2a2f (verify 통과, devlog 완료)",
     "32-production-prep": "implemented @ a64d564 (런북·0원 운영 환경변수·지표 semver 라벨 보강, README 개편)",
-    "33-member-guest": "in_progress (브리프 확정)",
+    "33-member-guest": "implemented @ 69f3b22 (verify 통과: unit 174/174, harness 70/70, api e2e 247/247, web e2e 57/57, rules 통과, 평가 8/8 통과, 가이드·devlog 완료)",
     "34-catalog-admin": "planned (브리프 확정)",
     "35-coupons-reviews": "planned (브리프 확정)",
     "36-storefront-designs": "planned (브리프 확정)"
@@ -56,6 +56,11 @@
       "branch": "31-observability",
       "what": "실제 Sentry DSN, 알림 웹훅, dead man's switch 연결 확인",
       "why": "키·URL 없음. 가짜 수집기·수신기와 리허설 구성으로 끝에서 끝까지 확인함. 운영 서버 .env에 넣는 것은 사람"
+    },
+    {
+      "branch": "33-member-guest",
+      "what": "실제 행안부 도로명주소 API 키(JUSO_API_KEY) 및 운영 SMTP 서버(SMTP_HOST) 연결 확인",
+      "why": "키 없음. 내장 도로명주소 15건 데이터셋 폴백 및 로컬 TCP 목 SMTP 서버(smtp-mailer.spec.ts)·FakeMailer로 전체 흐름 검증 완료"
     }
   ],
   "push_policy": "로컬 커밋만. 원격 푸시는 사람에게 묻는다.",
@@ -92,8 +97,8 @@
     "29-admin": "skip (집계·CRUD·폼 위주, 대사 멱등성은 devlog로)",
     "30-ai-mcp": "done (30-ai-mcp.md + 30.1-llm-draft.md)",
     "31-observability": "skip (설정 파일 위주)",
-    "32-production-prep": "skip (운영 스크립트·문서 보강)",
-    "33-member-guest": "pending (RLS 기반 비회원 소유자·단기 토큰 통합 및 배송지 동기화)",
+    "32-production-prep": "done (32-production-prep.md)",
+    "33-member-guest": "done (33-member-guest.md)",
     "34-catalog-admin": "pending (옵션 Variant 단위 비관적 잠금 및 AES-256-GCM 런타임 비밀 금고)",
     "35-coupons-reviews": "skip (쿠폰 차감·대사 정합성과 구매확정 리뷰는 devlog로)",
     "36-storefront-designs": "pending (공통 커머스 ViewModel + 3대 독립 디자인 렌더러 레지스트리 및 바이링구얼 폰트 아키텍처)"
