@@ -1,45 +1,62 @@
 # node-order
 
 ![Language](https://img.shields.io/badge/language-TypeScript-blue?logo=typescript&logoColor=white)
-![Runtime](https://img.shields.io/badge/runtime-Node.js-339933?logo=nodedotjs&logoColor=white)
+![Runtime](https://img.shields.io/badge/runtime-Node.js%2024-339933?logo=nodedotjs&logoColor=white)
 ![Stack](https://img.shields.io/badge/stack-NestJS%20%7C%20Next.js%20%7C%20Prisma%20%7C%20PostgreSQL%20%7C%20Redis-lightgrey)
 
-백엔드 학습을 위해 설계하고 배포한 주문 서비스입니다. 서버를 껐다 켜면 주문이 사라지던 NestJS API에서 시작해, PostgreSQL과 Redis, S3를 쓰고 AWS에 무중단으로 배포하는 서비스까지 키웠습니다. 한 번에 만들지 않고 단계마다 브랜치를 하나씩 남겼습니다.
+> [!IMPORTANT]
+> **현재 위치한 `main` 브랜치는 01번부터 32번까지의 점진적 학습 및 아키텍처 구축 과정을 보존하는 인덱스형 브랜치입니다.**  
+> 
+> **최신 브랜치의 전체 소스코드와 리드미**는 아래의 **`32-production-prep`** 브랜치에서 확인하실 수 있습니다.
+> #### 👉 [32-production-prep 최종 완성 브랜치 바로가기 (포트폴리오 README 및 전체 코드)](https://github.com/seungwoo7050/node-order/tree/32-production-prep) 👈
 
-> **지금 코드는 [`24-zero-downtime-release`](https://github.com/seungwoo7050/node-order/tree/24-zero-downtime-release) 브랜치에 있습니다.**  
-> 이 `main` 브랜치에는 이 문서만 둡니다. 다음 단계를 더하면 `25`, `26` 브랜치로 이어지고, 이 문서의 링크도 그 브랜치로 옮깁니다.
+---
+
+백엔드 학습 및 실전 프로덕션 구축을 위해 설계하고 배포한 고신뢰 주문·이커머스 서비스입니다.  
+서버를 껐다 켜면 주문이 사라지던 단일 NestJS 메모리 API에서 시작해, PostgreSQL과 Redis, S3, 토스페이먼츠, 주문 상태 기계, PG 일일 대사, AI 에이전트 연동(MCP), 그리고 Prometheus/Alertmanager/Sentry 관측성과 AWS EC2 무중단 Blue/Green 배포까지 점진적으로 키웠습니다. 한 번에 만들지 않고 단계마다 완결된 브랜치를 하나씩 남겼습니다.
 
 - 데모: https://shop.43-202-205-93.sslip.io/
-- 지금 코드: [`24-zero-downtime-release`](https://github.com/seungwoo7050/node-order/tree/24-zero-downtime-release)
 - 단계별 브랜치: [아래 목록](#단계별-브랜치)
+
+---
 
 ## 데모 둘러보기
 
 - 로그인 화면에서 "일반 사용자로"나 "관리자로"를 누르면 비밀번호 없이 임시 계정이 만들어집니다. 이 계정은 24시간 뒤 지워집니다.
 - 공개 데모라서 매일 새벽 4시(KST)에 상품과 데모 주문을 처음 상태로 되돌립니다. 새벽 3시 30분의 DB 백업이 그날 성공했을 때만 되돌립니다. GitHub로 가입한 계정과 그 주문은 남습니다.
-- 결제는 Stripe 테스트 모드라 실제로 돈이 나가지 않습니다.
+- 결제는 토스페이먼츠 및 Stripe 테스트 모드로 연동되어 있어 실제로 돈이 청구되지 않습니다.
 
-## 구성
+---
+
+## 시스템 구성
 
 ```text
-브라우저
+브라우저 (고객 / 관리자 / AI 에이전트)
   │
-Caddy (EC2 한 대, HTTPS)
-  ├─ web-blue / web-green   Next.js 화면
-  └─ api-blue / api-green   NestJS API ── Redis (같은 서버의 컨테이너)
+Caddy 리버스 프록시 (AWS EC2 한 대, HTTPS)
+  ├─ web-blue / web-green   Next.js 16 쇼핑몰 & 관리자 콘솔 화면
+  └─ api-blue / api-green   NestJS Core API & MCP 서버 ── Redis (같은 서버의 컨테이너)
                                 │
-                                ├─ PostgreSQL (RDS)
-                                └─ 상품 이미지 (S3)
+                                ├─ PostgreSQL 17 (RDS Aurora)
+                                └─ 상품 이미지 (S3 / RustFS)
 
-GitHub Actions 배포 순서: 검사, 이미지를 GHCR에 올리기, SSH로 release.sh up, 대기 쪽 스모크 테스트, release.sh switch
+모니터링 & 관측성:
+  ├─ Prometheus v3 (서버 로컬 메트릭 및 리더 API 업무 지표 스크레이프)
+  ├─ Alertmanager (14개 업무/시스템 경보 규칙 및 런북 연동)
+  └─ Sentry (오류 이벤트의 개인정보/비밀값 자동 마스킹)
+
+GitHub Actions 배포 파이프라인:
+  검사(verify:fast) ➔ 이미지 GHCR 빌드 ➔ SSH release.sh up (대기 슬롯) ➔ 스모크 테스트 ➔ release.sh switch (무중단 전환)
 ```
 
-- 배포는 블루그린입니다. 쉬고 있는 쪽에 새 이미지를 띄우고 스모크 테스트를 통과하면 Caddy가 그쪽으로 트래픽을 넘깁니다. 이전 쪽은 지우지 않고 멈춰 두어 되돌리기는 다시 가리키기만 하면 됩니다.
-- 서버 한 대에 모았습니다. ALB와 ECS는 학습용 서비스 한 대에 비해 비용이 컸고, 무엇이 어디서 도는지 직접 보려고 EC2와 Docker Compose를 골랐습니다.
+- **블루그린 무중단 배포**: 쉬고 있는 대기 슬롯에 새 이미지를 띄우고 Playwright 스모크 테스트를 통과하면 Caddy가 트래픽을 즉시 넘깁니다. 이전 슬롯은 지우지 않고 멈춰 두어 롤백은 즉각적인 라우팅 복귀로 완료됩니다.
+- **비용 0원 운영 아키텍처**: 모든 외부 유료 서비스(LLM, 유료 PG, 유료 메일러)는 키가 없어도 핵심 도메인이 멈추지 않는 방어적 기본값(Fallback/Null Object)으로 설계되었습니다.
+
+---
 
 ## 다룬 문제와 결과
 
-수치는 제 PC나 리허설 환경에서 k6와 스크립트로 잰 값입니다.
+수치는 PC 및 리허설 환경에서 k6와 측정 스크립트로 잰 값입니다.
 
 | 문제 | 한 일 | 결과 |
 | --- | --- | --- |
@@ -52,28 +69,17 @@ GitHub Actions 배포 순서: 검사, 이미지를 GHCR에 올리기, SSH로 rel
 | 배포할 때마다 요청이 끊김 | 같은 자리 교체를 블루그린으로 | 초당 50건 리허설에서 실패 179건(3.52초)이 0건 |
 | 칸 이름을 바꾸는 배포에서 옛 버전이 깨짐 | 마이그레이션을 네 번의 배포로 나눔(expand, contract) | 실패 176건이 배포마다 0건 |
 | 상품 목록이 느림 | 재고는 빼고 카탈로그만 Redis에 캐시 | 목록 p95 166ms에서 79ms, 적중률 99.7% |
+| 오타가 섞이거나 2글자 단어로 검색하면 상품을 못 찾음 | PostgreSQL `pg_trgm` 2-gram 색인 및 유사도 보정 (26) | 외장 검색 엔진 없이 오타 보정 및 실시간 자동완성 처리 |
+| 결제 위변조 및 PG 비동기 장애로 인한 정산 오차 | 토스페이먼츠 결제위젯 연동, 웹훅 실조회 재검증, 매일 04시 전수 대사 배치 (27, 29) | 결제 금액 검증 및 불일치 감지/해결 파이프라인 구축 |
+| 주문 결제 후 배송·반품·재고 복구의 다단계 상태 꼬임 | 순수 함수 상태 기계와 조건부 UPDATE, 멱등 환불 연동 (28) | 상태 전이 147쌍 전수 검증, 중복 환불·재고 누락 원천 차단 |
+| 1인 운영자의 반복적인 주문 조회 및 재고/반품 처리 부담 | Model Context Protocol(MCP) 서버 구축 (30) | Claude Code 등 AI 에이전트가 11개 도구로 상점 자동 관리 (감사 로그 완비) |
+| 운영 중 장애 발생 시 원인 규명 지연 및 개인정보 유출 위험 | Sentry 에러 마스킹, Prometheus 비즈니스 지표, 14개 경보 규칙 및 런북 (31, 32) | 주소·전화번호 철저 마스킹, 장애 발생 시 런북 링크로 즉각 대응 체계 완비 |
 
-## 한계
-
-- 운영 서버에는 지표 수집과 경보가 없습니다. Prometheus와 Grafana는 로컬 환경에서만 구성했습니다.
-- 서버 한 대 구성이라 재부팅하는 동안은 서비스가 멈춥니다. 리소스는 IaC 도구 없이 AWS CLI 스크립트로 만들었습니다.
-- 실제 사용자 트래픽과 실제 결제는 없습니다.
+---
 
 ## 단계별 브랜치
 
-[node-workspace](https://github.com/seungwoo7050/node-workspace)에서 만든 주문 API에서 출발합니다. 단계마다 브랜치가 하나씩 있고, 각 브랜치의 `README.md`에 그 단계의 시작점, 바뀐 것, 실행과 테스트 방법을 적었습니다.
-
-### 요구 환경
-
-- Node.js와 npm이 필요합니다. 어느 브랜치의 package.json에도 engines 지정은 없습니다. `17` 이후의 CI는 Node.js 24를 씁니다.
-- Docker가 필요합니다. 모든 브랜치가 PostgreSQL을 compose로 띄웁니다(`04`부터 Redis, `06`부터 S3 호환 저장소 RustFS가 더해집니다).
-- 그 밖에 필요한 것(Playwright 브라우저, k6, GitHub, Stripe, AWS 계정과 CLI)은 각 브랜치 `README.md`의 실행 절에 적었습니다.
-
-### 시작 상태
-
-브랜치끼리 공통 조상이 없습니다. 24개 브랜치의 루트 커밋이 모두 다릅니다. 각 브랜치는 앞 단계 소스를 파일째 가져온 커밋에서 시작합니다. 아래 표의 "시작" 열이 그 출발점입니다.
-
-### 지원 범위
+각 단계의 브랜치를 체크아웃하면 그 시점의 소스코드와 상세 README를 확인할 수 있습니다:
 
 | 브랜치 | 주제 | 시작 | 내용 |
 | --- | --- | --- | --- |
@@ -101,38 +107,40 @@ GitHub Actions 배포 순서: 검사, 이미지를 GHCR에 올리기, SSH로 rel
 | [22-pagination-locking](https://github.com/seungwoo7050/node-order/tree/22-pagination-locking) | 페이지네이션, 잠금 | 21의 소스 | 목록 API를 cursor 페이지로 나누고, 관리자 재고 조정 API, 화면과 REST API 문서(`/docs`)를 더합니다 |
 | [23-caching](https://github.com/seungwoo7050/node-order/tree/23-caching) | 캐시 | 22의 소스 | 상품 카탈로그를 API는 Redis에, 화면은 Next 서버 캐시에 두고, 상품 수정이 두 캐시를 지우게 합니다 |
 | [24-zero-downtime-release](https://github.com/seungwoo7050/node-order/tree/24-zero-downtime-release) | 무중단 배포 | 23의 소스 | 배포를 블루, 그린 전환으로 바꾸고, 전환 전에 스모크 테스트를 돌리며, 칸 이름 변경을 여러 마이그레이션으로 나눕니다 |
+| [25-harness](https://github.com/seungwoo7050/node-order/tree/25-harness) | 하네스 & 테스트 | 24의 소스 | AGENTS.md, 파일 린트·위험 명령 차단 훅, 통합 빠른 검사(`verify:fast`)와 CI 파이프라인 정비 |
+| [26-search](https://github.com/seungwoo7050/node-order/tree/26-search) | 상품 검색 | 25의 소스 | PostgreSQL `pg_trgm` 2-gram 인덱스, 오타 보정 검색, 실시간 자동완성, Redis 인기 검색어 |
+| [27-toss-payments](https://github.com/seungwoo7050/node-order/tree/27-toss-payments) | 토스페이먼츠 연동 | 26의 소스 | 토스 결제위젯·승인·취소/부분환불, PG 웹훅 재조회 검증, 결제 대역 시뮬레이터 |
+| [28-fulfillment](https://github.com/seungwoo7050/node-order/tree/28-fulfillment) | 주문 이행 | 27의 소스 | 주문 상태 기계(결제완료→배송준비→배송중→배송완료→구매확정), 배송지 사본 및 배송비 정책, 송장 추적 및 반품·재고 복구 |
+| [29-admin](https://github.com/seungwoo7050/node-order/tree/29-admin) | 관리자 & PG 대사 | 28의 소스 | 관리자 대시보드(오늘 주문·재고 부족), 상점 설정(낙관적 락), 약관 버전 관리, 정기 PG 대사 배치 |
+| [30-ai-mcp](https://github.com/seungwoo7050/node-order/tree/30-ai-mcp) | 판매자용 MCP & AI | 29의 소스 | Model Context Protocol(MCP) 서버(11개 도구), LLM 기반 상품 설명 초안 실시간 스트리밍 |
+| [31-observability](https://github.com/seungwoo7050/node-order/tree/31-observability) | 관측성 | 30의 소스 | Sentry 에러 추적(개인정보 마스킹), Prometheus 업무 지표 수집, Alertmanager 경보 및 런북 |
+| [32-production-prep](https://github.com/seungwoo7050/node-order/tree/32-production-prep) | 운영 배포 전 실험 | 31의 소스 | 비용 0원 운영 구성, 토스 개발자 테스트 키 연동, 모니터링 런북 결함 해결 및 포트폴리오 종합 아키텍처 수록 |
 
-- 번호 순서대로 진행합니다. `01`~`04`는 API(`order-api-nest`)만 바꾸고, `05`에서 주문 콘솔(`order-console-next`)이 들어옵니다.
-- `16`부터 루트에서 두 프로젝트를 함께 띄우고 검사하며, `17`부터 CI, `18`부터 AWS 배포가 붙습니다.
+---
 
-### 구성
-
-- 각 브랜치 루트에 프로젝트 폴더가 있습니다. `01`~`04`는 `order-api-nest/` 하나이고, `05`부터 `order-console-next/`가 더해집니다. `12`부터 루트 `package.json`이 두 폴더를 npm 워크스페이스로 묶습니다.
-- `18`부터 `deploy/`(AWS 스크립트, 운영 compose)와 `.github/workflows/`가 있습니다.
-- 각 브랜치 루트의 `README.md`에 그 단계의 시작 브랜치, 지원 범위, 구성, 실행, 테스트, 정리를 적었습니다.
-
-### 실행
+### 로컬 실행 방법
 
 ```sh
 # 저장소를 둘 위치에서
 git clone https://github.com/seungwoo7050/node-order.git
 cd node-order
-git switch 10-rls # 원하는 브랜치
+git switch 32-production-prep # 최신 브랜치로 전환
 ```
 
-브랜치를 바꾸면 작업 트리 전체가 그 단계로 바뀝니다. 두 단계를 나란히 두고 보려면 worktree를 씁니다.
+1. **설치 및 인프라 실행**: 루트에서 `npm ci` 후 `docker compose up -d`로 로컬 인프라(Postgres, Redis, Storage)를 실행합니다.
+2. **환경변수 복사**:
+   ```sh
+   cp order-api-nest/.env.example order-api-nest/.env
+   cp order-console-next/.env.example order-console-next/.env.local
+   ```
+3. **마이그레이션 및 시드**:
+   ```sh
+   cd order-api-nest && npx prisma migrate dev && npm run seed && cd ..
+   ```
+4. **개발 서버 실행**: `npm run dev:api` (API: 4000), `npm run dev:web` (Next.js 콘솔: 3000)으로 실행합니다.
 
-```sh
-# node-order 안에서
-git worktree add ../09-category-tree 09-category-tree
-```
+### 테스트 검증
 
-설치는 `11`까지 프로젝트 폴더마다 `npm ci`, `12`부터 루트에서 `npm ci` 한 번입니다. `15`까지는 `order-api-nest/`에서 `docker compose up -d`와 마이그레이션, 시드 뒤 `npm run start:dev`로 API를 띄웁니다. `16`부터는 루트에서 `docker compose up -d` 뒤 `npm run dev:api`, `npm run dev:web`으로 띄웁니다. 정확한 명령과 필요한 `.env`는 각 브랜치 README의 실행 절에 있습니다.
-
-### 테스트
-
-- 모든 브랜치의 `order-api-nest`에 Vitest 단위, e2e 테스트가 있습니다. e2e는 compose로 띄운 PostgreSQL의 테스트 DB를 씁니다.
-- `05`부터 `order-console-next`에 Playwright e2e가, `19`부터 Vitest 단위 테스트가 있습니다.
-- `15`부터 Prometheus 경보 규칙의 `promtool` 테스트가 있습니다.
-- `16`부터 루트에서 `npm run lint`, `npm run typecheck`, `npm run test:api`, `npm run test:web`, `npm run test:rules`로 돌립니다. `17`부터 같은 검사를 GitHub Actions가 푸시마다 돌립니다.
-- 각 브랜치에서 무엇을 어떤 순서로 돌리는지는 그 브랜치 README의 테스트 절에 있습니다.
+- **빠른 검사**: `npm run verify:fast` (Prisma + Lint + Typecheck + 단위 테스트 + 가드 테스트)
+- **전체 검증**: `npm run verify` (빠른 검사 + e2e + 결제 시뮬레이터 + 모니터링 규칙)
+- **경보 규칙 검사**: `npm run test:rules` (Prometheus 14개 경보 규칙 + Alertmanager 검증)
