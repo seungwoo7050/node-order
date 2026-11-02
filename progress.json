@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-30",
+  "updated": "2026-11-03",
   "start_point": {
     "branch": "24-zero-downtime-release",
     "commit": "4d509a1"
@@ -13,9 +13,9 @@
     "note": "Next 16.4.0 빌드가 보안 업그레이드 안내로 불규칙하게 실패한다(재시도하면 통과). 25 첫 커밋에서 16.4.3으로 올린다"
   },
   "current": {
-    "branch": "done",
-    "stage": "wrap-up",
-    "note": "구현 25~31, devlog 25~31, 가이드 25·26·27·28·30 완료. 남은 것은 needs_human(운영 배포, 반품 배송비 정책, 추적되는 .env)과 deferred(study/interview 질문·답·ai-cases), blocked(실제 외부 키 확인)뿐"
+    "branch": "33-member-guest",
+    "stage": "implementing",
+    "note": "33~36 설계 브리프 확정 및 ai-work 선행 커밋 완료. 33-member-guest 구현 시작"
   },
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
@@ -24,7 +24,12 @@
     "28-fulfillment": "implemented @ 90d0278 (verify 통과, devlog 완료)",
     "29-admin": "implemented @ f4a23ee (verify 통과, devlog 완료)",
     "30-ai-mcp": "implemented @ b1584e0 (verify 통과, 실제 Claude Code 연결 확인, devlog 완료)",
-    "31-observability": "implemented @ f6b2a2f (verify 통과, devlog 완료). 구현 끝"
+    "31-observability": "implemented @ f6b2a2f (verify 통과, devlog 완료)",
+    "32-production-prep": "implemented @ a64d564 (런북·0원 운영 환경변수·지표 semver 라벨 보강, README 개편)",
+    "33-member-guest": "in_progress (브리프 확정)",
+    "34-catalog-admin": "planned (브리프 확정)",
+    "35-coupons-reviews": "planned (브리프 확정)",
+    "36-storefront-designs": "planned (브리프 확정)"
   },
   "blocked": [
     {
@@ -56,16 +61,14 @@
   "push_policy": "로컬 커밋만. 원격 푸시는 사람에게 묻는다.",
   "needs_human": [
     "운영 서버의 웹 이미지가 Next 16.4.0이다(critical 권고). 패치는 25에 들어가지만 운영 배포는 사람이 정한다",
-    "반품 정책: 단순변심 반품을 여러 건으로 나눠 신청하면 건마다 왕복 배송비 6,000원을 뺀다. 그대로 둘지, 주문당 한 번만 뺄지 정해야 한다. 같은 묶음: 반품 왕복 배송비를 승인 시점 설정 값으로 뺀다(지난 주문에도 걸림). 주문 시점 값으로 고정할지 정해야 한다",
-    "운영 배포: 25(Next 보안 패치)부터 31까지 운영 서버에 올리지 않았다. 마이그레이션 0028~0036이 쌓여 있고 blue/green 전환 사이 옛 칸 동기화 트리거(0034)가 있다. 배포 시점과 리허설 여부를 정해야 한다",
-    "order-api-nest/.env가 처음 커밋(a9d2d5a)부터 git에 추적된다. 값은 로컬 개발용(로컬 DB·저장소 키, 개발 JWT 비밀)이고 운영은 서버의 별도 .env를 쓴다. 추적을 끊고 .env.example만 둘지 정해야 한다"
+    "운영 배포: 25부터 36까지 완료 후 운영 서버에 한 번에 배포할지 시점과 리허설 여부를 정해야 한다",
+    "order-api-nest/.env가 처음 커밋(a9d2d5a)부터 git에 추적된다. 값은 로컬 개발용이고 운영은 서버의 별도 .env를 쓴다. 추적을 끊고 .env.example만 둘지 정해야 한다"
   ],
   "harness_gaps": [
     "Bash 가드 우회: sh -c \"git push\", 변수로 감싼 git, cp/mv/dd로 .env 쓰기, echo>/sed -i로 기존 마이그레이션 수정이 통과한다",
     "SubagentStop 훅이 없다. 서브에이전트 구현이 끝날 때 verify:fast를 강제하지 않는다(지금은 메인이 verify로 확인)",
     "과잉 차단: 저장소 밖 임시 디렉터리 rm -rf도 막는다. 기존 경고가 있는 파일을 고치면 PostToolUse가 exit 2를 낸다",
     "훅은 세션을 연 체크아웃의 .claude/settings.json을 따른다. 원본 체크아웃이 main(24)에 있으면 훅이 꺼진 채로 세션이 열린다",
-    "verify의 포트 점유 검사에 가드 테스트가 없다(ORCHESTRATION 6절). 26 구현 때 같이 더한다",
     "(정정) 28 가이드 검증에서 guard.sh는 create-only로 만든 마이그레이션 SQL의 Edit를 막지 않았다(27 가이드 보고의 추정은 틀렸다). 막힌 것은 파일 통째 쓰기 스크립트를 우회로 본 auto-mode 분류기였다"
   ],
   "deferred": [
@@ -79,9 +82,7 @@
     "토스 환불 확정은 금액으로 짝을 지어 같은 금액 환불 두 건이 동시에 결과 미상이면 짝이 바뀔 수 있다(작음)",
     "seed가 견본 사용자의 PG 결제 주문을 남겨 e2e를 돌릴 때마다 주문이 늘어난다",
     "0034 트리거는 옛 칸(paid, canceled_at)을 쓸 때마다 같은 행을 다시 UPDATE하고, status_changed_at에 트리거 시각을 적는다. contract 마이그레이션 때 지운다",
-    "MCP 결과에 손님이 쓴 글이 실려 write 토큰을 쥔 클라이언트 모델에 간다. 서버는 untrusted 칸 표시와 이스케이프까지 하고, 마지막 방어는 클라이언트의 확인 절차다",
-    "(31 devlog 17절) 토큰 갱신이 fetch 예외로 끝나면 배송지 칸이 checking에 잠기고, 결제 버튼은 잠기지 않아 빈 배송지가 실릴 수 있다",
-    "(31 devlog 18절) 시·구 없는 주소가 자유 글 속에 있거나 주소 칸 값이 객체·배열이면 Sentry 이벤트에 남는다"
+    "MCP 결과에 손님이 쓴 글이 실려 write 토큰을 쥔 클라이언트 모델에 간다. 서버는 untrusted 칸 표시와 이스케이프까지 하고, 마지막 방어는 클라이언트의 확인 절차다"
   ],
   "guides": {
     "25-harness": "done",
@@ -90,7 +91,12 @@
     "28-fulfillment": "done",
     "29-admin": "skip (집계·CRUD·폼 위주, 대사 멱등성은 devlog로)",
     "30-ai-mcp": "done (30-ai-mcp.md + 30.1-llm-draft.md)",
-    "31-observability": "skip (설정 파일 위주)"
+    "31-observability": "skip (설정 파일 위주)",
+    "32-production-prep": "skip (운영 스크립트·문서 보강)",
+    "33-member-guest": "pending (RLS 기반 비회원 소유자·단기 토큰 통합 및 배송지 동기화)",
+    "34-catalog-admin": "pending (옵션 Variant 단위 비관적 잠금 및 AES-256-GCM 런타임 비밀 금고)",
+    "35-coupons-reviews": "skip (쿠폰 차감·대사 정합성과 구매확정 리뷰는 devlog로)",
+    "36-storefront-designs": "pending (공통 커머스 ViewModel + 3대 독립 디자인 렌더러 레지스트리 및 바이링구얼 폰트 아키텍처)"
   },
-  "scope_decision": "2026-10-30 사람: 구현은 31에서 마무리. 실제 메일·실결제 확인·디자인 재정립·테마는 하지 않고 '판매 전 남은 것'으로 기록한다"
+  "scope_decision": "2026-11-03 사람: 완성된 온라인 자사몰(사이트 자체를 판매자에게 납품 가능한 수준)을 위해 33(회원가입·우편번호검색·회원배송지 자동연동·비회원주문/표기·결함수정·SMTP) → 34(어드민 백오피스 완전 분리·전 도메인 Full CRUD·API 키 금고·옵션 Variant) → 35(쿠폰·구매확정 리뷰) → 36(3대 독립 스토어프론트 디자인 렌더러·바이링구얼 폰트·디자인 가드 하네스)까지 구현한다"
 }
