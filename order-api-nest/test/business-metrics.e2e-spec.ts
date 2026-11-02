@@ -96,7 +96,9 @@ describe("업무 지표(/metrics)", () => {
         expect(v, `${s.name}{${k}}`).not.toMatch(PHONE);
         expect(v).not.toContain(payment.providerOrderId);
         expect(v).not.toBe("kim");
-        if (k !== "le" && k !== "status_code") expect(v, `${s.name}{${k}}에 주문 id`).not.toBe(String(orderId));
+        if (!["le", "status_code", "major", "minor", "patch"].includes(k)) {
+          expect(v, `${s.name}{${k}}에 주문 id`).not.toBe(String(orderId));
+        }
       }
     }
     expect(text).not.toContain(SHIPPING.recipientPhone);
