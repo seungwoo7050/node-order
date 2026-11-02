@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional, ServiceUnavailableException, UnprocessableEntityException } from "@nestjs/common";
 import { Prisma } from "../generated/prisma/client.js";
 import { NotificationsGateway } from "../notifications/notifications.gateway.js";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -11,13 +11,14 @@ import type { ProviderId } from "../payments/payment-gateway.js";
 import { PaymentGateways } from "../payments/payment-gateways.js";
 import { LegalService } from "../admin/legal.service.js";
 import { StoreSettingsService } from "../admin/store-settings.service.js";
+import { RuntimeSecretsService } from "../admin/runtime-secrets.service.js";
 import type { ShippingPolicy } from "../fulfillment/policy.js";
 import { afterOrder, encodeOrderCursor, orderListOrder, toPage, type Page } from "../pagination/cursor.js";
 import { AuthService } from "../auth/auth.service.js";
 import { hashPassword } from "../auth/password.js";
 
 export type Order = { id: number; user: string; price: number; paid: boolean; }
-export type CheckoutResult = Order & { shippingFee: number; items: { productId: number; quantity: number; unitPrice: number }[] };
+export type CheckoutResult = Order & { shippingFee: number; items: { productId: number; variantId?: number | null; variantLabel?: string; quantity: number; unitPrice: number }[] };
 type Consent = { version: number; at: Date };
 export type CheckoutResponse = CheckoutResult & { checkoutUrl: string; provider: ProviderId };
 
@@ -38,6 +39,7 @@ export class OrdersService {
     private readonly settings: StoreSettingsService,
     private readonly legal: LegalService,
     private readonly authService: AuthService,
+    @Optional() private readonly runtimeSecrets?: RuntimeSecretsService,
   ) {}
 
   async list(query: { limit: number; cursor?: string; offset?: number; paid?: boolean }): Promise<Page<Order & { createdAt: Date }>> {
@@ -59,6 +61,9 @@ export class OrdersService {
   }
 
   async create(input: Omit<Order, "id">, creatorId: string): Promise<Order> {
+    if (this.runtimeSecrets?.isMaintenanceMode()) {
+      throw new ServiceUnavailableException("현재 상점 점검(휴면) 모드입니다. 잠시 후 다시 이용해 주세요");
+    }
     const { user, price, ...rest } = input; // 입력 이름은 price 그대로, DB에는 total_amount에만 쓴다
     const order = await this.prisma.asAdmin(async (tx) => {
       const created = toOrder(await tx.order.create({ data: { ...rest, status: rest.paid ? "paid" : "pending_payment", totalAmount: price, userId: user }, select: orderSelect }));
@@ -78,6 +83,9 @@ export class OrdersService {
   }
 
   async checkout(userId: string, items: CheckoutItemDto[], shipping: ShippingAddressDto, consent: { privacyConsentVersion: number }, idempotencyKey?: string, provider?: ProviderId): Promise<CheckoutResponse> {
+    if (this.runtimeSecrets?.isMaintenanceMode()) {
+      throw new ServiceUnavailableException("현재 상점 점검(휴면) 모드입니다. 잠시 후 다시 이용해 주세요");
+    }
     const gateway = this.gateways.pick(provider); // 쓸 수 없는 결제 수단이면 주문을 만들기 전에 400
     // 개인정보 수집·이용(배송지) 동의: 손님이 본 판이 지금 시행 중인 개인정보처리방침이어야 한다(아니면 400, 다시 읽고 동의)
     const privacy = await this.legal.current("privacy");
@@ -134,6 +142,9 @@ export class OrdersService {
   }
 
   async guestCheckout(dto: GuestCheckoutDto, idempotencyKey?: string): Promise<CheckoutResponse & { guestAccessToken: string; guestUserId: string }> {
+    if (this.runtimeSecrets?.isMaintenanceMode()) {
+      throw new ServiceUnavailableException("현재 상점 점검(휴면) 모드입니다. 잠시 후 다시 이용해 주세요");
+    }
     const gateway = this.gateways.pick(dto.provider);
     const privacy = await this.legal.current("privacy");
     if (dto.privacyConsentVersion !== privacy.version) {
@@ -234,16 +245,63 @@ export class OrdersService {
     guestMeta?: { isGuest?: boolean; guestPasswordHash?: string },
   ): Promise<CheckoutResult> {
     const ids = [...new Set(items.map((i) => i.productId))];
-    const products = await tx.$queryRaw<{ id: number; name: string; price: number; stock: number }[]>`
-      SELECT id, name, price, stock FROM products WHERE id = ANY(${ids}) ORDER BY id FOR UPDATE`;
+    const products = await tx.$queryRaw<{ id: number; name: string; price: number; stock: number; is_visible: boolean; deleted_at: Date | null }[]>`
+      SELECT id, name, price, stock, is_visible, deleted_at FROM products WHERE id = ANY(${ids}) ORDER BY id FOR UPDATE`;
+
+    const variantIds = [...new Set(items.flatMap((i) => (i.variantId ? [i.variantId] : [])))];
+    let variants: { id: number; product_id: number; name: string; sku: string; price_delta: number; stock: number }[] = [];
+    if (variantIds.length > 0) {
+      variants = await tx.$queryRaw<{ id: number; product_id: number; name: string; sku: string; price_delta: number; stock: number }[]>`
+        SELECT id, product_id, name, sku, price_delta, stock FROM product_variants WHERE id = ANY(${variantIds}) ORDER BY id FOR UPDATE`;
+    }
+
     let total = 0;
+    const orderItemsData: { productId: number; variantKey: number; variantId: number | null; variantLabel: string; quantity: number; unitPrice: number }[] = [];
+
     for (const item of items) {
       const product = products.find((p) => p.id === item.productId);
-      if (!product) throw new NotFoundException(`product ${item.productId} not found`);
-      if (product.stock < item.quantity) throw new ConflictException(`재고 부족: ${product.name}`);
-      await tx.product.update({ where: { id: product.id }, data: { stock: { decrement: item.quantity } } });
-      total += product.price * item.quantity;
+      if (!product || product.deleted_at !== null || !product.is_visible) {
+        throw new NotFoundException(`product ${item.productId} not found`);
+      }
+
+      if (item.variantId) {
+        const variant = variants.find((v) => v.id === item.variantId);
+        if (!variant || variant.product_id !== item.productId) {
+          throw new BadRequestException(`유효하지 않은 상품 옵션입니다: #${item.variantId}`);
+        }
+        if (variant.stock < item.quantity) {
+          throw new ConflictException(`재고 부족: ${product.name} (${variant.name})`);
+        }
+        await tx.productVariant.update({ where: { id: variant.id }, data: { stock: { decrement: item.quantity } } });
+        await tx.product.update({ where: { id: product.id }, data: { stock: { decrement: item.quantity } } });
+        const unitPrice = product.price + variant.price_delta;
+        total += unitPrice * item.quantity;
+        orderItemsData.push({
+          productId: item.productId,
+          variantKey: variant.id,
+          variantId: variant.id,
+          variantLabel: variant.name,
+          quantity: item.quantity,
+          unitPrice,
+        });
+      } else {
+        if (product.stock < item.quantity) {
+          throw new ConflictException(`재고 부족: ${product.name}`);
+        }
+        await tx.product.update({ where: { id: product.id }, data: { stock: { decrement: item.quantity } } });
+        const unitPrice = product.price;
+        total += unitPrice * item.quantity;
+        orderItemsData.push({
+          productId: item.productId,
+          variantKey: 0,
+          variantId: null,
+          variantLabel: "",
+          quantity: item.quantity,
+          unitPrice,
+        });
+      }
     }
+
     // 배송비는 주문에 따로 저장하고 total_amount에 더한다. PG 승인 금액 대조(27)는 이 total과 비교한다
     const shippingFee = shippingFeeFor(total, policy);
     const order = await tx.order.create({
@@ -253,11 +311,9 @@ export class OrdersService {
         returnShippingFee: policy.returnShippingFee,
         isGuest: guestMeta?.isGuest ?? false,
         guestPasswordHash: guestMeta?.guestPasswordHash ?? null,
-        items: { create: items.map((i) => ({
-          productId: i.productId, quantity: i.quantity, unitPrice: products.find((p) => p.id === i.productId)!.price,
-        })) },
+        items: { create: orderItemsData },
       },
-      select: { ...orderSelect, shippingFee: true, items: { select: { productId: true, quantity: true, unitPrice: true } } },
+      select: { ...orderSelect, shippingFee: true, items: { select: { productId: true, variantId: true, variantLabel: true, quantity: true, unitPrice: true } } },
     });
     return { ...toOrder(order), shippingFee: order.shippingFee, items: order.items };
   }

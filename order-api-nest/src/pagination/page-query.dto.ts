@@ -11,6 +11,7 @@ export class PageQueryDto {
 export class ProductPageQueryDto {
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(MAX_LIMIT) limit: number = DEFAULT_LIMIT;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) cursor?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) categoryId?: number;
 }
 
 export class AdminOrderQueryDto extends PageQueryDto {

@@ -1,4 +1,5 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
+import { RuntimeSecretsService } from "../admin/runtime-secrets.service.js";
 
 export interface AddressItem {
   postalCode: string;
@@ -72,11 +73,15 @@ export const PRESET_ADDRESSES: AddressItem[] = [
 export class AddressesService {
   private readonly logger = new Logger(AddressesService.name);
 
+  constructor(@Optional() private readonly secrets?: RuntimeSecretsService) {}
+
   async search(query: string): Promise<{ items: AddressItem[] }> {
     const q = query.trim();
     if (!q) return { items: [] };
 
-    const apiKey = process.env.JUSO_API_KEY;
+    const apiKey = this.secrets?.isPausedPaidApis()
+      ? undefined
+      : (this.secrets?.getSecret("JUSO_API_KEY") ?? process.env.JUSO_API_KEY);
     if (apiKey) {
       try {
         const url = `https://business.juso.go.kr/addrlink/addrLinkApi.do?confmKey=${encodeURIComponent(apiKey)}&currentPage=1&countPerPage=15&keyword=${encodeURIComponent(q)}&resultType=json`;

@@ -71,6 +71,17 @@ export async function transitionOrder(...args: Parameters<typeof attemptTransiti
 
 // 주문 항목 수량만큼 재고를 돌려놓는다(취소). 상품 id 순서로 잠가 다른 재고 변경과 교착되지 않게 한다
 export async function restoreOrderStock(tx: Tx, orderId: number): Promise<void> {
-  const items = await tx.orderItem.findMany({ where: { orderId }, orderBy: { productId: "asc" } });
-  for (const item of items) await tx.product.update({ where: { id: item.productId }, data: { stock: { increment: item.quantity } } });
+  const items = await tx.orderItem.findMany({
+    where: { orderId },
+    select: { productId: true, variantId: true, quantity: true },
+    orderBy: [{ productId: "asc" }, { variantKey: "asc" }],
+  });
+  for (const item of items) {
+    if (item.variantId) {
+      await tx.productVariant.update({ where: { id: item.variantId }, data: { stock: { increment: item.quantity } } });
+      await tx.product.update({ where: { id: item.productId }, data: { stock: { increment: item.quantity } } });
+    } else {
+      await tx.product.update({ where: { id: item.productId }, data: { stock: { increment: item.quantity } } });
+    }
+  }
 }

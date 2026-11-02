@@ -51,6 +51,7 @@ export class OutboxRelay implements OnApplicationBootstrap, OnModuleDestroy {
         WHERE published_at IS NULL ORDER BY id LIMIT 20 FOR UPDATE SKIP LOCKED`;
       for (const e of events) {
         this.notifications.notifyUser(e.user_id, e.type, { eventId: e.id, ...e.payload });
+        this.notifications.notifyAdmins(e.type, { eventId: e.id, userId: e.user_id, ...e.payload });
         const orderId = orderIdOf(e);
         await this.mailQueue.enqueueOrderEmail({ id: e.id, createdAt: e.created_at }, { to: `${e.user_id}@example.com`, orderId, ...mailFor(e.type, orderId, e.payload) });
       }

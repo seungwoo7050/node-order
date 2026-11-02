@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
+import { RuntimeSecretsService } from "../admin/runtime-secrets.service.js";
 import { PG_READ_CONCURRENCY, mapLimit, parseRetryAfter, withPgRetry } from "./pg-retry.js";
 import { PAYMENT_TIMEOUT_MS, PgError, type CheckoutOrder, type PaymentGateway, type PgPayment, type PgPaymentStatus, type PgRefund, type StartedCheckout } from "./payment-gateway.js";
 
@@ -65,15 +66,20 @@ export function toPgPayment(p: TossPayment): PgPayment {
 export class TossGateway implements PaymentGateway {
   readonly id = "toss" as const;
 
+  constructor(@Optional() private readonly secrets?: RuntimeSecretsService) {}
+
   isConfigured(): boolean {
-    return Boolean(simulatorUrl() || (process.env.TOSS_CLIENT_KEY && process.env.TOSS_SECRET_KEY));
+    const ck = this.secrets?.getSecret("TOSS_CLIENT_KEY") ?? process.env.TOSS_CLIENT_KEY;
+    const sk = this.secrets?.getSecret("TOSS_SECRET_KEY") ?? process.env.TOSS_SECRET_KEY;
+    return Boolean(simulatorUrl() || (ck && sk));
   }
 
   // 브라우저에 줄 값. 클라이언트 키는 공개해도 되는 키다(시크릿 키는 서버에만 둔다)
   widgetConfig(): { clientKey: string; sdkUrl: string } {
     const sim = simulatorUrl();
     if (sim) return { clientKey: SIMULATOR_CLIENT_KEY, sdkUrl: `${sim}/v2/standard` };
-    return { clientKey: process.env.TOSS_CLIENT_KEY ?? "", sdkUrl: TOSS_SDK_URL };
+    const ck = this.secrets?.getSecret("TOSS_CLIENT_KEY") ?? process.env.TOSS_CLIENT_KEY ?? "";
+    return { clientKey: ck, sdkUrl: TOSS_SDK_URL };
   }
 
   // 토스는 서버에서 만들 세션이 없다. 주문번호(6~64자, 영문·숫자·-_=)를 주문 id에서 만들고 콘솔의 위젯 페이지로 보낸다
@@ -132,7 +138,7 @@ export class TossGateway implements PaymentGateway {
 
   private async request<T>(method: "GET" | "POST", path: string, body?: unknown, idempotencyKey?: string): Promise<T> {
     const sim = simulatorUrl();
-    const secret = sim ? SIMULATOR_SECRET_KEY : process.env.TOSS_SECRET_KEY;
+    const secret = sim ? SIMULATOR_SECRET_KEY : (this.secrets?.getSecret("TOSS_SECRET_KEY") ?? process.env.TOSS_SECRET_KEY);
     if (!secret) throw new Error("TOSS_SECRET_KEY 환경변수가 없습니다");
     const headers: Record<string, string> = { Authorization: `Basic ${Buffer.from(`${secret}:`).toString("base64")}` };
     if (body) headers["Content-Type"] = "application/json";

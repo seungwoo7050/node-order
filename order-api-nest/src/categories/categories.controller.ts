@@ -1,18 +1,31 @@
-import { Body, ConflictException, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Patch, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { PrismaService } from "../prisma/prisma.service.js";
-import { MoveCategoryDto } from "./move-category.dto.js";
-import { CategoriesService } from "./categories.service.js";
 import { AdminGuard } from "../auth/admin.guard.js";
+import { AdminViewGuard } from "../auth/admin-view.guard.js";
+import { CategoriesService } from "./categories.service.js";
+import { CreateCategoryDto, UpdateCategoryDto } from "./move-category.dto.js";
 
 @ApiTags("categories")
 @Controller("categories")
 export class CategoriesController {
-  constructor(
-    private readonly categories: CategoriesService,
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly categories: CategoriesService) {}
+
+  @Get()
+  list() {
+    return this.categories.listAll();
+  }
 
   @Get("tree-naive")
   treeNaive() {
@@ -34,20 +47,63 @@ export class CategoriesController {
     return this.categories.path(id);
   }
 
+  @Post()
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard("jwt"), AdminGuard)
+  create(@Body() dto: CreateCategoryDto) {
+    return this.categories.create(dto);
+  }
+
   @Patch(":id")
   @ApiBearerAuth()
   @UseGuards(AuthGuard("jwt"), AdminGuard)
-  move(@Param("id", ParseIntPipe) id: number, @Body() dto: MoveCategoryDto) {
-    return this.categories.move(id, dto.parentId);
+  move(@Param("id", ParseIntPipe) id: number, @Body() dto: UpdateCategoryDto) {
+    return this.categories.update(id, dto);
   }
 
   @Delete(":id")
   @HttpCode(204)
   @ApiBearerAuth()
   @UseGuards(AuthGuard("jwt"), AdminGuard)
-  async remove(@Param("id", ParseIntPipe) id: number) {
-    const children = await this.prisma.category.count({ where: { parentId: id } });
-    if (children > 0) throw new ConflictException(`하위 카테고리 ${children}개가 있어 지울 수 없습니다 - 먼저 옮기거나 지웁니다`);
-    await this.prisma.category.delete({ where: { id } });
+  remove(@Param("id", ParseIntPipe) id: number) {
+    return this.categories.delete(id);
+  }
+}
+
+@ApiTags("admin-categories")
+@Controller("admin/categories")
+@ApiBearerAuth()
+export class AdminCategoriesController {
+  constructor(private readonly categories: CategoriesService) {}
+
+  @Get()
+  @UseGuards(AuthGuard("jwt"), AdminViewGuard)
+  list() {
+    return this.categories.listAll();
+  }
+
+  @Get("tree")
+  @UseGuards(AuthGuard("jwt"), AdminViewGuard)
+  tree() {
+    return this.categories.tree();
+  }
+
+  @Post()
+  @UseGuards(AuthGuard("jwt"), AdminGuard)
+  create(@Body() dto: CreateCategoryDto) {
+    return this.categories.create(dto);
+  }
+
+  @Patch(":id")
+  @UseGuards(AuthGuard("jwt"), AdminGuard)
+  update(@Param("id", ParseIntPipe) id: number, @Body() dto: UpdateCategoryDto) {
+    return this.categories.update(id, dto);
+  }
+
+  @Delete(":id")
+  @HttpCode(204)
+  @UseGuards(AuthGuard("jwt"), AdminGuard)
+  remove(@Param("id", ParseIntPipe) id: number) {
+    return this.categories.delete(id);
   }
 }

@@ -22,7 +22,7 @@ const RETURN_LABEL: Record<ReturnStatus, string> = { requested: "요청됨", app
 const returnConflict = (current: ReturnStatus, what: string) =>
   new TransitionConflict(current, `반품 요청이 ${RETURN_LABEL[current]} 상태라 ${what}할 수 없습니다`);
 
-export type ReturnRequest = { kind: "refund" | "exchange"; reason: ReturnReason; detail?: string; items: { productId: number; quantity: number }[] };
+export type ReturnRequest = { kind: "refund" | "exchange"; reason: ReturnReason; detail?: string; items: { productId: number; variantId?: number; quantity: number }[] };
 export type AutoAdvanceResult = { expired: number; paidOnRecheck: number; delivered: number; confirmed: number; returnsCompleted: number };
 
 // 주문 이행: 배송 준비 → 송장 → 배송 완료 → 구매확정, 취소, 반품·교환.
@@ -41,14 +41,34 @@ export class FulfillmentService {
 
   // ── 관리자 ────────────────────────────────────────────
 
-  async list(query: { limit: number; cursor?: string; status?: OrderStatus; returns?: "requested"; guest?: boolean }) {
+  async list(query: { limit: number; cursor?: string; status?: OrderStatus; returns?: "requested"; guest?: boolean; q?: string }) {
+    const q = query.q?.trim();
+    const where: Prisma.OrderWhereInput = {
+      status: query.status,
+      ...(query.returns ? { returns: { some: { status: query.returns } } } : {}),
+      ...(query.guest !== undefined ? { isGuest: query.guest } : {}),
+      ...afterOrder(query.cursor),
+    };
+    if (q) {
+      if (/^\d+$/.test(q)) {
+        where.OR = [
+          { id: Number(q) },
+          { userId: { contains: q, mode: "insensitive" } },
+          { recipientName: { contains: q, mode: "insensitive" } },
+          { recipientPhone: { contains: q } },
+        ];
+      } else {
+        where.OR = [
+          { userId: { contains: q, mode: "insensitive" } },
+          { user: { name: { contains: q, mode: "insensitive" } } },
+          { recipientName: { contains: q, mode: "insensitive" } },
+          { recipientPhone: { contains: q } },
+          { address1: { contains: q, mode: "insensitive" } },
+        ];
+      }
+    }
     const rows = await this.prisma.asAdmin((tx) => tx.order.findMany({
-      where: {
-        status: query.status,
-        ...(query.returns ? { returns: { some: { status: query.returns } } } : {}),
-        ...(query.guest !== undefined ? { isGuest: query.guest } : {}),
-        ...afterOrder(query.cursor),
-      },
+      where,
       select: { id: true, userId: true, status: true, totalAmount: true, shippingFee: true, recipientName: true, createdAt: true, statusChangedAt: true, isGuest: true },
       orderBy: [...orderListOrder],
       take: query.limit + 1,
@@ -127,12 +147,25 @@ export class FulfillmentService {
         if (r.kind === "exchange") {
           // 교환품을 먼저 뺀다(재고가 모자라면 409, 트랜잭션이 통째로 롤백돼 아무것도 바뀌지 않는다)
           for (const i of r.items) {
-            const taken = await tx.$executeRaw`UPDATE products SET stock = stock - ${i.quantity} WHERE id = ${i.productId} AND stock >= ${i.quantity}`;
-            if (taken === 0) throw new ConflictException(`교환품 재고가 모자랍니다(상품 #${i.productId} ${i.quantity}개)`);
+            if (i.variantId) {
+              const takenVar = await tx.$executeRaw`UPDATE product_variants SET stock = stock - ${i.quantity} WHERE id = ${i.variantId} AND stock >= ${i.quantity}`;
+              if (takenVar === 0) throw new ConflictException(`교환품 재고가 모자랍니다(옵션 #${i.variantId} ${i.quantity}개)`);
+              await tx.$executeRaw`UPDATE products SET stock = stock - ${i.quantity} WHERE id = ${i.productId}`;
+            } else {
+              const taken = await tx.$executeRaw`UPDATE products SET stock = stock - ${i.quantity} WHERE id = ${i.productId} AND stock >= ${i.quantity}`;
+              if (taken === 0) throw new ConflictException(`교환품 재고가 모자랍니다(상품 #${i.productId} ${i.quantity}개)`);
+            }
           }
         }
         // 반품 수량은 재고로 돌려놓는다
-        for (const i of r.items) await tx.product.update({ where: { id: i.productId }, data: { stock: { increment: i.quantity } } });
+        for (const i of r.items) {
+          if (i.variantId) {
+            await tx.productVariant.update({ where: { id: i.variantId }, data: { stock: { increment: i.quantity } } });
+            await tx.product.update({ where: { id: i.productId }, data: { stock: { increment: i.quantity } } });
+          } else {
+            await tx.product.update({ where: { id: i.productId }, data: { stock: { increment: i.quantity } } });
+          }
+        }
         await tx.outboxEvent.create({
           data: { type: "return.approved", userId: r.order.userId, payload: { orderId: r.orderId, returnId, kind: r.kind, refundAmount } },
         });
@@ -261,17 +294,26 @@ export class FulfillmentService {
       const row = await tx.order.findUniqueOrThrow({
         where: { id: orderId },
         select: {
-          items: { select: { quantity: true, unitPrice: true, product: { select: { id: true, name: true } } } },
-          returns: { select: { status: true, items: { select: { productId: true, quantity: true } } } },
+          items: { select: { quantity: true, unitPrice: true, variantKey: true, variantId: true, variantLabel: true, product: { select: { id: true, name: true } } } },
+          returns: { select: { status: true, items: { select: { productId: true, variantKey: true, variantId: true, quantity: true } } } },
         },
       });
       const left = returnableQuantities(row);
       const items = input.items.map((i) => {
-        const ordered = row.items.find((o) => o.product.id === i.productId);
+        const ordered = i.variantId
+          ? row.items.find((o) => o.product.id === i.productId && o.variantId === i.variantId)
+          : row.items.find((o) => o.product.id === i.productId);
         if (!ordered) throw new BadRequestException(`이 주문에 없는 상품입니다(#${i.productId})`);
-        const max = left.get(i.productId) ?? 0;
+        const max = left.get(`${i.productId}:${ordered.variantKey}`) ?? left.get(i.productId) ?? 0;
         if (i.quantity > max) throw new BadRequestException(`${ordered.product.name}은(는) ${max}개까지 반품·교환할 수 있습니다`);
-        return { productId: i.productId, quantity: i.quantity, unitPrice: ordered.unitPrice };
+        return {
+          productId: i.productId,
+          variantKey: ordered.variantKey,
+          variantId: ordered.variantId,
+          variantLabel: ordered.variantLabel,
+          quantity: i.quantity,
+          unitPrice: ordered.unitPrice,
+        };
       });
       return tx.return.create({
         data: { orderId, kind: input.kind, reason: input.reason, detail: input.detail?.trim() || null, requestedAt: now, items: { create: items } },
@@ -280,6 +322,108 @@ export class FulfillmentService {
     });
     this.logger.log(`반품·교환 신청: 주문 #${orderId} → 요청 #${created.id} (${input.kind}, ${input.reason})`);
     return this.customerDetail(userId, orderId);
+  }
+
+  async exportOrdersCsv(query: { status?: OrderStatus; returns?: "requested"; guest?: boolean; q?: string }, isDemoAdmin = false): Promise<string> {
+    const q = query.q?.trim();
+    const where: Prisma.OrderWhereInput = {
+      status: query.status,
+      ...(query.returns ? { returns: { some: { status: query.returns } } } : {}),
+      ...(query.guest !== undefined ? { isGuest: query.guest } : {}),
+    };
+    if (q) {
+      if (/^\d+$/.test(q)) {
+        where.OR = [
+          { id: Number(q) },
+          { userId: { contains: q, mode: "insensitive" } },
+          { recipientName: { contains: q, mode: "insensitive" } },
+          { recipientPhone: { contains: q } },
+        ];
+      } else {
+        where.OR = [
+          { userId: { contains: q, mode: "insensitive" } },
+          { user: { name: { contains: q, mode: "insensitive" } } },
+          { recipientName: { contains: q, mode: "insensitive" } },
+          { recipientPhone: { contains: q } },
+          { address1: { contains: q, mode: "insensitive" } },
+        ];
+      }
+    }
+
+    const orders = await this.prisma.asAdmin((tx) =>
+      tx.order.findMany({
+        where,
+        select: {
+          id: true,
+          createdAt: true,
+          status: true,
+          isGuest: true,
+          userId: true,
+          recipientName: true,
+          recipientPhone: true,
+          postalCode: true,
+          address1: true,
+          address2: true,
+          deliveryMemo: true,
+          totalAmount: true,
+          shippingFee: true,
+          items: {
+            select: {
+              quantity: true,
+              unitPrice: true,
+              variantLabel: true,
+              product: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { id: "desc" },
+        take: 1000,
+      }),
+    );
+
+    const header = "주문번호,주문일시,상태,구분,주문자ID,수령인,연락처,우편번호,주소,상세주소,배송메모,주문상품,결제금액,배송비";
+    const rows = orders.map((o) => {
+      let recName = o.recipientName ?? "";
+      let recPhone = o.recipientPhone ?? "";
+      let pCode = o.postalCode ?? "";
+      let addr1 = o.address1 ?? "";
+      let addr2 = o.address2 ?? "";
+      let memo = o.deliveryMemo ?? "";
+
+      if (isDemoAdmin) {
+        if (recName) recName = recName.length > 2 ? `${recName[0]}*${recName.slice(-1)}` : `${recName[0]}*`;
+        if (recPhone) recPhone = recPhone.replace(/(\d{3})-?(\d{3,4})-?(\d{4})/, "$1-****-$3");
+        if (pCode) pCode = `${pCode.slice(0, 2)}***`;
+        if (addr1) addr1 = addr1.split(" ").slice(0, 2).join(" ") + " ***";
+        if (addr2) addr2 = "***";
+        if (memo) memo = "***";
+      }
+
+      const itemsSummary = o.items
+        .map((it) => `${it.product.name}${it.variantLabel ? ` (${it.variantLabel})` : ""} x ${it.quantity}`)
+        .join(" / ");
+
+      const escape = (val: string | number) => `"${String(val).replace(/"/g, '""')}"`;
+
+      return [
+        o.id,
+        escape(o.createdAt.toISOString()),
+        escape(ORDER_STATUS_LABEL[o.status] ?? o.status),
+        escape(o.isGuest ? "비회원" : "회원"),
+        escape(o.userId),
+        escape(recName),
+        escape(recPhone),
+        escape(pCode),
+        escape(addr1),
+        escape(addr2),
+        escape(memo),
+        escape(itemsSummary),
+        o.totalAmount,
+        o.shippingFee,
+      ].join(",");
+    });
+
+    return "\uFEFF" + [header, ...rows].join("\r\n");
   }
 
   // ── 자동 전이(리더 작업) ──────────────────────────────

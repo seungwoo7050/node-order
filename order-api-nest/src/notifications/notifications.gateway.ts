@@ -10,14 +10,21 @@ export class NotificationsGateway implements OnGatewayConnection {
     const token = socket.handshake.auth.token as string | undefined;
     if (!token) { socket.disconnect(true); return; }
     try {
-      const payload = jwt.verify(token, process.env.JWT_SECRET!) as { sub: string };
+      const payload = jwt.verify(token, process.env.JWT_SECRET!) as { sub: string; role?: string };
       void socket.join(`user:${payload.sub}`);
+      if (payload.role === "admin" || payload.role === "demo_admin") {
+        void socket.join("admins");
+      }
     } catch {
       socket.disconnect(true);
     }
   }
 
   notifyUser(userId: string, event: string, data: unknown) {
-    this.server.to(`user:${userId}`).emit(event, data);
+    this.server?.to(`user:${userId}`).emit(event, data);
+  }
+
+  notifyAdmins(event: string, data: unknown) {
+    this.server?.to("admins").emit(event, data);
   }
 }

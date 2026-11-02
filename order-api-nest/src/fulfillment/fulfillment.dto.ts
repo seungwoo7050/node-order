@@ -15,6 +15,7 @@ export class AdminFulfillmentQueryDto extends PageQueryDto {
   @Transform(({ value }) => (value === "true" || value === true ? true : value === "false" || value === false ? false : undefined))
   @IsBoolean()
   guest?: boolean;
+  @IsOptional() @IsString() @MaxLength(100) q?: string;
 }
 
 // 목록에 없는 택배사 코드는 400
@@ -33,6 +34,7 @@ export class RejectReturnDto {
 
 export class ReturnItemDto {
   @IsInt() @IsPositive() productId!: number;
+  @IsOptional() @IsInt() @IsPositive() variantId?: number;
   @IsInt() @IsPositive() quantity!: number;
 }
 
@@ -43,5 +45,5 @@ export class ReturnRequestDto {
   @IsIn(RETURN_REASONS) reason!: ReturnReason;
   @IsOptional() @IsString() @MaxLength(500) detail?: string;
   @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => ReturnItemDto)
-  @ArrayUnique((i: ReturnItemDto) => i.productId) items!: ReturnItemDto[];
+  @ArrayUnique((i: ReturnItemDto) => `${i.productId}:${i.variantId ?? 0}`) items!: ReturnItemDto[];
 }

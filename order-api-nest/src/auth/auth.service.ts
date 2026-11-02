@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Prisma } from "../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -75,6 +75,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { id } });
     const ok = await verifyPassword(password, user?.passwordHash ?? (await this.dummyHash));
     if (!user?.passwordHash || !ok) throw new UnauthorizedException("id 또는 password가 올바르지 않습니다");
+    if (user.isActive === false) throw new ForbiddenException("정지된 계정입니다");
     return this.issueTokens(this.prisma, user.id, randomUUID());
   }
 
@@ -111,6 +112,9 @@ export class AuthService {
     const result = await this.prisma.$transaction(async (tx) => {
       const token = await tx.refreshToken.findUnique({ where: { tokenHash: sha256(rawToken) } });
       if (!token || token.expiresAt < new Date()) return { kind: "invalid" as const };
+
+      const user = await tx.user.findUnique({ where: { id: token.userId }, select: { isActive: true } });
+      if (!user || user.isActive === false) return { kind: "invalid" as const };
 
       const { count } = await tx.refreshToken.updateMany({
         where: { id: token.id, revokedAt: null },
