@@ -21,6 +21,14 @@ model User {
   githubId      String?     @unique @map("github_id")
   createdAt     DateTime    @default(now()) @map("created_at")
   expiresAt     DateTime?   @map("expires_at")
+  isGuest       Boolean     @default(false) @map("is_guest")
+  phone         String?
+  recipientName String?     @map("recipient_name")
+  recipientPhone String?    @map("recipient_phone")
+  postalCode    String?     @map("postal_code")
+  address1      String?
+  address2      String?
+  deliveryMemo  String?     @map("delivery_memo")
   orders        Order[]
   refreshTokens RefreshToken[]
   accessTokens  AccessToken[]
@@ -53,6 +61,10 @@ model Order {
   // 0033: 결제할 때 손님이 동의한 개인정보처리방침 버전과 시각(옛 주문은 비어 있다)
   privacyConsentVersion Int?      @map("privacy_consent_version")
   privacyConsentedAt    DateTime? @map("privacy_consented_at")
+  // 0037: 비회원 주문 여부 및 비회원 조회용 비밀번호 해시, 주문 당시 반품 왕복 배송비 스냅샷
+  isGuest           Boolean     @default(false) @map("is_guest")
+  guestPasswordHash String?     @map("guest_password_hash")
+  returnShippingFee Int         @default(6000) @map("return_shipping_fee")
   items             OrderItem[]
   payment           Payment?
   history           OrderStatusHistory[]
@@ -63,6 +75,7 @@ model Order {
   @@index([userId, createdAt, id])
   @@index([status, createdAt, id])
   @@index([status, statusChangedAt])
+  @@index([isGuest, createdAt(sort: Desc), id(sort: Desc)], map: "orders_is_guest_created_at_id_idx")
   @@map("orders")
 }
 
