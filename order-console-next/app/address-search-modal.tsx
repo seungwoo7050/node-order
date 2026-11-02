@@ -96,24 +96,31 @@ export function AddressSearchModal({ onSelect, buttonLabel = "우편번호 찾�
               </button>
             </div>
 
-            <form onSubmit={handleSearch} className="flex gap-2 mb-4">
+            <div className="flex gap-2 mb-4">
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void handleSearch();
+                  }
+                }}
                 placeholder="도로명, 건물명, 지번 검색 (예: 테헤란로 123)"
                 className="flex-1 border border-line px-3 py-1.5 text-sm rounded"
                 data-testid="address-search-input"
                 autoFocus
               />
               <button
-                type="submit"
+                type="button"
                 className="btn text-sm px-4"
                 disabled={isLoading}
+                onClick={() => void handleSearch()}
               >
                 {isLoading ? "검색 중…" : "검색"}
               </button>
-            </form>
+            </div>
 
             <div className="max-h-64 overflow-y-auto divide-y divide-line text-sm border border-line rounded">
               {results.length > 0 ? (

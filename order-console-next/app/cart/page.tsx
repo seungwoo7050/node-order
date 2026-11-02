@@ -49,26 +49,55 @@ export default function CartPage() {
   // 로그인 회원 프로필 조회 (기본 배송지 불러오기)
   const isMember = !!accessToken;
   const profileQuery = useQuery({
-    ...trpc.me.profile.queryOptions(),
+    queryKey: ["me", "profile", accessToken],
+    queryFn: () =>
+      authFetch<{
+        id: string;
+        name: string;
+        phone: string | null;
+        recipientName: string | null;
+        recipientPhone: string | null;
+        postalCode: string | null;
+        address1: string | null;
+        address2: string | null;
+        deliveryMemo: string | null;
+      }>("/me/profile"),
     enabled: isMember,
   });
 
   const loadedRef = useRef(false);
-  const [isEditingShipping, setIsEditingShipping] = useState(false);
   const [guestPassword, setGuestPassword] = useState("");
 
   const hasDefaultShipping = !!(profileQuery.data?.postalCode && profileQuery.data?.address1);
 
+  const applyDefaultShipping = () => {
+    if (!profileQuery.data?.postalCode || !profileQuery.data?.address1) return;
+    setShipping({
+      recipientName: profileQuery.data.recipientName ?? profileQuery.data.name ?? shipping.recipientName,
+      recipientPhone: profileQuery.data.recipientPhone ?? profileQuery.data.phone ?? shipping.recipientPhone,
+      postalCode: profileQuery.data.postalCode,
+      address1: profileQuery.data.address1,
+      address2: profileQuery.data.address2 ?? "",
+      deliveryMemo: profileQuery.data.deliveryMemo ?? "",
+    });
+  };
+
   useEffect(() => {
     if (isMember && profileQuery.data && !loadedRef.current) {
-      if (profileQuery.data.postalCode && profileQuery.data.address1) {
+      if (
+        profileQuery.data.postalCode &&
+        profileQuery.data.address1 &&
+        !shipping.recipientName &&
+        !shipping.postalCode &&
+        !shipping.address1
+      ) {
         setShipping({
-          recipientName: profileQuery.data.recipientName ?? shipping.recipientName,
-          recipientPhone: profileQuery.data.recipientPhone ?? profileQuery.data.phone ?? shipping.recipientPhone,
+          recipientName: profileQuery.data.recipientName ?? profileQuery.data.name ?? "",
+          recipientPhone: profileQuery.data.recipientPhone ?? profileQuery.data.phone ?? "",
           postalCode: profileQuery.data.postalCode,
           address1: profileQuery.data.address1,
-          address2: profileQuery.data.address2 ?? shipping.address2,
-          deliveryMemo: profileQuery.data.deliveryMemo ?? shipping.deliveryMemo,
+          address2: profileQuery.data.address2 ?? "",
+          deliveryMemo: profileQuery.data.deliveryMemo ?? "",
         });
       }
       loadedRef.current = true;
@@ -139,7 +168,7 @@ export default function CartPage() {
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const fee = store.data ? shippingFeeFor(subtotal, store.data) : null;
   const total = subtotal + (fee ?? 0);
-  const showSummaryCard = isMember && hasDefaultShipping && !isEditingShipping;
+  const showSummaryCard = isMember && hasDefaultShipping;
 
   return (
     <main className="page flex-1 pb-12 pt-2">
@@ -177,27 +206,26 @@ export default function CartPage() {
             )}
 
             {showSummaryCard ? (
-              <div className="mb-6 rounded border border-line p-3 text-sm" data-testid="member-shipping-summary">
-                <div className="flex items-center justify-between mb-2">
+              <div className="mb-4 rounded border border-line p-3 text-sm" data-testid="member-shipping-summary">
+                <div className="flex items-center justify-between mb-1">
                   <span className="label">기본 배송지</span>
                   <button
                     type="button"
                     className="text-xs underline text-muted hover:text-fg"
                     data-testid="edit-shipping-button"
-                    onClick={() => setIsEditingShipping(true)}
+                    onClick={applyDefaultShipping}
                   >
-                    배송지 변경
+                    기본 배송지 다시 채우기
                   </button>
                 </div>
-                <p className="font-medium">{shipping.recipientName || profileQuery.data?.recipientName} ({shipping.recipientPhone || profileQuery.data?.recipientPhone})</p>
-                <p className="text-muted text-xs mt-0.5">({shipping.postalCode}) {shipping.address1} {shipping.address2}</p>
-                {shipping.deliveryMemo && <p className="text-muted text-xs mt-1">메모: {shipping.deliveryMemo}</p>}
+                <p className="font-medium">{profileQuery.data?.recipientName || shipping.recipientName} ({profileQuery.data?.recipientPhone || shipping.recipientPhone})</p>
+                <p className="text-muted text-xs mt-0.5">({profileQuery.data?.postalCode}) {profileQuery.data?.address1} {profileQuery.data?.address2}</p>
+                {profileQuery.data?.deliveryMemo && <p className="text-muted text-xs mt-1">메모: {profileQuery.data.deliveryMemo}</p>}
               </div>
             ) : null}
 
-            {/* 기본 배송지가 없거나 배송지 변경을 누른 경우, 또는 비회원인 경우 폼 노출 */}
             <fieldset
-              className={`mb-6 ${showSummaryCard ? "hidden" : "block"}`}
+              className="mb-6 block"
               data-testid="shipping-form"
               disabled={checkingAuth}
               aria-busy={checkingAuth}
@@ -215,7 +243,7 @@ export default function CartPage() {
                 <label key={f.name} className="mb-2 block text-sm">
                   <span className="mb-1 block text-[0.78rem] text-muted">{f.label}{f.required ? "" : " (선택)"}</span>
                   <input
-                    name={f.name} className="w-full border border-line px-2 py-1.5 text-sm" required={!showSummaryCard && f.required} maxLength={f.maxLength}
+                    name={f.name} className="w-full border border-line px-2 py-1.5 text-sm" required={f.required} maxLength={f.maxLength}
                     autoComplete={f.autoComplete} inputMode={"inputMode" in f ? f.inputMode : undefined}
                     placeholder={"placeholder" in f ? f.placeholder : undefined} pattern={"pattern" in f ? f.pattern : undefined}
                     value={shipping[f.name]} onChange={(e) => setShipping({ [f.name]: e.target.value })}
