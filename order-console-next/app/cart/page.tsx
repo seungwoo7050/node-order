@@ -2,8 +2,8 @@
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { ApiError, authFetch, refreshAccessToken } from "@/lib/api-client";
+import { useEffect, useRef, useState } from "react";
+import { API_URL, ApiError, authFetch, refreshAccessToken } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/auth-store";
 import { shippingFor, useCartStore } from "@/lib/cart-store";
 import { defaultProvider, featuresOptions, providerLabel, providerNote, type PaymentProvider } from "@/lib/features";
@@ -13,8 +13,9 @@ import { privacyOptions, storeInfoOptions } from "@/lib/store-info";
 import { useTRPC } from "@/lib/trpc";
 import { useOnline } from "../online-banner";
 import { Stepper } from "../shop/stepper";
+import { AddressSearchModal } from "../address-search-modal";
 
-type CheckoutResult = { id: number; price: number; checkoutUrl: string; provider: PaymentProvider };
+type CheckoutResult = { id: number; price: number; checkoutUrl: string; provider: PaymentProvider; guestAccessToken?: string };
 
 // 배송지 입력 칸. 형식은 API가 다시 검사한다(비었거나 우편번호가 5자리가 아니면 400)
 const SHIPPING_FIELDS = [
@@ -31,8 +32,9 @@ export default function CartPage() {
   const remove = useCartStore((s) => s.remove);
   // 소유자가 있는 배송지는 그 사람이 인증돼 있을 때만 보인다(세션 만료 뒤 앞 사람의 배송지를 보이지 않는다)
   const accessToken = useAuthStore((s) => s.accessToken);
+  const authStatus = useAuthStore((s) => s.status);
   // 새로고침 직후에는 토큰이 없어 누구인지 모른다: 갱신을 한 번 해 보고, 그동안 배송지 칸을 잠근다(지우지도 덮어쓰지도 않게)
-  const checkingAuth = useAuthStore((s) => s.status === "checking");
+  const checkingAuth = authStatus === "checking";
   useEffect(() => {
     if (useAuthStore.getState().status === "checking") void refreshAccessToken().catch(() => {});
   }, []);
@@ -43,6 +45,36 @@ export default function CartPage() {
   const trpc = useTRPC();
   const { data: products } = useInfiniteQuery(productListOptions(trpc));
   const stockOf = (productId: number) => products?.pages.flatMap((p) => p.items).find((p) => p.id === productId)?.stock ?? Infinity;
+
+  // 로그인 회원 프로필 조회 (기본 배송지 불러오기)
+  const isMember = !!accessToken;
+  const profileQuery = useQuery({
+    ...trpc.me.profile.queryOptions(),
+    enabled: isMember,
+  });
+
+  const loadedRef = useRef(false);
+  const [isEditingShipping, setIsEditingShipping] = useState(false);
+  const [guestPassword, setGuestPassword] = useState("");
+
+  const hasDefaultShipping = !!(profileQuery.data?.postalCode && profileQuery.data?.address1);
+
+  useEffect(() => {
+    if (isMember && profileQuery.data && !loadedRef.current) {
+      if (profileQuery.data.postalCode && profileQuery.data.address1) {
+        setShipping({
+          recipientName: profileQuery.data.recipientName ?? shipping.recipientName,
+          recipientPhone: profileQuery.data.recipientPhone ?? profileQuery.data.phone ?? shipping.recipientPhone,
+          postalCode: profileQuery.data.postalCode,
+          address1: profileQuery.data.address1,
+          address2: profileQuery.data.address2 ?? shipping.address2,
+          deliveryMemo: profileQuery.data.deliveryMemo ?? shipping.deliveryMemo,
+        });
+      }
+      loadedRef.current = true;
+    }
+  }, [isMember, profileQuery.data, setShipping, shipping]);
+
   // 결제 수단: API가 켜 둔 것만 보인다(키가 있는 PG)
   const features = useQuery(featuresOptions);
   const available = features.data?.payments ?? [];
@@ -54,11 +86,32 @@ export default function CartPage() {
   const [agreed, setAgreed] = useState(false);
 
   const checkout = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const key = useCartStore.getState().beginCheckout();
+      if (!isMember) {
+        // 비회원 주문
+        const res = await fetch(`${API_URL}/orders/guest-checkout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(key ? { "Idempotency-Key": key } : {}) },
+          body: JSON.stringify({
+            provider,
+            shipping,
+            privacyConsentVersion: privacy.data?.version,
+            password: guestPassword,
+            items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+          }),
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { message?: string | string[] };
+          throw new ApiError(res.status, Array.isArray(body.message) ? body.message.join(", ") : (body.message ?? res.statusText));
+        }
+        return (await res.json()) as CheckoutResult;
+      }
+
+      // 회원 주문
       return authFetch<CheckoutResult>("/orders/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+        headers: { "Content-Type": "application/json", ...(key ? { "Idempotency-Key": key } : {}) },
         body: JSON.stringify({
           provider, shipping, privacyConsentVersion: privacy.data?.version,
           items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
@@ -73,6 +126,9 @@ export default function CartPage() {
       }
     },
     onSuccess: (data) => {
+      if (data.guestAccessToken) {
+        useAuthStore.getState().setAccessToken(data.guestAccessToken);
+      }
       useCartStore.getState().finishCheckout();
       void queryClient.invalidateQueries({ queryKey: trpc.products.list.pathKey() });
       void queryClient.invalidateQueries({ queryKey: trpc.me.orders.pathKey() });
@@ -83,6 +139,8 @@ export default function CartPage() {
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const fee = store.data ? shippingFeeFor(subtotal, store.data) : null;
   const total = subtotal + (fee ?? 0);
+  const showSummaryCard = isMember && hasDefaultShipping && !isEditingShipping;
+
   return (
     <main className="page flex-1 pb-12 pt-2">
       <h1 className="title mb-8">장바구니</h1>
@@ -109,14 +167,55 @@ export default function CartPage() {
             ))}
           </ul>
           <aside aria-label="결제" className="lg:sticky lg:top-6"><form onSubmit={(e) => { e.preventDefault(); checkout.mutate(); }}>
-            <fieldset className="mb-6" data-testid="shipping-form" disabled={checkingAuth} aria-busy={checkingAuth}>
-              <legend className="label mb-2">배송지</legend>
+            {!isMember && (
+              <div className="mb-4 flex items-center justify-between rounded bg-neutral-100 p-2.5 text-xs border border-line">
+                <span className="font-medium" data-testid="guest-badge">[비회원 주문]</span>
+                <Link href="/login" className="underline text-muted hover:text-fg">
+                  로그인하고 주문하기
+                </Link>
+              </div>
+            )}
+
+            {showSummaryCard ? (
+              <div className="mb-6 rounded border border-line p-3 text-sm" data-testid="member-shipping-summary">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="label">기본 배송지</span>
+                  <button
+                    type="button"
+                    className="text-xs underline text-muted hover:text-fg"
+                    data-testid="edit-shipping-button"
+                    onClick={() => setIsEditingShipping(true)}
+                  >
+                    배송지 변경
+                  </button>
+                </div>
+                <p className="font-medium">{shipping.recipientName || profileQuery.data?.recipientName} ({shipping.recipientPhone || profileQuery.data?.recipientPhone})</p>
+                <p className="text-muted text-xs mt-0.5">({shipping.postalCode}) {shipping.address1} {shipping.address2}</p>
+                {shipping.deliveryMemo && <p className="text-muted text-xs mt-1">메모: {shipping.deliveryMemo}</p>}
+              </div>
+            ) : null}
+
+            {/* 기본 배송지가 없거나 배송지 변경을 누른 경우, 또는 비회원인 경우 폼 노출 */}
+            <fieldset
+              className={`mb-6 ${showSummaryCard ? "hidden" : "block"}`}
+              data-testid="shipping-form"
+              disabled={checkingAuth}
+              aria-busy={checkingAuth}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <legend className="label">배송지</legend>
+                <AddressSearchModal
+                  onSelect={({ postalCode, address1 }) => {
+                    setShipping({ postalCode, address1 });
+                  }}
+                />
+              </div>
               {checkingAuth && <p role="status" className="mb-2 text-[0.78rem] text-muted">로그인 상태를 확인하는 중입니다…</p>}
               {SHIPPING_FIELDS.map((f) => (
                 <label key={f.name} className="mb-2 block text-sm">
                   <span className="mb-1 block text-[0.78rem] text-muted">{f.label}{f.required ? "" : " (선택)"}</span>
                   <input
-                    name={f.name} className="w-full border border-line px-2 py-1.5 text-sm" required={f.required} maxLength={f.maxLength}
+                    name={f.name} className="w-full border border-line px-2 py-1.5 text-sm" required={!showSummaryCard && f.required} maxLength={f.maxLength}
                     autoComplete={f.autoComplete} inputMode={"inputMode" in f ? f.inputMode : undefined}
                     placeholder={"placeholder" in f ? f.placeholder : undefined} pattern={"pattern" in f ? f.pattern : undefined}
                     value={shipping[f.name]} onChange={(e) => setShipping({ [f.name]: e.target.value })}
@@ -124,6 +223,27 @@ export default function CartPage() {
                 </label>
               ))}
             </fieldset>
+
+            {!isMember && (
+              <fieldset className="mb-5 border-t border-line pt-4">
+                <legend className="label mb-2">비회원 주문 비밀번호</legend>
+                <label className="mb-2 block text-sm">
+                  <span className="mb-1 block text-[0.78rem] text-muted">주문 조회 시 사용할 비밀번호 (4자 이상)</span>
+                  <input
+                    type="password"
+                    name="guestPassword"
+                    required
+                    minLength={4}
+                    value={guestPassword}
+                    onChange={(e) => setGuestPassword(e.target.value)}
+                    placeholder="비밀번호 입력"
+                    className="w-full border border-line px-2 py-1.5 text-sm"
+                    data-testid="guest-password"
+                  />
+                </label>
+              </fieldset>
+            )}
+
             <dl className="mb-5 grid grid-cols-[1fr_auto] gap-y-1 text-sm">
               <dt className="text-muted">상품 합계</dt>
               <dd className="num text-right">{won(subtotal)}</dd>

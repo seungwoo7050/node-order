@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { CookieOptions, Request, Response } from "express";
@@ -6,6 +6,7 @@ import { AuthService, REFRESH_TOKEN_TTL_SECONDS } from "./auth.service.js";
 import { LoginDto } from "./login.dto.js";
 import { ExchangeCodeDto, GithubLoginDto } from "./github-login.dto.js";
 import { DemoLoginDto } from "./demo-login.dto.js";
+import { SignupDto } from "./signup.dto.js";
 
 const REFRESH_COOKIE = "refresh_token";
 const refreshCookieOptions: CookieOptions = {
@@ -19,6 +20,19 @@ const refreshCookieOptions: CookieOptions = {
 @Controller("auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post("signup")
+  @HttpCode(201)
+  async signup(@Body() dto: SignupDto, @Res({ passthrough: true }) res: Response) {
+    const { accessToken, refreshToken } = await this.authService.signup(dto);
+    res.cookie(REFRESH_COOKIE, refreshToken, { ...refreshCookieOptions, maxAge: REFRESH_TOKEN_TTL_SECONDS * 1000 });
+    return { accessToken };
+  }
+
+  @Get("check-id")
+  checkId(@Query("id") id = "") {
+    return this.authService.checkId(id);
+  }
 
   @Post("login")
   @HttpCode(200)

@@ -9,7 +9,7 @@ import { ORDER_STATUS_CODES, ORDER_STATUS_LABEL, won, type OrderStatusCode } fro
 import { LoadMore } from "../../load-more";
 import { AdminOnly } from "../products/admin-only";
 
-type Row = { id: number; userId: string; status: OrderStatusCode; price: number; recipientName: string | null; createdAt: string };
+type Row = { id: number; userId: string; status: OrderStatusCode; price: number; recipientName: string | null; createdAt: string; isGuest?: boolean };
 type Page = { items: Row[]; nextCursor: string | null };
 
 const READ_ONLY = "데모 관리자는 볼 수만 있습니다. 배송 준비·송장 입력·취소·반품 처리는 진짜 관리자만 할 수 있어 버튼을 꺼 두었습니다.";
@@ -22,12 +22,14 @@ function OrderTable() {
   const initialStatus = search.get("status");
   const [status, setStatus] = useState<OrderStatusCode | "">(isStatus(initialStatus) ? initialStatus : search.get("returns") ? "" : "paid");
   const [returnsOnly, setReturnsOnly] = useState(search.get("returns") === "requested");
+  const [guestFilter, setGuestFilter] = useState<string>(search.get("guest") ?? "");
   const query = useInfiniteQuery({
-    queryKey: ["admin-orders", status, returnsOnly],
+    queryKey: ["admin-orders", status, returnsOnly, guestFilter],
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({ limit: "20" });
       if (status) params.set("status", status);
       if (returnsOnly) params.set("returns", "requested");
+      if (guestFilter) params.set("guest", guestFilter);
       if (pageParam) params.set("cursor", pageParam);
       return authFetch<Page>(`/admin/orders?${params}`);
     },
@@ -44,6 +46,14 @@ function OrderTable() {
           <select className="border border-line px-2 py-1" value={status} onChange={(e) => setStatus(e.target.value as OrderStatusCode | "")} data-testid="status-filter">
             <option value="">전체</option>
             {ORDER_STATUS_CODES.map((s) => <option key={s} value={s}>{ORDER_STATUS_LABEL[s]}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-3">
+          <span className="label">주문 구분</span>
+          <select className="border border-line px-2 py-1" value={guestFilter} onChange={(e) => setGuestFilter(e.target.value)} data-testid="guest-filter">
+            <option value="">전체</option>
+            <option value="false">회원 주문만</option>
+            <option value="true">비회원 주문만</option>
           </select>
         </label>
         <label className="flex items-center gap-2">
@@ -71,7 +81,14 @@ function OrderTable() {
           <tbody>
             {rows.map((o) => (
               <tr key={o.id} className="border-b border-line">
-                <td className="py-3"><Link href={`/admin/orders/${o.id}`}>#{o.id}</Link> <span className="text-muted">{o.userId}</span></td>
+                <td className="py-3">
+                  <Link href={`/admin/orders/${o.id}`}>#{o.id}</Link> <span className="text-muted">{o.userId}</span>
+                  {o.isGuest && (
+                    <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-neutral-200 rounded font-normal" data-testid="guest-badge">
+                      비회원
+                    </span>
+                  )}
+                </td>
                 <td className="num hidden py-3 sm:table-cell">{new Date(o.createdAt).toLocaleDateString("ko-KR")}</td>
                 <td className="hidden py-3 sm:table-cell">{o.recipientName ?? "-"}</td>
                 <td className="num py-3 text-right">{won(o.price)}</td>

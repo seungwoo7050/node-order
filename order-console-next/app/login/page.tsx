@@ -73,6 +73,14 @@ export default function LoginPage() {
         <form action={signInWithGithub}>
           <button type="submit" className="btn w-full">GitHub로 로그인</button>
         </form>
+        <div className="mt-4 flex justify-between text-xs text-muted">
+          <a href="/signup" className="underline hover:text-fg" data-testid="signup-link">
+            회원가입
+          </a>
+          <a href="/guest/orders" className="underline hover:text-fg" data-testid="guest-orders-link">
+            비회원 주문 조회
+          </a>
+        </div>
       </div>
     </main>
   );

@@ -103,6 +103,12 @@ export class MyFulfillmentController {
     return this.fulfillment.confirm(userIdOf(req), id);
   }
 
+  @Post(":id/cancel")
+  @HttpCode(200)
+  cancelOrder(@Param("id", ParseIntPipe) id: number, @Body() dto: CancelOrderDto, @Req() req: Request) {
+    return this.fulfillment.customerCancel(userIdOf(req), id, dto?.reason);
+  }
+
   @Post(":id/returns")
   requestReturn(@Param("id", ParseIntPipe) id: number, @Body() dto: ReturnRequestDto, @Req() req: Request) {
     return this.fulfillment.requestReturn(userIdOf(req), id, dto);

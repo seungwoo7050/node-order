@@ -35,7 +35,14 @@ export function Nav() {
       <Link href="/shop" className="mr-auto font-serif text-base no-underline">Brown Store.</Link>
       <nav aria-label="주요 메뉴" className="flex items-baseline gap-5">
         <NavLink href="/shop">상품</NavLink>
-        <NavLink href="/me/orders">내 주문</NavLink>
+        {loggedIn ? (
+          <>
+            <NavLink href="/me/orders">내 주문</NavLink>
+            <NavLink href="/me/profile">내 정보</NavLink>
+          </>
+        ) : (
+          <NavLink href="/guest/orders">비회원 주문</NavLink>
+        )}
         {canSeeAdmin && <NavLink href="/admin" exact>대시보드</NavLink>}
         {canSeeAdmin && <NavLink href="/admin/products">관리</NavLink>}
         {canSeeAdmin && <NavLink href="/admin/orders">주문 처리</NavLink>}

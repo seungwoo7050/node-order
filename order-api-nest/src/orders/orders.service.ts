@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import { Prisma } from "../generated/prisma/client.js";
 import { NotificationsGateway } from "../notifications/notifications.gateway.js";
 import { PrismaService } from "../prisma/prisma.service.js";
-import type { CheckoutItemDto, ShippingAddressDto } from "./dto/checkout.dto.js";
+import type { CheckoutItemDto, GuestCheckoutDto, ShippingAddressDto } from "./dto/checkout.dto.js";
 import { maskShipping } from "../fulfillment/mask.js";
 import { shippingFeeFor } from "../fulfillment/policy.js";
 import { cancelUnpaidOrder, manualPayment } from "../payments/cancel-unpaid-order.js";
@@ -13,6 +13,8 @@ import { LegalService } from "../admin/legal.service.js";
 import { StoreSettingsService } from "../admin/store-settings.service.js";
 import type { ShippingPolicy } from "../fulfillment/policy.js";
 import { afterOrder, encodeOrderCursor, orderListOrder, toPage, type Page } from "../pagination/cursor.js";
+import { AuthService } from "../auth/auth.service.js";
+import { hashPassword } from "../auth/password.js";
 
 export type Order = { id: number; user: string; price: number; paid: boolean; }
 export type CheckoutResult = Order & { shippingFee: number; items: { productId: number; quantity: number; unitPrice: number }[] };
@@ -35,6 +37,7 @@ export class OrdersService {
     private readonly gateways: PaymentGateways,
     private readonly settings: StoreSettingsService,
     private readonly legal: LegalService,
+    private readonly authService: AuthService,
   ) {}
 
   async list(query: { limit: number; cursor?: string; offset?: number; paid?: boolean }): Promise<Page<Order & { createdAt: Date }>> {
@@ -82,7 +85,26 @@ export class OrdersService {
       throw new BadRequestException(`개인정보처리방침이 바뀌었습니다(${privacy.version}판). 다시 확인하고 동의해 주세요`);
     }
     const policy = await this.settings.shippingPolicy(); // 배송비는 지금 설정으로 계산해 주문에 저장한다(지난 주문은 그대로)
-    const placed = await this.placeOrReplay(userId, items, trimShipping(shipping), { version: privacy.version, at: new Date() }, policy, idempotencyKey);
+    const trimmed = trimShipping(shipping);
+
+    // 회원이 주문할 때 기본 배송지가 비어 있으면 이번 주문 배송지를 기본 배송지로 자동 저장
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { isGuest: true, postalCode: true, phone: true } });
+    if (user && !user.isGuest && !user.postalCode) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          recipientName: trimmed.recipientName,
+          recipientPhone: trimmed.recipientPhone,
+          postalCode: trimmed.postalCode,
+          address1: trimmed.address1,
+          address2: trimmed.address2,
+          deliveryMemo: trimmed.deliveryMemo,
+          phone: user.phone ?? trimmed.recipientPhone,
+        },
+      });
+    }
+
+    const placed = await this.placeOrReplay(userId, items, trimmed, { version: privacy.version, at: new Date() }, policy, idempotencyKey);
     const attemptKey = idempotencyKey && createHash("sha256").update(`${userId}:${idempotencyKey}:${placed.id}`).digest("hex");
     try {
       const started = await gateway.startCheckout({ id: placed.id, price: placed.price, name: `주문 #${placed.id}` }, attemptKey);
@@ -111,8 +133,68 @@ export class OrdersService {
     }
   }
 
+  async guestCheckout(dto: GuestCheckoutDto, idempotencyKey?: string): Promise<CheckoutResponse & { guestAccessToken: string; guestUserId: string }> {
+    const gateway = this.gateways.pick(dto.provider);
+    const privacy = await this.legal.current("privacy");
+    if (dto.privacyConsentVersion !== privacy.version) {
+      throw new BadRequestException(`개인정보처리방침이 바뀌었습니다(${privacy.version}판). 다시 확인하고 동의해 주세요`);
+    }
+    const policy = await this.settings.shippingPolicy();
+    const trimmed = trimShipping(dto.shipping);
+    const guestUserId = `guest-${randomUUID()}`;
+    const guestPasswordHash = await hashPassword(dto.password);
+
+    // users 테이블에는 RLS가 없으므로 먼저 user 행 생성
+    await this.prisma.user.create({
+      data: {
+        id: guestUserId,
+        name: trimmed.recipientName,
+        phone: trimmed.recipientPhone,
+        isGuest: true,
+      },
+    });
+
+    const placed = await this.placeOrReplay(
+      guestUserId,
+      dto.items,
+      trimmed,
+      { version: privacy.version, at: new Date() },
+      policy,
+      idempotencyKey,
+      { isGuest: true, guestPasswordHash },
+    );
+
+    const attemptKey = idempotencyKey && createHash("sha256").update(`${guestUserId}:${idempotencyKey}:${placed.id}`).digest("hex");
+    try {
+      const started = await gateway.startCheckout({ id: placed.id, price: placed.price, name: `주문 #${placed.id}` }, attemptKey);
+      const count = await this.prisma.asUser(guestUserId, async (tx) => {
+        const { count } = await tx.order.updateMany({
+          where: { id: placed.id, canceledAt: null },
+          data: gateway.id === "stripe" ? { stripeSessionId: started.providerOrderId } : {},
+        });
+        if (count === 0) return 0;
+        const existing = await tx.payment.findUnique({ where: { orderId: placed.id }, select: { status: true } });
+        const attempt = { provider: gateway.id, providerOrderId: started.providerOrderId, amount: placed.price };
+        if (!existing) await tx.payment.create({ data: { orderId: placed.id, ...attempt } });
+        else if (existing.status === "ready") await tx.payment.update({ where: { orderId: placed.id }, data: attempt });
+        return count;
+      });
+      if (count === 0) throw new ConflictException("결제 시도가 취소됐습니다 - 다시 결제합니다");
+      const guestAccessToken = this.authService.issueGuestToken(guestUserId);
+      return { ...placed, checkoutUrl: started.checkoutUrl, provider: gateway.id, guestAccessToken, guestUserId };
+    } catch (err) {
+      await this.prisma.asUser(guestUserId, async (tx) => {
+        await cancelUnpaidOrder(tx, placed.id);
+        if (idempotencyKey) await tx.idempotencyKey.deleteMany({ where: { userId: guestUserId, key: idempotencyKey } });
+      });
+      this.logger.warn(`비회원 결제 시작 실패(${gateway.id}) → 주문 #${placed.id} 취소, 재고 복구: ${(err as Error).message}`);
+      throw err;
+    }
+  }
+
   private async placeOrReplay(
     userId: string, items: CheckoutItemDto[], shipping: ShippingAddressDto, consent: Consent, policy: ShippingPolicy, idempotencyKey?: string,
+    guestMeta?: { isGuest?: boolean; guestPasswordHash?: string },
   ): Promise<CheckoutResult> {
     const requestHash = createHash("sha256").update(JSON.stringify({ items, shipping })).digest("hex");
     try {
@@ -120,7 +202,7 @@ export class OrdersService {
         if (idempotencyKey) {
           await tx.idempotencyKey.create({ data: { userId, key: idempotencyKey, requestHash } });
         }
-        const placed = await this.placeOrder(tx, userId, items, shipping, consent, policy);
+        const placed = await this.placeOrder(tx, userId, items, shipping, consent, policy, guestMeta);
         await tx.outboxEvent.create({ data: { type: "order.created", userId, payload: placed } });
         if (idempotencyKey) {
           await tx.idempotencyKey.update({
@@ -149,6 +231,7 @@ export class OrdersService {
 
   private async placeOrder(
     tx: Prisma.TransactionClient, userId: string, items: CheckoutItemDto[], shipping: ShippingAddressDto, consent: Consent, policy: ShippingPolicy,
+    guestMeta?: { isGuest?: boolean; guestPasswordHash?: string },
   ): Promise<CheckoutResult> {
     const ids = [...new Set(items.map((i) => i.productId))];
     const products = await tx.$queryRaw<{ id: number; name: string; price: number; stock: number }[]>`
@@ -168,6 +251,8 @@ export class OrdersService {
         userId, totalAmount: total + shippingFee, shippingFee, paid: false, status: "pending_payment", ...shipping,
         privacyConsentVersion: consent.version, privacyConsentedAt: consent.at,
         returnShippingFee: policy.returnShippingFee,
+        isGuest: guestMeta?.isGuest ?? false,
+        guestPasswordHash: guestMeta?.guestPasswordHash ?? null,
         items: { create: items.map((i) => ({
           productId: i.productId, quantity: i.quantity, unitPrice: products.find((p) => p.id === i.productId)!.price,
         })) },

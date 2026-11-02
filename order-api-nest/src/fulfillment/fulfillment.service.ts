@@ -210,6 +210,27 @@ export class FulfillmentService {
     return view;
   }
 
+  // 고객 직접 취소 (결제 대기 또는 결제 완료 상태)
+  async customerCancel(userId: string, orderId: number, reason = "고객 직접 취소") {
+    try {
+      await this.prisma.asUser(userId, async (tx) => {
+        const [order] = await tx.$queryRaw<{ status: OrderStatus; paid: boolean }[]>`
+          SELECT status::text AS status, paid FROM orders WHERE id = ${orderId} AND user_id = ${userId} FOR UPDATE`;
+        if (!order) throw new NotFoundException(`order ${orderId} not found`);
+        if (order.status !== "pending_payment" && order.status !== "paid") {
+          throw new BadRequestException("결제 대기 또는 결제 완료 상태의 주문만 취소할 수 있습니다");
+        }
+        await transitionOrder(tx, orderId, "cancel", { type: "customer", id: userId }, { reason });
+        await restoreOrderStock(tx, orderId);
+      });
+      this.logger.log(`고객 주문 취소: #${orderId} (${userId}) (재고 복구) - ${reason}`);
+    } catch (err) {
+      if (!(err instanceof TransitionConflict) || err.currentStatus !== "canceled" || !(await this.wasCanceledAfterPayment(orderId))) throw err;
+    }
+    await this.refundOrder(orderId, `cancel-${orderId}`, reason);
+    return this.customerDetail(userId, orderId);
+  }
+
   // 구매확정과 반품 신청은 같은 주문 행 잠금(FOR UPDATE)으로 줄을 선다: 반품 신청이 먼저 커밋하면 여기서 그 요청을 보고 409,
   // 구매확정이 먼저면 반품 신청이 confirmed를 보고 409. 잠그지 않으면 둘 다 "아직 없음"을 읽고 둘 다 성공한다
   async confirm(userId: string, orderId: number) {
