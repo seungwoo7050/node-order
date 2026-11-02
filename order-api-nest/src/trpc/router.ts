@@ -26,7 +26,22 @@ export const appRouter = router({
 
   me: router({
     profile: protectedProcedure.query(({ ctx }) =>
-      ctx.prisma.user.findUniqueOrThrow({ where: { id: ctx.userId }, select: { id: true, name: true, role: true } }),
+      ctx.prisma.user.findUniqueOrThrow({
+        where: { id: ctx.userId },
+        select: {
+          id: true,
+          name: true,
+          role: true,
+          phone: true,
+          isGuest: true,
+          recipientName: true,
+          recipientPhone: true,
+          postalCode: true,
+          address1: true,
+          address2: true,
+          deliveryMemo: true,
+        },
+      }),
     ),
     orders: protectedProcedure
       .input(z.object({ limit: z.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT), cursor: z.string().nullish() }).default({ limit: DEFAULT_LIMIT }))

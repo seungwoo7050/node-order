@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Prisma } from "../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -7,12 +7,20 @@ import { hashPassword, verifyPassword } from "./password.js";
 import { AuthCodeStore } from "./auth-code.store.js";
 import { verifyGithubToken } from "./github.js";
 import { createDemoUser, newDemoUserId, type DemoKind } from "./demo-user.js";
+import type { SignupDto } from "./signup.dto.js";
 
 export const REFRESH_TOKEN_TTL_SECONDS = Number(process.env.REFRESH_TOKEN_TTL_SECONDS ?? 60 * 60 * 24 * 7);
 
 export type IssuedTokens = { accessToken: string; refreshToken: string };
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+
+const RESERVED_PREFIXES = ["guest-", "demo-", "github-"];
+
+function isReservedId(id: string): boolean {
+  const lower = id.toLowerCase();
+  return RESERVED_PREFIXES.some((prefix) => lower.startsWith(prefix)) || lower === "admin" || lower.startsWith("admin-");
+}
 
 @Injectable()
 export class AuthService {
@@ -23,6 +31,45 @@ export class AuthService {
   ) {}
 
   private readonly dummyHash = hashPassword("never-matches-any-real-password");
+
+  async signup(dto: SignupDto): Promise<IssuedTokens> {
+    const id = dto.id.trim();
+    if (isReservedId(id)) {
+      throw new BadRequestException("예약된 아이디나 접두사(guest-, demo-, github-, admin)는 사용할 수 없습니다");
+    }
+
+    const existing = await this.prisma.user.findUnique({ where: { id } });
+    if (existing) {
+      throw new ConflictException("이미 사용 중인 아이디입니다");
+    }
+
+    const passwordHash = await hashPassword(dto.password);
+    const user = await this.prisma.user.create({
+      data: {
+        id,
+        name: dto.name.trim(),
+        phone: dto.phone?.trim() || null,
+        passwordHash,
+        role: "user",
+        isGuest: false,
+      },
+    });
+
+    return this.issueTokens(this.prisma, user.id, randomUUID());
+  }
+
+  async checkId(id: string): Promise<{ available: boolean; reason?: string }> {
+    const trimmed = id.trim();
+    if (!trimmed || trimmed.length < 3) return { available: false, reason: "아이디는 3자 이상이어야 합니다" };
+    if (isReservedId(trimmed)) return { available: false, reason: "예약된 접두사가 포함된 아이디입니다" };
+    const existing = await this.prisma.user.findUnique({ where: { id: trimmed }, select: { id: true } });
+    if (existing) return { available: false, reason: "이미 사용 중인 아이디입니다" };
+    return { available: true };
+  }
+
+  issueGuestToken(userId: string): string {
+    return this.jwtService.sign({ sub: userId, role: "user", isGuest: true }, { expiresIn: "1h" });
+  }
 
   async login(id: string, password: string): Promise<IssuedTokens> {
     const user = await this.prisma.user.findUnique({ where: { id } });

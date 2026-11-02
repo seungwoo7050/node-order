@@ -19,7 +19,7 @@ type AdminReturn = {
   actions: ("approve" | "reject" | "ship")[];
 };
 type AdminOrder = {
-  id: number; userId: string; status: OrderStatusCode; price: number; subtotal: number; shippingFee: number; createdAt: string;
+  id: number; userId: string; status: OrderStatusCode; price: number; subtotal: number; shippingFee: number; createdAt: string; isGuest?: boolean;
   shipping: { recipientName: string; recipientPhone: string; postalCode: string; address1: string; address2: string | null; deliveryMemo: string | null } | null;
   items: { quantity: number; unitPrice: number; product: { id: number; name: string } }[];
   history: { toStatus: OrderStatusCode; createdAt: string }[];
@@ -90,7 +90,17 @@ function OrderDetail({ id }: { id: number }) {
   return (
     <section data-testid="admin-order-detail">
       <p className="label mb-1"><Link href="/admin/orders">주문 관리</Link> / #{data.id}</p>
-      <h2 className="title mb-6">주문 #{data.id} <span className="text-base text-muted" data-testid="admin-order-status">{ORDER_STATUS_LABEL[data.status]}</span></h2>
+      <h2 className="title mb-6">
+        주문 #{data.id}{" "}
+        <span className="text-base text-muted" data-testid="admin-order-status">
+          {ORDER_STATUS_LABEL[data.status]}
+        </span>
+        {data.isGuest && (
+          <span className="ml-2 text-xs px-2 py-0.5 bg-neutral-200 rounded font-normal" data-testid="guest-badge">
+            비회원
+          </span>
+        )}
+      </h2>
 
       <div className="mb-8 flex flex-wrap items-center gap-3" data-testid="admin-actions">
         {data.actions.includes("prepare") && button("배송 준비", `/admin/orders/${id}/prepare`)}
@@ -102,7 +112,14 @@ function OrderDetail({ id }: { id: number }) {
       {action.error && <p role="alert" className="alert mb-6">{action.error.message}</p>}
 
       <dl className="grid items-baseline gap-x-8 gap-y-1 border-y border-line py-6 sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-y-3">
-        <Row label="손님">{data.userId}</Row>
+        <Row label="손님">
+          {data.userId}
+          {data.isGuest && (
+            <span className="ml-2 text-xs px-1.5 py-0.5 bg-neutral-200 rounded font-normal" data-testid="guest-badge">
+              비회원
+            </span>
+          )}
+        </Row>
         <Row label="금액"><span className="num">{won(data.price)}</span> <span className="text-[0.82rem] text-muted">(상품 {won(data.subtotal)} + 배송비 {won(data.shippingFee)})</span></Row>
         <Row label="결제">{data.payment ? `${data.payment.provider} · ${data.payment.status}` : "-"}</Row>
         <Row label="상품">

@@ -35,3 +35,10 @@ export class CheckoutDto {
   // 고르지 않으면 Stripe, Stripe가 꺼져 있으면 토스(GET /features가 켜진 수단을 알려 준다)
   @IsOptional() @IsIn(PROVIDERS) provider?: ProviderId;
 }
+
+export class GuestCheckoutDto extends CheckoutDto {
+  @IsString()
+  @Matches(NOT_BLANK, { message: "비회원 주문 비밀번호를 입력해 주세요" })
+  @MaxLength(50)
+  password!: string;
+}

@@ -4,7 +4,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { CreateOrderDto } from "./dto/create-order.dto.js";
 import { OrdersService } from "./orders.service.js";
-import { CheckoutDto } from "./dto/checkout.dto.js";
+import { CheckoutDto, GuestCheckoutDto } from "./dto/checkout.dto.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import { AdminOrderQueryDto } from "../pagination/page-query.dto.js";
 import { PAGE_QUERY } from "../pagination/page-query.pipe.js";
@@ -32,6 +32,11 @@ export class OrdersController {
   checkout(@Body() dto: CheckoutDto, @Req() req: Request, @Headers("idempotency-key") idempotencyKey?: string) {
     const userId = (req.user as { userId: string }).userId;
     return this.ordersService.checkout(userId, dto.items, dto.shipping, { privacyConsentVersion: dto.privacyConsentVersion }, idempotencyKey, dto.provider);
+  }
+
+  @Post("guest-checkout")
+  guestCheckout(@Body() dto: GuestCheckoutDto, @Headers("idempotency-key") idempotencyKey?: string) {
+    return this.ordersService.guestCheckout(dto, idempotencyKey);
   }
 
   @Get(":id")
