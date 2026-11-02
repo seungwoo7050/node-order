@@ -6,6 +6,7 @@ import { PROVIDERS, type ProviderId } from "../../payments/payment-gateway.js";
 
 export class CheckoutItemDto {
   @IsInt() @IsPositive() productId!: number;
+  @IsOptional() @IsInt() @IsPositive() variantId?: number;
   @IsInt() @IsPositive() quantity!: number;
 }
 
@@ -23,7 +24,7 @@ export class ShippingAddressDto {
 
 export class CheckoutDto {
   @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => CheckoutItemDto)
-  @ArrayUnique((i: CheckoutItemDto) => i.productId, { message: "같은 상품은 한 줄로 합쳐 수량으로 보냅니다" })
+  @ArrayUnique((i: CheckoutItemDto) => `${i.productId}:${i.variantId ?? 0}`, { message: "같은 상품 옵션은 한 줄로 합쳐 수량으로 보냅니다" })
   items!: CheckoutItemDto[];
 
   @IsDefined({ message: "배송지(shipping)가 필요합니다" }) @ValidateNested() @Type(() => ShippingAddressDto)

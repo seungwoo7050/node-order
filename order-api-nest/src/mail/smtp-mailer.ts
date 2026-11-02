@@ -1,7 +1,8 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import * as net from "node:net";
 import * as tls from "node:tls";
 import type { SentMail } from "./fake-mailer.js";
+import { RuntimeSecretsService } from "../admin/runtime-secrets.service.js";
 
 export interface SmtpConfig {
   host: string;
@@ -31,8 +32,41 @@ export function loadSmtpConfigFromEnv(): SmtpConfig | null {
 export class SmtpMailer {
   private readonly logger = new Logger(SmtpMailer.name);
 
+  constructor(@Optional() private readonly secrets?: RuntimeSecretsService) {}
+
+  private resolveConfig(): SmtpConfig | null {
+    const urlStr = this.secrets?.getSecret("SMTP_URL");
+    if (urlStr) {
+      try {
+        const u = new URL(urlStr);
+        return {
+          host: u.hostname,
+          port: u.port ? Number(u.port) : 587,
+          user: u.username ? decodeURIComponent(u.username) : undefined,
+          pass: u.password ? decodeURIComponent(u.password) : undefined,
+          from: process.env.SMTP_FROM ?? "noreply@node-order.local",
+          secure: u.protocol === "smtps:" || Number(u.port) === 465,
+        };
+      } catch {
+        // fallback
+      }
+    }
+    const host = this.secrets?.getSecret("SMTP_HOST") ?? process.env.SMTP_HOST;
+    if (!host) return null;
+    const port = Number(this.secrets?.getSecret("SMTP_PORT") ?? process.env.SMTP_PORT ?? 587);
+    const secure = process.env.SMTP_SECURE === "true" || port === 465;
+    return {
+      host,
+      port,
+      user: this.secrets?.getSecret("SMTP_USER") ?? process.env.SMTP_USER,
+      pass: this.secrets?.getSecret("SMTP_PASS") ?? process.env.SMTP_PASS,
+      from: process.env.SMTP_FROM ?? "noreply@node-order.local",
+      secure,
+    };
+  }
+
   async send(mail: SentMail, attempt = 1, overrideConfig?: SmtpConfig): Promise<void> {
-    const config = overrideConfig ?? loadSmtpConfigFromEnv();
+    const config = overrideConfig ?? this.resolveConfig() ?? loadSmtpConfigFromEnv();
     if (!config) {
       throw new Error("SMTP_HOST 환경변수가 설정되지 않았습니다");
     }

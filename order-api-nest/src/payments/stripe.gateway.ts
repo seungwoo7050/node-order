@@ -1,5 +1,6 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import Stripe from "stripe";
+import { RuntimeSecretsService } from "../admin/runtime-secrets.service.js";
 import { PG_READ_CONCURRENCY, mapLimit, parseRetryAfter, withPgRetry } from "./pg-retry.js";
 import { PAYMENT_TIMEOUT_MS, PgError, type CheckoutOrder, type PaymentGateway, type PgPayment, type PgRefund, type StartedCheckout } from "./payment-gateway.js";
 
@@ -35,19 +36,27 @@ async function call<T>(fn: () => Promise<T>): Promise<T> {
 export class StripeGateway implements PaymentGateway {
   readonly id = "stripe" as const;
   private client?: Stripe;
+  private currentKey?: string;
+
+  constructor(@Optional() private readonly secrets?: RuntimeSecretsService) {}
 
   private get stripe(): Stripe {
     // 시간 초과는 우리가 정한다(PAYMENT_TIMEOUT_MS). SDK가 몰래 다시 보내지 않게 재시도는 끈다
     const options = { timeout: PAYMENT_TIMEOUT_MS(), maxNetworkRetries: 0 };
     const sim = simulatorUrl();
     if (sim) return (this.client ??= new Stripe("sk_test_simulator", { ...options, protocol: "http", host: sim.hostname, port: sim.port }));
-    const key = process.env.STRIPE_SECRET_KEY;
+    const key = this.secrets?.getSecret("STRIPE_SECRET_KEY") ?? process.env.STRIPE_SECRET_KEY;
     if (!key) throw new Error("STRIPE_SECRET_KEY 환경변수가 없습니다");
-    return (this.client ??= new Stripe(key, options));
+    if (!this.client || this.currentKey !== key) {
+      this.currentKey = key;
+      this.client = new Stripe(key, options);
+    }
+    return this.client;
   }
 
   isConfigured(): boolean {
-    return Boolean(simulatorUrl() || process.env.STRIPE_SECRET_KEY);
+    const key = this.secrets?.getSecret("STRIPE_SECRET_KEY") ?? process.env.STRIPE_SECRET_KEY;
+    return Boolean(simulatorUrl() || key);
   }
 
   async startCheckout(order: CheckoutOrder, attemptKey?: string): Promise<StartedCheckout> {

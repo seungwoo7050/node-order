@@ -24,6 +24,16 @@ export class AdminFulfillmentController {
     return this.fulfillment.list(query);
   }
 
+  @Get("orders/export.csv")
+  @UseGuards(AdminViewGuard)
+  async exportCsv(@Query(PAGE_QUERY) query: AdminFulfillmentQueryDto, @Req() req: Request, @Res() res: Response) {
+    const isDemo = (req.user as { role?: string })?.role === "demo_admin";
+    const csv = await this.fulfillment.exportOrdersCsv(query, isDemo);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="orders-export.csv"');
+    res.send(csv);
+  }
+
   @Get("orders/:id")
   @UseGuards(AdminViewGuard)
   detail(@Param("id", ParseIntPipe) id: number) {

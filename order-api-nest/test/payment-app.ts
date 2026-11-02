@@ -25,6 +25,8 @@ export const SHIPPING = { recipientName: "김구매", recipientPhone: "010-2345-
 // 7,000원 상품 하나(배송비 3,000원을 더해 1개 결제 금액이 10,000원), 구매자 kim, 관리자 boss
 export async function seedPaymentData(baseUrl: string, price = 7_000): Promise<{ user: string; admin: string }> {
   await adminDb.$executeRaw`TRUNCATE categories, refresh_tokens, outbox_events, idempotency_keys, stripe_events, order_items, orders, products, users RESTART IDENTITY CASCADE`;
+  await adminDb.$executeRaw`DELETE FROM integration_secrets`;
+  await adminDb.$executeRaw`UPDATE system_controls SET pause_paid_apis = false, maintenance_mode = false WHERE id = 1`;
   await adminDb.user.create({ data: { id: "kim", name: "김", passwordHash: await hashPassword("pw") } });
   await adminDb.user.create({ data: { id: "boss", name: "관리자", role: "admin", passwordHash: await hashPassword("pw") } });
   await adminDb.product.create({ data: { name: "마우스", price, stock: 10 } });

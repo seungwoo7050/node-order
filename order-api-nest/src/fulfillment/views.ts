@@ -11,14 +11,14 @@ export const fulfillmentSelect = {
   status: true, statusChangedAt: true, deliveredAt: true,
   isGuest: true, returnShippingFee: true,
   recipientName: true, recipientPhone: true, postalCode: true, address1: true, address2: true, deliveryMemo: true,
-  items: { select: { quantity: true, unitPrice: true, product: { select: { id: true, name: true } } }, orderBy: { productId: "asc" } },
+  items: { select: { quantity: true, unitPrice: true, variantKey: true, variantId: true, variantLabel: true, product: { select: { id: true, name: true } } }, orderBy: [{ productId: "asc" }, { variantKey: "asc" }] },
   history: { select: { fromStatus: true, toStatus: true, actorType: true, reason: true, createdAt: true }, orderBy: { id: "asc" } },
   shipments: { select: { id: true, returnId: true, carrier: true, trackingNumber: true, shippedAt: true }, orderBy: { id: "asc" } },
   returns: {
     select: {
       id: true, kind: true, status: true, reason: true, detail: true, refundAmount: true, rejectReason: true,
       requestedAt: true, decidedAt: true, completedAt: true,
-      items: { select: { productId: true, quantity: true, unitPrice: true, product: { select: { name: true } } }, orderBy: { productId: "asc" } },
+      items: { select: { productId: true, variantKey: true, variantId: true, variantLabel: true, quantity: true, unitPrice: true, product: { select: { name: true } } }, orderBy: [{ productId: "asc" }, { variantKey: "asc" }] },
     },
     orderBy: { id: "asc" },
   },
@@ -51,13 +51,24 @@ async function returnRefunds(tx: Tx, orderId: number) {
 
 // 반품할 수 있는 수량: 주문 수량 - (거절되지 않은 반품 요청의 수량)
 export function returnableQuantities(row: {
-  items: { quantity: number; product: { id: number } }[];
-  returns: { status: string; items: { productId: number; quantity: number }[] }[];
-}): Map<number, number> {
-  const left = new Map(row.items.map((i) => [i.product.id, i.quantity]));
+  items: { quantity: number; product: { id: number }; variantKey?: number }[];
+  returns: { status: string; items: { productId: number; quantity: number; variantKey?: number }[] }[];
+}): Map<string | number, number> {
+  const left = new Map<string | number, number>();
+  for (const i of row.items) {
+    const vKey = i.variantKey ?? 0;
+    const key = `${i.product.id}:${vKey}`;
+    left.set(key, (left.get(key) ?? 0) + i.quantity);
+    left.set(i.product.id, (left.get(i.product.id) ?? 0) + i.quantity);
+  }
   for (const r of row.returns) {
     if (r.status === "rejected") continue;
-    for (const i of r.items) left.set(i.productId, (left.get(i.productId) ?? 0) - i.quantity);
+    for (const i of r.items) {
+      const vKey = i.variantKey ?? 0;
+      const key = `${i.productId}:${vKey}`;
+      left.set(key, (left.get(key) ?? 0) - i.quantity);
+      left.set(i.productId, (left.get(i.productId) ?? 0) - i.quantity);
+    }
   }
   return left;
 }
@@ -77,7 +88,13 @@ async function baseView(tx: Tx, row: Row, now: Date) {
     shipments: row.shipments.map(shipmentView),
     returns: row.returns.map((r) => ({ ...r, refund: refunds.get(r.id) ?? null })),
     returnDeadline: deadline,
-    returnable: row.items.map((i) => ({ productId: i.product.id, name: i.product.name, quantity: Math.max(0, left.get(i.product.id) ?? 0) })),
+    returnable: row.items.map((i) => ({
+      productId: i.product.id,
+      variantId: i.variantId,
+      variantLabel: i.variantLabel,
+      name: i.variantLabel ? `${i.product.name} (${i.variantLabel})` : i.product.name,
+      quantity: Math.max(0, left.get(`${i.product.id}:${i.variantKey}`) ?? left.get(i.product.id) ?? 0),
+    })),
     canReturn,
     canConfirm: row.status === "delivered" && !openReturn,
   };

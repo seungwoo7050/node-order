@@ -5,7 +5,21 @@ import type { StorageService } from "../storage/storage.service.js";
 import { toPage } from "../pagination/cursor.js";
 
 export type CategoryStep = { id: number; name: string };
-export type CatalogItem = { id: number; name: string; price: number; imageKey: string | null; categories: CategoryStep[] };
+export type VariantItem = { id: number; name: string; sku: string; priceDelta: number; stock: number; sortOrder: number };
+export type ImageItem = { id: number; imageKey: string; sortOrder: number; imageUrl?: string | null };
+
+export type CatalogItem = {
+  id: number;
+  name: string;
+  price: number;
+  imageKey: string | null;
+  categories: CategoryStep[];
+  materialInfo?: string;
+  sizeGuide?: string;
+  isVisible?: boolean;
+  variants?: VariantItem[];
+  images?: ImageItem[];
+};
 type CatalogPage = { items: CatalogItem[]; nextCursor: number | null };
 type CatalogProduct = CatalogItem & { description: string };
 export type ProductDeps = { prisma: PrismaService; storage: StorageService; cache: CatalogCache };
@@ -22,43 +36,130 @@ export async function categoryPaths(prisma: Pick<PrismaClient, "$queryRaw">, lea
   return new Map(rows.map((r) => [r.leaf, r.path]));
 }
 
-export async function loadCatalogPage(prisma: PrismaService, page: { limit: number; cursor?: number | null }): Promise<CatalogPage> {
+export async function loadCatalogPage(
+  prisma: PrismaService,
+  page: { limit: number; cursor?: number | null; categoryId?: number | null },
+): Promise<CatalogPage> {
+  let categoryIds: number[] | undefined;
+  if (page.categoryId) {
+    const sub = await prisma.$queryRaw<{ id: number }[]>`
+      WITH RECURSIVE subtree AS (
+        SELECT id FROM categories WHERE id = ${page.categoryId}
+        UNION ALL
+        SELECT c.id FROM categories c JOIN subtree s ON c.parent_id = s.id
+      ) CYCLE id SET is_cycle USING visited
+      SELECT id FROM subtree WHERE NOT is_cycle`;
+    categoryIds = sub.map((r) => r.id);
+  }
+
   const rows = await prisma.product.findMany({
-    where: page.cursor ? { id: { gt: page.cursor } } : {},
-    select: { id: true, name: true, price: true, imageKey: true, categoryId: true },
+    where: {
+      deletedAt: null,
+      isVisible: true,
+      ...(page.cursor ? { id: { gt: page.cursor } } : {}),
+      ...(categoryIds ? { categoryId: { in: categoryIds } } : {}),
+    },
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      imageKey: true,
+      categoryId: true,
+      materialInfo: true,
+      sizeGuide: true,
+      isVisible: true,
+      variants: {
+        select: { id: true, name: true, sku: true, priceDelta: true, stock: true, sortOrder: true },
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+      },
+      images: {
+        select: { id: true, imageKey: true, sortOrder: true },
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+      },
+    },
     orderBy: { id: "asc" },
     take: page.limit + 1,
   });
+
   const { items, nextCursor } = toPage(rows, page.limit, (last) => last.id);
   const pathOf = await categoryPaths(prisma, [...new Set(items.flatMap((p) => (p.categoryId ? [p.categoryId] : [])))]);
   return {
-    items: items.map(({ categoryId, ...p }) => ({ ...p, categories: (categoryId && pathOf.get(categoryId)) || [] })),
+    items: items.map(({ categoryId, ...p }) => ({
+      ...p,
+      categories: (categoryId && pathOf.get(categoryId)) || [],
+    })),
     nextCursor,
   };
 }
 
-export async function listProducts(deps: ProductDeps, page: { limit: number; cursor?: number | null }) {
-  const catalog = await deps.cache.getOrLoad(`list:${page.cursor ?? 0}:${page.limit}`, () => loadCatalogPage(deps.prisma, page));
-  const stocks = await deps.prisma.product.findMany({ where: { id: { in: catalog.items.map((p) => p.id) } }, select: { id: true, stock: true } });
+export async function listProducts(deps: ProductDeps, page: { limit: number; cursor?: number | null; categoryId?: number | null }) {
+  const cacheKey = page.categoryId
+    ? `list:${page.cursor ?? 0}:${page.limit}:cat:${page.categoryId}`
+    : `list:${page.cursor ?? 0}:${page.limit}`;
+
+  const catalog = await deps.cache.getOrLoad(cacheKey, () => loadCatalogPage(deps.prisma, page));
+  const productIds = catalog.items.map((p) => p.id);
+
+  const [stocks, variantStocks] = await Promise.all([
+    deps.prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, stock: true } }),
+    deps.prisma.productVariant.findMany({ where: { productId: { in: productIds } }, select: { id: true, stock: true } }),
+  ]);
+
   const stockOf = new Map(stocks.map((s) => [s.id, s.stock]));
+  const variantStockOf = new Map(variantStocks.map((v) => [v.id, v.stock]));
+
   const items = await Promise.all(
-    catalog.items.map(async ({ imageKey, ...p }) => ({
-      ...p,
-      categoryPath: p.categories.map((c) => c.name),
-      stock: stockOf.get(p.id) ?? 0,
-      imageUrl: imageKey ? await deps.storage.createDownloadUrl(imageKey, 600) : null,
-    })),
+    catalog.items.map(async ({ imageKey, ...p }) => {
+      const imagesWithUrl = await Promise.all(
+        (p.images ?? []).map(async (img) => ({
+          ...img,
+          imageUrl: await deps.storage.createDownloadUrl(img.imageKey, 600),
+        })),
+      );
+
+      return {
+        ...p,
+        categoryPath: p.categories.map((c) => c.name),
+        stock: stockOf.get(p.id) ?? 0,
+        imageUrl: imageKey ? await deps.storage.createDownloadUrl(imageKey, 600) : (imagesWithUrl[0]?.imageUrl ?? null),
+        images: imagesWithUrl,
+        variants: (p.variants ?? []).map((v) => ({
+          ...v,
+          stock: variantStockOf.get(v.id) ?? v.stock,
+        })),
+      };
+    }),
   );
+
   return { items, nextCursor: catalog.nextCursor };
 }
 
 async function loadProduct(prisma: PrismaService, id: number): Promise<CatalogProduct | null> {
   const row = await prisma.product.findUnique({
     where: { id },
-    select: { id: true, name: true, price: true, description: true, imageKey: true, categoryId: true },
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      description: true,
+      imageKey: true,
+      categoryId: true,
+      deletedAt: true,
+      isVisible: true,
+      materialInfo: true,
+      sizeGuide: true,
+      variants: {
+        select: { id: true, name: true, sku: true, priceDelta: true, stock: true, sortOrder: true },
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+      },
+      images: {
+        select: { id: true, imageKey: true, sortOrder: true },
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+      },
+    },
   });
-  if (!row) return null;
-  const { categoryId, ...p } = row;
+  if (!row || row.deletedAt !== null) return null;
+  const { categoryId, deletedAt: _, ...p } = row;
   const pathOf = await categoryPaths(prisma, categoryId ? [categoryId] : []);
   return { ...p, categories: (categoryId && pathOf.get(categoryId)) || [] };
 }
@@ -68,17 +169,54 @@ export async function getProduct(deps: ProductDeps, id: number) {
   if (!catalog) return null;
   const row = await deps.prisma.product.findUnique({ where: { id }, select: { stock: true } });
   if (!row) return null;
+
+  const variantStocks = await deps.prisma.productVariant.findMany({ where: { productId: id }, select: { id: true, stock: true } });
+  const variantStockOf = new Map(variantStocks.map((v) => [v.id, v.stock]));
+
   const { imageKey, ...p } = catalog;
-  return { ...p, categoryPath: p.categories.map((c) => c.name), stock: row.stock, imageUrl: imageKey ? await deps.storage.createDownloadUrl(imageKey, 600) : null };
+  const imagesWithUrl = await Promise.all(
+    (p.images ?? []).map(async (img) => ({
+      ...img,
+      imageUrl: await deps.storage.createDownloadUrl(img.imageKey, 600),
+    })),
+  );
+
+  return {
+    ...p,
+    categoryPath: p.categories.map((c) => c.name),
+    stock: row.stock,
+    imageUrl: imageKey ? await deps.storage.createDownloadUrl(imageKey, 600) : (imagesWithUrl[0]?.imageUrl ?? null),
+    images: imagesWithUrl,
+    variants: (p.variants ?? []).map((v) => ({
+      ...v,
+      stock: variantStockOf.get(v.id) ?? v.stock,
+    })),
+  };
 }
 
-// 검색 결과처럼 id 순서가 정해진 상품 목록에 목록과 같은 모양(재고, 이미지 URL, 카테고리 경로)을 붙인다
-// 카탈로그 캐시를 거치지 않는다(검색어마다 키가 생겨 끝없이 는다)
 export async function hydrateProducts(deps: Omit<ProductDeps, "cache">, ids: number[]) {
   if (ids.length === 0) return [];
   const rows = await deps.prisma.product.findMany({
     where: { id: { in: ids } },
-    select: { id: true, name: true, price: true, stock: true, imageKey: true, categoryId: true },
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      stock: true,
+      imageKey: true,
+      categoryId: true,
+      materialInfo: true,
+      sizeGuide: true,
+      isVisible: true,
+      variants: {
+        select: { id: true, name: true, sku: true, priceDelta: true, stock: true, sortOrder: true },
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+      },
+      images: {
+        select: { id: true, imageKey: true, sortOrder: true },
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+      },
+    },
   });
   const byId = new Map(rows.map((r) => [r.id, r]));
   const pathOf = await categoryPaths(deps.prisma, [...new Set(rows.flatMap((p) => (p.categoryId ? [p.categoryId] : [])))]);
@@ -88,7 +226,23 @@ export async function hydrateProducts(deps: Omit<ProductDeps, "cache">, ids: num
       if (!row) return []; // 색인에는 남았지만 지워진 상품
       const { categoryId, imageKey, ...p } = row;
       const categories = (categoryId && pathOf.get(categoryId)) || [];
-      return [(async () => ({ ...p, categories, categoryPath: categories.map((c) => c.name), imageUrl: imageKey ? await deps.storage.createDownloadUrl(imageKey, 600) : null }))()];
+      return [
+        (async () => {
+          const imagesWithUrl = await Promise.all(
+            (p.images ?? []).map(async (img) => ({
+              ...img,
+              imageUrl: await deps.storage.createDownloadUrl(img.imageKey, 600),
+            })),
+          );
+          return {
+            ...p,
+            categories,
+            categoryPath: categories.map((c) => c.name),
+            imageUrl: imageKey ? await deps.storage.createDownloadUrl(imageKey, 600) : (imagesWithUrl[0]?.imageUrl ?? null),
+            images: imagesWithUrl,
+          };
+        })(),
+      ];
     }),
   );
 }
