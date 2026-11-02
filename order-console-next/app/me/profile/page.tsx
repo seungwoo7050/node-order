@@ -175,9 +175,9 @@ function ProfileForm({ profile }: { profile: ProfileData }) {
               <input
                 type="text"
                 value={postalCode}
-                onChange={(e) => setPostalCode(e.target.value)}
+                readOnly
                 placeholder="06236"
-                className="w-28 border border-line px-3 py-1.5 font-mono"
+                className="w-28 border border-line bg-neutral-50 px-3 py-1.5 font-mono"
                 data-testid="profile-postal-code"
               />
               <AddressSearchModal
@@ -194,9 +194,9 @@ function ProfileForm({ profile }: { profile: ProfileData }) {
             <input
               type="text"
               value={address1}
-              onChange={(e) => setAddress1(e.target.value)}
-              placeholder="서울특별시 강남구 테헤란로 123"
-              className="border border-line px-3 py-1.5"
+              readOnly
+              placeholder="우편번호 찾기로 도로명 주소를 검색해 주세요"
+              className="border border-line bg-neutral-50 px-3 py-1.5"
               data-testid="profile-address1"
             />
           </label>

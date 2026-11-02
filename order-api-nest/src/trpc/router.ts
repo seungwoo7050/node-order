@@ -28,19 +28,7 @@ export const appRouter = router({
     profile: protectedProcedure.query(({ ctx }) =>
       ctx.prisma.user.findUniqueOrThrow({
         where: { id: ctx.userId },
-        select: {
-          id: true,
-          name: true,
-          role: true,
-          phone: true,
-          isGuest: true,
-          recipientName: true,
-          recipientPhone: true,
-          postalCode: true,
-          address1: true,
-          address2: true,
-          deliveryMemo: true,
-        },
+        select: { id: true, name: true, role: true },
       }),
     ),
     orders: protectedProcedure

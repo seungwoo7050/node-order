@@ -39,7 +39,7 @@ export class CatalogCache implements OnModuleDestroy {
   async invalidate(): Promise<void> {
     try {
       await this.redis.del(...CATALOG_KEYS_TO_CLEAR);
-    } catch (err) {
+    } catch {
     }
   }
 
