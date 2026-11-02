@@ -127,7 +127,11 @@ export default function CartPage() {
             shipping,
             privacyConsentVersion: privacy.data?.version,
             password: guestPassword,
-            items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+            items: items.map((i) => ({
+              productId: i.productId,
+              quantity: i.quantity,
+              ...(i.variantId ? { variantId: i.variantId } : {}),
+            })),
           }),
         });
         if (!res.ok) {
@@ -142,8 +146,14 @@ export default function CartPage() {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(key ? { "Idempotency-Key": key } : {}) },
         body: JSON.stringify({
-          provider, shipping, privacyConsentVersion: privacy.data?.version,
-          items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+          provider,
+          shipping,
+          privacyConsentVersion: privacy.data?.version,
+          items: items.map((i) => ({
+            productId: i.productId,
+            quantity: i.quantity,
+            ...(i.variantId ? { variantId: i.variantId } : {}),
+          })),
         }),
       });
     },
@@ -182,15 +192,18 @@ export default function CartPage() {
         <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,1fr)_300px]">
           <ul className="border-t border-line">
             {items.map((i) => (
-              <li key={i.productId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 border-b border-line py-4 sm:grid-cols-[minmax(0,1fr)_auto_7rem]">
+              <li key={`${i.productId}:${i.variantId ?? 0}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 border-b border-line py-4 sm:grid-cols-[minmax(0,1fr)_auto_7rem]">
                 <div className="min-w-0">
                   <p className="font-normal">{i.name}</p>
+                  {i.variantLabel && (
+                    <p className="text-xs text-muted font-normal mt-0.5">옵션: {i.variantLabel}</p>
+                  )}
                   <p className="num text-[0.8rem] text-muted">{won(i.price)}</p>
                 </div>
                 <span className="num text-right sm:order-last">{won(i.price * i.quantity)}</span>
                 <span className="col-span-2 flex items-center gap-3 sm:col-span-1">
                   <Stepper productId={i.productId} name={i.name} quantity={i.quantity} max={stockOf(i.productId)} />
-                  <button type="button" className="link-quiet" onClick={() => remove(i.productId)}>빼기</button>
+                  <button type="button" className="link-quiet" onClick={() => remove(i.productId, i.variantId)}>빼기</button>
                 </span>
               </li>
             ))}

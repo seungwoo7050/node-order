@@ -22,7 +22,22 @@ export async function ProductDetail({ params }: { params: Promise<{ id: string }
         <h1 id="product-title" className="title">{product.name}</h1>
         <p className="num">{won(product.price)}</p>
         {product.description && <p className="whitespace-pre-line text-sm text-muted">{product.description}</p>}
-        <BuyBox id={product.id} name={product.name} price={product.price} />
+        
+        {product.materialInfo && (
+          <div className="rounded border border-line p-2.5 text-xs">
+            <span className="font-semibold text-fg">소재 / 혼용률: </span>
+            <span className="text-muted">{product.materialInfo}</span>
+          </div>
+        )}
+
+        {product.sizeGuide && (
+          <div className="rounded border border-line p-2.5 text-xs">
+            <span className="font-semibold text-fg">사이즈 가이드: </span>
+            <span className="text-muted">{product.sizeGuide}</span>
+          </div>
+        )}
+
+        <BuyBox id={product.id} name={product.name} price={product.price} variants={product.variants} />
       </div>
     </article>
   );

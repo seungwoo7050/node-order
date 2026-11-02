@@ -59,6 +59,9 @@ export function EditProductForm({ product }: { product: CatalogProduct }) {
   const [name, setName] = useState(product.name);
   const [price, setPrice] = useState(String(product.price));
   const [description, setDescription] = useState(product.description);
+  const [materialInfo, setMaterialInfo] = useState(product.materialInfo ?? "");
+  const [sizeGuide, setSizeGuide] = useState(product.sizeGuide ?? "");
+  const [isVisible, setIsVisible] = useState(product.isVisible ?? true);
   const [keywords, setKeywords] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -85,7 +88,14 @@ export function EditProductForm({ product }: { product: CatalogProduct }) {
     startTransition(async () => {
       let token = useAuthStore.getState().accessToken ?? (await refreshAccessToken());
       if (!token) return setError("로그인이 필요합니다.");
-      const input = { name: name.trim(), price: Number(price), description: description.trim() };
+      const input = {
+        name: name.trim(),
+        price: Number(price),
+        description: description.trim(),
+        materialInfo: materialInfo.trim(),
+        sizeGuide: sizeGuide.trim(),
+        isVisible,
+      };
       void queryClient.invalidateQueries({ queryKey: trpc.products.pathKey() });
       let result = await saveProduct(token, product.id, input);
       if (result.status === 401 && (token = await refreshAccessToken())) result = await saveProduct(token, product.id, input);
@@ -110,6 +120,20 @@ export function EditProductForm({ product }: { product: CatalogProduct }) {
         <textarea className="min-h-32 border border-line-strong bg-bg px-3 py-2" value={description} onChange={(e) => { setDescription(e.target.value); setHandEdited(true); }}
           maxLength={DESCRIPTION_MAX} disabled={readOnly} readOnly={draft.drafting} aria-busy={draft.drafting}
           aria-describedby={readOnly ? "read-only-note" : canDraft ? "draft-note" : undefined} />
+      </label>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <label className="grid gap-1">
+          <span className="label">소재 / 혼용률</span>
+          <input className="border border-line-strong bg-bg px-3 py-2 text-sm" value={materialInfo} onChange={(e) => setMaterialInfo(e.target.value)} disabled={readOnly} />
+        </label>
+        <label className="grid gap-1">
+          <span className="label">사이즈 가이드</span>
+          <input className="border border-line-strong bg-bg px-3 py-2 text-sm" value={sizeGuide} onChange={(e) => setSizeGuide(e.target.value)} disabled={readOnly} />
+        </label>
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={isVisible} onChange={(e) => setIsVisible(e.target.checked)} disabled={readOnly} />
+        <span>쇼핑몰에 상품 노출</span>
       </label>
       {canDraft && (
         <section aria-label="AI 초안" className="grid gap-2 border-t border-line pt-4">

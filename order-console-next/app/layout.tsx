@@ -6,6 +6,7 @@ import { connection } from "next/server";
 import { SwRegister } from './sw-resgister';
 import { OnlineBanner } from "./online-banner";
 import { StoreFooter } from "./store-footer";
+import { StoreFooterWrapper } from "./store-footer-wrapper";
 import { Suspense } from "react";
 import "./globals.css";
 
@@ -32,9 +33,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <SwRegister />
           <OnlineBanner />
           {children}
-          <Suspense fallback={null}>
-            <StoreFooter />
-          </Suspense>
+          <StoreFooterWrapper>
+            <Suspense fallback={null}>
+              <StoreFooter />
+            </Suspense>
+          </StoreFooterWrapper>
         </Providers>
       </body>
     </html>

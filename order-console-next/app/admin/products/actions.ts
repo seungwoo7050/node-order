@@ -5,7 +5,14 @@ import { redirect } from "next/navigation";
 import { PRODUCTS_TAG, productTag } from "@/lib/catalog";
 
 export type ActionResult = { status: number; message: string };
-export type ProductInput = { name: string; price: number; description: string };
+export type ProductInput = {
+  name: string;
+  price: number;
+  description: string;
+  materialInfo?: string;
+  sizeGuide?: string;
+  isVisible?: boolean;
+};
 
 async function failure(res: Response): Promise<ActionResult> {
   const body = (await res.json().catch(() => ({}))) as { message?: string | string[] };

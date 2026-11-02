@@ -32,6 +32,6 @@ export const CARRIER_OPTIONS = [
 export type ShippingPolicy = { shippingFee: number; freeShippingThreshold: number };
 export const shippingFeeFor = (subtotal: number, policy: ShippingPolicy) => (subtotal >= policy.freeShippingThreshold ? 0 : policy.shippingFee);
 
-export const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
+export const won = (n?: number | null) => `${(n ?? 0).toLocaleString("ko-KR")}원`;
 export const dateTime = (iso: string | Date) =>
   new Date(iso).toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
