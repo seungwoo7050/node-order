@@ -390,6 +390,10 @@ model StoreSettings {
   freeShippingThreshold Int      @map("free_shipping_threshold")
   returnShippingFee     Int      @map("return_shipping_fee")
   lowStockThreshold     Int      @map("low_stock_threshold")
+  storeDesign           String   @default("editorial-atelier") @map("store_design")
+  heroTitle             String   @default("CONTEMPORARY ARCHIVE COLLECTION") @map("hero_title")
+  heroSubtitle          String   @default("소재의 본질과 절제된 실루엣에 집중한 데일리 에센셜 아카이브") @map("hero_subtitle")
+  announcementText      String   @default("전 상품 50,000원 이상 구매 시 무료배송 · 신규 가입 웰컴 쿠폰 증정") @map("announcement_text")
   version               Int      @default(1)
   updatedAt             DateTime @default(now()) @map("updated_at")
 

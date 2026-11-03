@@ -1,5 +1,5 @@
 import { Transform } from "class-transformer";
-import { IsEmail, IsInt, IsString, Matches, Max, MaxLength, Min, Validate, ValidatorConstraint, type ValidatorConstraintInterface } from "class-validator";
+import { IsEmail, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, Validate, ValidatorConstraint, type ValidatorConstraintInterface } from "class-validator";
 import { isValidBusinessNumber, normalizeBusinessNumber } from "./business-number.js";
 
 @ValidatorConstraint({ name: "businessNumber" })
@@ -15,6 +15,33 @@ class BusinessNumberConstraint implements ValidatorConstraintInterface {
 const NOT_BLANK = /\S/;
 const trim = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value);
 const MAX_AMOUNT = 1_000_000;
+
+export const STORE_DESIGNS = ["muji-hara", "editorial-atelier", "zavanas-archive"] as const;
+export type StoreDesign = (typeof STORE_DESIGNS)[number];
+
+export class BrandingDto {
+  @IsOptional()
+  @IsIn(STORE_DESIGNS, { message: "스토어 디자인은 muji-hara, editorial-atelier, zavanas-archive 중 하나여야 합니다" })
+  storeDesign?: StoreDesign;
+
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(200)
+  heroTitle?: string;
+
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(500)
+  heroSubtitle?: string;
+
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(300)
+  announcementText?: string;
+}
 
 // PUT /admin/settings 본문. 칸 전체를 보낸다(빠진 칸은 400). 비밀값(PG 키 등) 칸은 없다: 환경변수에만 둔다
 export class StoreSettingsDto {
@@ -32,4 +59,26 @@ export class StoreSettingsDto {
   @IsInt({ message: "무료 배송 기준은 원 단위 정수입니다" }) @Min(0) @Max(100_000_000) freeShippingThreshold!: number;
   @IsInt({ message: "반품 왕복 배송비는 원 단위 정수입니다" }) @Min(0) @Max(MAX_AMOUNT) returnShippingFee!: number;
   @IsInt({ message: "재고 부족 기준은 정수입니다" }) @Min(0) @Max(100_000) lowStockThreshold!: number;
+
+  @IsOptional()
+  @IsIn(STORE_DESIGNS, { message: "스토어 디자인은 muji-hara, editorial-atelier, zavanas-archive 중 하나여야 합니다" })
+  storeDesign?: StoreDesign;
+
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(200)
+  heroTitle?: string;
+
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(500)
+  heroSubtitle?: string;
+
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(300)
+  announcementText?: string;
 }

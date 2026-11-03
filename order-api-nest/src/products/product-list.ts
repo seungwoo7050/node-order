@@ -19,6 +19,8 @@ export type CatalogItem = {
   isVisible?: boolean;
   variants?: VariantItem[];
   images?: ImageItem[];
+  reviewCount?: number;
+  averageRating?: number;
 };
 type CatalogPage = { items: CatalogItem[]; nextCursor: number | null };
 type CatalogProduct = CatalogItem & { description: string };
@@ -76,6 +78,9 @@ export async function loadCatalogPage(
         select: { id: true, imageKey: true, sortOrder: true },
         orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
       },
+      reviews: {
+        select: { rating: true },
+      },
     },
     orderBy: { id: "asc" },
     take: page.limit + 1,
@@ -84,10 +89,20 @@ export async function loadCatalogPage(
   const { items, nextCursor } = toPage(rows, page.limit, (last) => last.id);
   const pathOf = await categoryPaths(prisma, [...new Set(items.flatMap((p) => (p.categoryId ? [p.categoryId] : [])))]);
   return {
-    items: items.map(({ categoryId, ...p }) => ({
-      ...p,
-      categories: (categoryId && pathOf.get(categoryId)) || [],
-    })),
+    items: items.map(({ categoryId, reviews, ...p }) => {
+      const revs = reviews ?? [];
+      const reviewCount = revs.length;
+      const averageRating =
+        reviewCount > 0
+          ? Math.round((revs.reduce((sum, r) => sum + r.rating, 0) / reviewCount) * 10) / 10
+          : 0;
+      return {
+        ...p,
+        categories: (categoryId && pathOf.get(categoryId)) || [],
+        reviewCount,
+        averageRating,
+      };
+    }),
     nextCursor,
   };
 }
@@ -156,12 +171,21 @@ async function loadProduct(prisma: PrismaService, id: number): Promise<CatalogPr
         select: { id: true, imageKey: true, sortOrder: true },
         orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
       },
+      reviews: {
+        select: { rating: true },
+      },
     },
   });
   if (!row || row.deletedAt !== null) return null;
-  const { categoryId, deletedAt: _, ...p } = row;
+  const { categoryId, deletedAt: _, reviews, ...p } = row;
   const pathOf = await categoryPaths(prisma, categoryId ? [categoryId] : []);
-  return { ...p, categories: (categoryId && pathOf.get(categoryId)) || [] };
+  const revs = reviews ?? [];
+  const reviewCount = revs.length;
+  const averageRating =
+    reviewCount > 0
+      ? Math.round((revs.reduce((sum, r) => sum + r.rating, 0) / reviewCount) * 10) / 10
+      : 0;
+  return { ...p, categories: (categoryId && pathOf.get(categoryId)) || [], reviewCount, averageRating };
 }
 
 export async function getProduct(deps: ProductDeps, id: number) {
