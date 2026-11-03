@@ -40,22 +40,54 @@ for (const p of catalog.products) {
 }
 if (noPhoto.size > 0) console.warn(`사진 없음(파일도 저장소의 키도 없다): ${[...noPhoto].join(", ")}`);
 
-// 3. 카테고리·상품
+// 3. 카테고리·상품·상점 설정·약관·쿠폰·리뷰 초기화
 for (const c of catalog.categories) {
-  await prisma.category.upsert({ where: { id: c.id }, create: c, update: { name: c.name, parentId: c.parentId } });
+  await prisma.category.upsert({ where: { id: c.id }, create: c, update: { name: c.name, parentId: c.parentId, sortOrder: 0 } });
 }
 const categoryIds = new Map(catalog.categories.map((c) => [c.name, c.id]));
+const seedCategoryIdList = catalog.categories.map((c) => c.id);
 for (const p of catalog.products) {
   const categoryId = categoryIds.get(p.category);
   if (categoryId === undefined) throw new Error(`catalog.json: 없는 카테고리 "${p.category}" (${p.name})`);
-  const data = { name: p.name, price: p.price, stock: p.stock, description: p.description, categoryId, imageKey: noPhoto.has(p.photo) ? null : `seed/${p.photo}`, isVisible: true, deletedAt: null };
+  const data = { name: p.name, price: p.price, stock: p.stock, description: p.description, categoryId, imageKey: noPhoto.has(p.photo) ? null : `seed/${p.photo}`, isVisible: true, deletedAt: null, materialInfo: "", sizeGuide: "" };
   await prisma.product.upsert({ where: { id: p.id }, create: { id: p.id, ...data }, update: data });
 }
 const productIds = catalog.products.map((p) => p.id);
+await prisma.productImage.deleteMany({});
+await prisma.productVariant.deleteMany({ where: { orderItems: { none: {} }, returnItems: { none: {} } } });
 await prisma.product.deleteMany({ where: { id: { notIn: productIds }, items: { none: {} }, returnItems: { none: {} } } });
-await prisma.product.updateMany({ where: { id: { notIn: productIds } }, data: { stock: 0, isVisible: false, deletedAt: new Date() } });
+await prisma.product.updateMany({ where: { id: { notIn: productIds } }, data: { stock: 0, isVisible: false, deletedAt: new Date(), categoryId: null } });
+await prisma.category.updateMany({ where: { id: { notIn: seedCategoryIdList } }, data: { parentId: null } });
+await prisma.category.deleteMany({ where: { id: { notIn: seedCategoryIdList }, products: { none: {} }, children: { none: {} } } });
 await prisma.$executeRaw`SELECT setval(pg_get_serial_sequence('categories', 'id'), (SELECT max(id) FROM categories))`;
 await prisma.$executeRaw`SELECT setval(pg_get_serial_sequence('products', 'id'), (SELECT max(id) FROM products))`;
+
+const defaultStoreSettings = {
+  storeName: "Brown Store",
+  representative: "대표자",
+  businessNumber: "1234567891",
+  mailOrderNumber: "제0000-서울강남-00000호",
+  address: "서울특별시 강남구 테헤란로 123",
+  phone: "02-000-0000",
+  email: "help@example.com",
+  privacyOfficer: "개인정보 보호책임자",
+  shippingFee: 3000,
+  freeShippingThreshold: 50000,
+  returnShippingFee: 6000,
+  lowStockThreshold: 5,
+  storeDesign: "editorial-atelier",
+  heroTitle: "CONTEMPORARY ARCHIVE COLLECTION",
+  heroSubtitle: "소재의 본질과 절제된 실루엣에 집중한 데일리 에센셜 아카이브",
+  announcementText: "전 상품 50,000원 이상 구매 시 무료배송 · 신규 가입 웰컴 쿠폰 증정",
+};
+await prisma.storeSettings.upsert({
+  where: { id: 1 },
+  create: { id: 1, ...defaultStoreSettings },
+  update: defaultStoreSettings,
+});
+await prisma.legalDocument.deleteMany({ where: { version: { gt: 1 } } });
+await prisma.review.deleteMany({});
+await prisma.coupon.deleteMany({});
 
 // 4. 시드 사용자와 그 주문
 const seedUsers = [
@@ -66,7 +98,7 @@ const seedUsers = [
 ];
 for (const u of seedUsers) {
   const passwordHash = await hashPassword(process.env.DEMO_PASSWORD!);
-  await prisma.user.upsert({ where: { id: u.id }, create: { ...u, passwordHash, isActive: true }, update: { passwordHash, isActive: true, role: u.role } });
+  await prisma.user.upsert({ where: { id: u.id }, create: { ...u, passwordHash, isActive: true }, update: { name: u.name, passwordHash, isActive: true, role: u.role } });
 }
 await prisma.systemControl.upsert({
   where: { id: 1 },
@@ -82,6 +114,24 @@ const seedOrders: { userId: string; paid: boolean; items: [productId: number, qu
   { userId: "park", paid: true, items: [[15, 1], [16, 1]] },
 ];
 const seedUserIds = seedUsers.map((u) => u.id);
+// 시드 외 일반/비회원 사용자 중 PG(stripe·toss) 결제가 없는 사용자의 주문을 정리하고 계정도 정리한다
+const extraUsers = await prisma.user.findMany({ where: { id: { notIn: seedUserIds } }, select: { id: true } });
+const extraUserIds = extraUsers.map((u) => u.id);
+if (extraUserIds.length > 0) {
+  await prisma.$transaction((tx) => deleteOrdersKeepingPgPayments(tx, extraUserIds));
+  const removableUsers = await prisma.user.findMany({
+    where: { id: { in: extraUserIds }, orders: { none: {} } },
+    select: { id: true },
+  });
+  const removableIds = removableUsers.map((u) => u.id);
+  if (removableIds.length > 0) {
+    await prisma.refreshToken.deleteMany({ where: { userId: { in: removableIds } } });
+    await prisma.accessToken.deleteMany({ where: { userId: { in: removableIds } } });
+    await prisma.idempotencyKey.deleteMany({ where: { userId: { in: removableIds } } });
+    await prisma.outboxEvent.deleteMany({ where: { userId: { in: removableIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: removableIds } } });
+  }
+}
 // 견본 주문을 다시 만든다. PG(stripe·toss) 결제 기록이 있는 주문은 지우지 않고 남긴다(0031)
 const { kept: keptPgOrders } = await prisma.$transaction((tx) => deleteOrdersKeepingPgPayments(tx, seedUserIds));
 const priceOf = new Map(catalog.products.map((p) => [p.id, p.price]));

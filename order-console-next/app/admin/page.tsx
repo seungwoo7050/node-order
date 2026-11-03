@@ -6,6 +6,7 @@ import { useState, type ReactNode } from "react";
 import { authFetch } from "@/lib/api-client";
 import { won } from "@/lib/orders";
 import { AdminOnly } from "./products/admin-only";
+import styles from "./admin.module.css";
 
 type DashboardScope = "all" | "post_seed" | "seed_only";
 
@@ -47,17 +48,49 @@ type Dashboard = {
 
 const READ_ONLY = "데모 관리자는 볼 수만 있습니다. 타일의 링크로 각 목록을 열어 볼 수 있고, 바꾸는 동작은 진짜 관리자만 할 수 있습니다.";
 
-function TileCard({ title, href, testId, children, linkLabel = "목록 보기" }: { title: string; href: string; testId: string; children: ReactNode; linkLabel?: string }) {
+function TileCard({
+  index,
+  title,
+  href,
+  testId,
+  featured = false,
+  children,
+  linkLabel = "목록 보기",
+}: {
+  index: string;
+  title: string;
+  href: string;
+  testId: string;
+  featured?: boolean;
+  children: ReactNode;
+  linkLabel?: string;
+}) {
   return (
-    <section aria-label={title} className="border-t border-line-strong pt-3" data-testid={testId}>
-      <h2 className="label mb-2">{title}</h2>
-      <div className="mb-2">{children}</div>
-      <Link href={href} className="link-quiet">{linkLabel}</Link>
+    <section
+      aria-label={title}
+      className={featured ? styles.kpiTileFeatured : styles.kpiTile}
+      data-testid={testId}
+    >
+      <div>
+        <div className={styles.kpiHeader}>
+          <h2 className={styles.kpiTitle}>{title}</h2>
+          <span className={styles.kpiIndex}>{index}</span>
+        </div>
+        <div className={styles.kpiBody}>{children}</div>
+      </div>
+      <Link href={href} className={styles.kpiFooterLink}>
+        {linkLabel} →
+      </Link>
     </section>
   );
 }
 
-const Big = ({ children }: { children: ReactNode }) => <p className="num font-serif text-2xl">{children}</p>;
+const Big = ({ children }: { children: ReactNode }) => <p className={styles.kpiBig}>{children}</p>;
+
+function formatRatio(val: number | undefined): number {
+  if (!val) return 0;
+  return val > 1 ? Math.round(val) : Math.round(val * 100);
+}
 
 function Tiles() {
   const [scope, setScope] = useState<DashboardScope>("all");
@@ -75,50 +108,70 @@ function Tiles() {
         대시보드를 불러오지 못했습니다. ({error.message}) <button type="button" className="btn ml-2" onClick={() => void refetch()}>다시 시도</button>
       </p>
     );
-  const { today, pending, lowStock, zeroResultQueries, reconciliation, pipelineFunnel, guestVsMember, bestSellers, lowStockVariants, recentSales, dataOrigin } = data;
+  const {
+    today,
+    pending,
+    lowStock,
+    zeroResultQueries,
+    reconciliation,
+    pipelineFunnel,
+    guestVsMember,
+    bestSellers,
+    lowStockVariants,
+    recentSales,
+    dataOrigin,
+  } = data;
+
   return (
-    <div className="space-y-12">
-      {/* 시드 기본 데이터 vs 시드 이후 실유입 데이터 구분 바 */}
+    <div className={styles.dashboard}>
+      {/* 시드 기본 데이터 vs 시드 이후 실유입 데이터 구분 매트릭스 */}
       {dataOrigin && (
         <section
           aria-label="데이터 출처 구분"
           data-testid="dashboard-origin-filter"
-          className="rounded border border-line bg-neutral-50/70 p-4"
+          className={styles.originPanel}
         >
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="label text-fg">데이터 출처 구분 (시드 기본 vs 시드 이후 유입)</h2>
-              <p className="text-xs text-muted mt-0.5">
-                시드 스크립트(manual 샘플 결제·데모 계정)로 생성된 데이터와 실제 스토어프론트 체크아웃으로 쌓인 데이터를 분리해 조회합니다.
+          <div className={styles.originHeader}>
+            <div className={styles.originTitleGroup}>
+              <h2 className={styles.originTitle}>Data Origin Filter · 시드 기본 vs 실유입 분리</h2>
+              <p className={styles.originDesc}>
+                시드 스크립트(manual 샘플 결제·데모 계정)로 생성된 데이터와 실제 스토어프론트 체크아웃으로 쌓인 데이터를 분리해 집계합니다.
               </p>
             </div>
             <Link
-              href={scope === "post_seed" ? "/admin/orders?origin=post_seed&status=" : scope === "seed_only" ? "/admin/orders?origin=seed_only&status=" : "/admin/orders"}
-              className="link-quiet text-xs"
+              href={
+                scope === "post_seed"
+                  ? "/admin/orders?origin=post_seed&status="
+                  : scope === "seed_only"
+                    ? "/admin/orders?origin=seed_only&status="
+                    : "/admin/orders"
+              }
+              className={styles.originActionLink}
             >
-              이 범위 주문 목록 열기 →
+              현재 범위 주문 목록 열기 →
             </Link>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3 text-left text-sm">
+
+          <div className={styles.originGrid}>
             <button
               type="button"
               data-testid="scope-all"
               onClick={() => setScope("all")}
-              className={`rounded border p-3 text-left cursor-pointer transition-colors ${
-                scope === "all"
-                  ? "border-line-strong bg-bg ring-1 ring-line-strong"
-                  : "border-line bg-bg/60 hover:bg-bg"
-              }`}
+              className={`${styles.originTab} ${scope === "all" ? styles.originTabActive : ""}`}
             >
-              <span className="flex items-center justify-between text-xs text-muted mb-1">
-                <span>전체 합산</span>
-                {scope === "all" && <span className="rounded bg-fg px-1.5 py-0.5 text-[11px] text-bg">선택됨</span>}
-              </span>
-              <span className="num font-semibold text-base block">
+              <div className={styles.originTabTop}>
+                <span className={styles.originTabLabel}>전체 합산 (All Records)</span>
+                {scope === "all" ? (
+                  <span className={styles.originStateBadge}>ACTIVE</span>
+                ) : (
+                  <span className={styles.originStateBadgeIdle}>01</span>
+                )}
+              </div>
+              <span className={styles.originMetric}>
                 주문 {dataOrigin.seedOrders + dataOrigin.postSeedOrders}건 · {won(dataOrigin.seedPaidAmount + dataOrigin.postSeedPaidAmount)}
               </span>
-              <span className="text-xs text-muted block mt-1">
-                전체 고객 {dataOrigin.seedUsers + dataOrigin.postSeedUsers}명
+              <span className={styles.originSub}>
+                전체 등록 고객 {dataOrigin.seedUsers + dataOrigin.postSeedUsers}명 합산
               </span>
             </button>
 
@@ -126,21 +179,21 @@ function Tiles() {
               type="button"
               data-testid="scope-post-seed"
               onClick={() => setScope("post_seed")}
-              className={`rounded border p-3 text-left cursor-pointer transition-colors ${
-                scope === "post_seed"
-                  ? "border-emerald-700 bg-emerald-50/60 ring-1 ring-emerald-700"
-                  : "border-line bg-bg/60 hover:bg-bg"
-              }`}
+              className={`${styles.originTab} ${scope === "post_seed" ? styles.originTabActive : ""}`}
             >
-              <span className="flex items-center justify-between text-xs text-emerald-800 font-medium mb-1">
-                <span>시드 이후 실유입 데이터만</span>
-                {scope === "post_seed" && <span className="rounded bg-emerald-700 px-1.5 py-0.5 text-[11px] text-white">선택됨</span>}
-              </span>
-              <span className="num font-semibold text-base block text-fg">
+              <div className={styles.originTabTop}>
+                <span className={styles.originTabLabel}>시드 이후 실유입 데이터만 (Live Only)</span>
+                {scope === "post_seed" ? (
+                  <span className={styles.originStateBadge}>ACTIVE</span>
+                ) : (
+                  <span className={styles.originStateBadgeIdle}>02</span>
+                )}
+              </div>
+              <span className={styles.originMetric}>
                 주문 {dataOrigin.postSeedOrders}건 · {won(dataOrigin.postSeedPaidAmount)}
               </span>
-              <span className="text-xs text-muted block mt-1">
-                시드 이후 신규/비회원 고객 {dataOrigin.postSeedUsers}명 (PG 실결제·배송지 입력 주문)
+              <span className={styles.originSub}>
+                시드 이후 신규·비회원 고객 {dataOrigin.postSeedUsers}명 (실제 체크아웃 유입)
               </span>
             </button>
 
@@ -148,171 +201,223 @@ function Tiles() {
               type="button"
               data-testid="scope-seed-only"
               onClick={() => setScope("seed_only")}
-              className={`rounded border p-3 text-left cursor-pointer transition-colors ${
-                scope === "seed_only"
-                  ? "border-amber-700 bg-amber-50/60 ring-1 ring-amber-700"
-                  : "border-line bg-bg/60 hover:bg-bg"
-              }`}
+              className={`${styles.originTab} ${scope === "seed_only" ? styles.originTabActive : ""}`}
             >
-              <span className="flex items-center justify-between text-xs text-amber-800 font-medium mb-1">
-                <span>시드·데모 초기 데이터만</span>
-                {scope === "seed_only" && <span className="rounded bg-amber-700 px-1.5 py-0.5 text-[11px] text-white">선택됨</span>}
-              </span>
-              <span className="num font-semibold text-base block text-fg">
+              <div className={styles.originTabTop}>
+                <span className={styles.originTabLabel}>시드·데모 초기 데이터만 (Seed Baseline)</span>
+                {scope === "seed_only" ? (
+                  <span className={styles.originStateBadge}>ACTIVE</span>
+                ) : (
+                  <span className={styles.originStateBadgeIdle}>03</span>
+                )}
+              </div>
+              <span className={styles.originMetric}>
                 주문 {dataOrigin.seedOrders}건 · {won(dataOrigin.seedPaidAmount)}
               </span>
-              <span className="text-xs text-muted block mt-1">
-                시드 기본 계정(kim·lee·park·choi) 및 임시 데모 계정 {dataOrigin.seedUsers}명
+              <span className={styles.originSub}>
+                기본 시드 계정(kim·lee·park·choi) 및 임시 데모 계정 {dataOrigin.seedUsers}명
               </span>
             </button>
           </div>
         </section>
       )}
 
-      {/* 기본 운영 5대 타일 */}
-      <div className="grid gap-x-10 gap-y-8 sm:grid-cols-2">
-        <TileCard title={`오늘(${today.date}) 결제된 주문`} href={today.href} testId="tile-today">
+      {/* 기본 운영 5대 타일 (Interlocking 1px Bento Ledger) */}
+      <div className={styles.kpiMatrix}>
+        <TileCard index="01" title={`오늘(${today.date}) 결제된 주문`} href={today.href} testId="tile-today" featured>
           <Big>{today.orders}건 · {won(today.netSales)}</Big>
-          <p className="text-[0.78rem] text-muted">순매출 = 결제 {won(today.paidAmount)} − 환불 {won(today.refundedAmount)} (한국 시각 자정 기준)</p>
+          <p className={styles.kpiCaption}>
+            순매출 = 결제 {won(today.paidAmount)} − 환불 {won(today.refundedAmount)} (한국 시각 자정 기준)
+          </p>
         </TileCard>
-        <TileCard title="처리 대기" href={pending.paid.href} testId="tile-pending" linkLabel="배송 준비할 주문 보기">
-          <ul className="grid gap-1 text-sm">
-            <li><Link href={pending.paid.href}>결제 완료(배송 준비 전)</Link> <span className="num">{pending.paid.count}건</span></li>
-            <li><Link href={pending.preparing.href}>배송 준비 중</Link> <span className="num">{pending.preparing.count}건</span></li>
-            <li><Link href={pending.returnsRequested.href}>반품·교환 요청</Link> <span className="num">{pending.returnsRequested.count}건</span></li>
+
+        <TileCard index="02" title="처리 대기" href={pending.paid.href} testId="tile-pending" linkLabel="배송 준비할 주문 보기">
+          <ul className={styles.kpiList}>
+            <li className={styles.kpiListRow}>
+              <Link href={pending.paid.href} className={styles.kpiListLink}>결제 완료(배송 준비 전)</Link>
+              <span className={styles.kpiListNum}>{pending.paid.count}건</span>
+            </li>
+            <li className={styles.kpiListRow}>
+              <Link href={pending.preparing.href} className={styles.kpiListLink}>배송 준비 중</Link>
+              <span className={styles.kpiListNum}>{pending.preparing.count}건</span>
+            </li>
+            <li className={styles.kpiListRow}>
+              <Link href={pending.returnsRequested.href} className={styles.kpiListLink}>반품·교환 요청</Link>
+              <span className={styles.kpiListNum}>{pending.returnsRequested.count}건</span>
+            </li>
           </ul>
         </TileCard>
-        <TileCard title={`재고 부족(${lowStock.threshold}개 이하)`} href={lowStock.href} testId="tile-low-stock" linkLabel="상품 관리">
+
+        <TileCard index="03" title={`재고 부족(${lowStock.threshold}개 이하)`} href={lowStock.href} testId="tile-low-stock" linkLabel="상품 관리">
           <Big>{lowStock.count}개 상품</Big>
           {lowStock.items.length > 0 && (
-            <ul className="text-sm">
-              {lowStock.items.map((p) => <li key={p.id}>{p.name} <span className="num text-muted">{p.stock}개</span></li>)}
+            <ul className={styles.kpiList}>
+              {lowStock.items.map((p) => (
+                <li key={p.id} className={styles.kpiListRow}>
+                  <span>{p.name}</span>
+                  <span className={styles.kpiListNum}>{p.stock}개</span>
+                </li>
+              ))}
             </ul>
           )}
         </TileCard>
-        <TileCard title="못 찾은 검색어(최근 7일)" href={zeroResultQueries.href} testId="tile-zero-search" linkLabel="검색 화면">
+
+        <TileCard index="04" title="못 찾은 검색어(최근 7일)" href={zeroResultQueries.href} testId="tile-zero-search" linkLabel="검색 화면">
           {zeroResultQueries.items.length === 0 ? (
-            <p className="text-sm text-muted">결과가 0건인 검색어가 없습니다.</p>
+            <p className={styles.kpiCaption}>결과가 0건인 검색어가 없습니다.</p>
           ) : (
-            <ol className="text-sm">
-              {zeroResultQueries.items.map((q) => <li key={q.query}>{q.query} <span className="num text-muted">{q.count}회</span></li>)}
+            <ol className={styles.kpiList}>
+              {zeroResultQueries.items.map((q) => (
+                <li key={q.query} className={styles.kpiListRow}>
+                  <span>{q.query}</span>
+                  <span className={styles.kpiListNum}>{q.count}회</span>
+                </li>
+              ))}
             </ol>
           )}
         </TileCard>
-        <TileCard title="PG 대사 미해결" href={reconciliation.href} testId="tile-reconciliation" linkLabel="불일치 목록">
+
+        <TileCard index="05" title="PG 대사 미해결" href={reconciliation.href} testId="tile-reconciliation" linkLabel="불일치 목록">
           <Big>{reconciliation.unresolved}건</Big>
+          <p className={styles.kpiCaption}>PG 결제 원장과 내부 주문 DB 간 미해결 대사 건수</p>
         </TileCard>
       </div>
 
-      {/* 34단계 추가 분석 지표 */}
-      <div className="border-t border-line pt-8 space-y-8">
-        <h2 className="title text-lg font-serif">주문 파이프라인 및 비즈니스 현황</h2>
+      {/* 주문 파이프라인 및 비즈니스 분석 지표 */}
+      <div className={styles.analyticsSection}>
+        <div className={styles.sectionHeaderBar}>
+          <h2 className={styles.sectionHeading}>주문 파이프라인 및 비즈니스 현황</h2>
+          <span className={styles.sectionSub}>Fulfillment &amp; Commerce Ledger</span>
+        </div>
 
         {/* 주문 파이프라인 퍼널 */}
-        <section aria-label="주문 파이프라인 퍼널" data-testid="tile-pipeline-funnel" className="rounded border border-line p-4">
-          <h3 className="label mb-3">주문 처리 파이프라인</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 text-center">
-            <div className="rounded bg-neutral-100 p-2.5">
-              <span className="text-xs text-muted block mb-1">결제 대기</span>
-              <span className="num font-semibold text-lg">{pipelineFunnel?.pendingPayment ?? 0}</span>
+        <section aria-label="주문 파이프라인 퍼널" data-testid="tile-pipeline-funnel" className={styles.funnelPanel}>
+          <div className={styles.funnelPanelHeader}>
+            <h3 className={styles.funnelPanelTitle}>주문 처리 파이프라인 (6-Stage Lifecycle)</h3>
+            <span className={styles.kpiIndex}>STAGE 01 — 06</span>
+          </div>
+          <div className={styles.funnelGrid}>
+            <div className={styles.funnelStep}>
+              <span className={styles.funnelStepIndex}>01 / PENDING</span>
+              <span className={styles.funnelStepLabel}>결제 대기</span>
+              <span className={styles.funnelStepValue}>{pipelineFunnel?.pendingPayment ?? 0}</span>
             </div>
-            <div className="rounded bg-neutral-100 p-2.5">
-              <span className="text-xs text-muted block mb-1">결제 완료</span>
-              <span className="num font-semibold text-lg">{pipelineFunnel?.paid ?? 0}</span>
+            <div className={styles.funnelStep}>
+              <span className={styles.funnelStepIndex}>02 / PAID</span>
+              <span className={styles.funnelStepLabel}>결제 완료</span>
+              <span className={styles.funnelStepValue}>{pipelineFunnel?.paid ?? 0}</span>
             </div>
-            <div className="rounded bg-neutral-100 p-2.5">
-              <span className="text-xs text-muted block mb-1">배송 준비 중</span>
-              <span className="num font-semibold text-lg">{pipelineFunnel?.preparing ?? 0}</span>
+            <div className={styles.funnelStep}>
+              <span className={styles.funnelStepIndex}>03 / PREPARING</span>
+              <span className={styles.funnelStepLabel}>배송 준비 중</span>
+              <span className={styles.funnelStepValue}>{pipelineFunnel?.preparing ?? 0}</span>
             </div>
-            <div className="rounded bg-neutral-100 p-2.5">
-              <span className="text-xs text-muted block mb-1">출고·배송 중</span>
-              <span className="num font-semibold text-lg">{pipelineFunnel?.shipped ?? 0}</span>
+            <div className={styles.funnelStep}>
+              <span className={styles.funnelStepIndex}>04 / SHIPPED</span>
+              <span className={styles.funnelStepLabel}>출고·배송 중</span>
+              <span className={styles.funnelStepValue}>{pipelineFunnel?.shipped ?? 0}</span>
             </div>
-            <div className="rounded bg-neutral-100 p-2.5">
-              <span className="text-xs text-muted block mb-1">배송 완료</span>
-              <span className="num font-semibold text-lg">{pipelineFunnel?.delivered ?? 0}</span>
+            <div className={styles.funnelStep}>
+              <span className={styles.funnelStepIndex}>05 / DELIVERED</span>
+              <span className={styles.funnelStepLabel}>배송 완료</span>
+              <span className={styles.funnelStepValue}>{pipelineFunnel?.delivered ?? 0}</span>
             </div>
-            <div className="rounded bg-green-50 border border-green-200 p-2.5 text-green-800">
-              <span className="text-xs text-green-700 block mb-1">구매 확정</span>
-              <span className="num font-semibold text-lg">{pipelineFunnel?.confirmed ?? 0}</span>
+            <div className={styles.funnelStepHighlight}>
+              <span className={styles.funnelStepIndex}>06 / CONFIRMED</span>
+              <span className={styles.funnelStepLabel}>구매 확정</span>
+              <span className={styles.funnelStepValue}>{pipelineFunnel?.confirmed ?? 0}</span>
             </div>
           </div>
         </section>
 
-        <div className="grid gap-6 sm:grid-cols-2">
+        <div className={styles.analyticsGrid}>
           {/* 회원 vs 비회원 비율 */}
-          <section aria-label="회원 vs 비회원 비율" data-testid="tile-member-ratio" className="rounded border border-line p-4">
-            <h3 className="label mb-3">고객 및 주문 구성</h3>
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between border-b border-line pb-2">
-                <span className="text-muted">가입 회원</span>
-                <span className="num font-medium">주문 {guestVsMember?.memberOrders ?? 0}건 ({Math.round((guestVsMember?.memberRatio ?? 0) * 100)}%)</span>
+          <section aria-label="회원 vs 비회원 비율" data-testid="tile-member-ratio" className={styles.analyticsCard}>
+            <div className={styles.analyticsCardHeader}>
+              <h3 className={styles.analyticsCardTitle}>고객 및 주문 구성</h3>
+              <span className={styles.kpiIndex}>MEMBER VS GUEST</span>
+            </div>
+            <div className={styles.analyticsTable}>
+              <div className={styles.analyticsRow}>
+                <span>가입 회원</span>
+                <span className={styles.monoValue}>
+                  주문 {guestVsMember?.memberOrders ?? 0}건 ({formatRatio(guestVsMember?.memberRatio)}%)
+                </span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted">비회원 주문자</span>
-                <span className="num font-medium">주문 {guestVsMember?.guestOrders ?? 0}건 ({Math.round((guestVsMember?.guestRatio ?? 0) * 100)}%)</span>
+              <div className={styles.analyticsRow}>
+                <span>비회원 주문자</span>
+                <span className={styles.monoValue}>
+                  주문 {guestVsMember?.guestOrders ?? 0}건 ({formatRatio(guestVsMember?.guestRatio)}%)
+                </span>
               </div>
             </div>
           </section>
 
           {/* 최근 7일 매출 추이 */}
-          <section aria-label="최근 매출 추이" data-testid="tile-recent-sales" className="rounded border border-line p-4">
-            <h3 className="label mb-3">최근 매출 요약</h3>
+          <section aria-label="최근 매출 추이" data-testid="tile-recent-sales" className={styles.analyticsCard}>
+            <div className={styles.analyticsCardHeader}>
+              <h3 className={styles.analyticsCardTitle}>최근 매출 요약</h3>
+              <span className={styles.kpiIndex}>RECENT 7 DAYS</span>
+            </div>
             {recentSales && recentSales.length > 0 ? (
-              <div className="space-y-1.5 text-sm">
+              <div className={styles.analyticsTable}>
                 {recentSales.map((s) => (
-                  <div key={s.date} className="flex items-center justify-between">
-                    <span className="text-xs text-muted">{s.date}</span>
-                    <span className="num">{won(s.amount)}</span>
+                  <div key={s.date} className={styles.analyticsRow}>
+                    <span className={styles.monoValue}>{s.date}</span>
+                    <span className={styles.monoValue}>{won(s.amount)}</span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted">매출 내역이 없습니다.</p>
+              <p className={styles.kpiCaption}>매출 내역이 없습니다.</p>
             )}
           </section>
 
           {/* 베스트셀러 TOP 5 */}
-          <section aria-label="베스트셀러 TOP 5" data-testid="tile-best-sellers" className="rounded border border-line p-4">
-            <h3 className="label mb-3">베스트셀러 TOP 5</h3>
+          <section aria-label="베스트셀러 TOP 5" data-testid="tile-best-sellers" className={styles.analyticsCard}>
+            <div className={styles.analyticsCardHeader}>
+              <h3 className={styles.analyticsCardTitle}>베스트셀러 TOP 5</h3>
+              <span className={styles.kpiIndex}>BY VOLUME</span>
+            </div>
             {bestSellers && bestSellers.length > 0 ? (
-              <ol className="space-y-2 text-sm">
+              <ol className={styles.analyticsTable}>
                 {bestSellers.map((item, idx) => (
-                  <li key={item.productId} className="flex items-center justify-between">
-                    <span className="truncate mr-2">
-                      <span className="font-semibold text-muted mr-2">{idx + 1}.</span>
+                  <li key={item.productId} className={styles.analyticsRow}>
+                    <span>
+                      <span className={styles.rankIndex}>0{idx + 1}</span>
                       {item.name}
                     </span>
-                    <span className="num text-xs text-muted shrink-0">
+                    <span className={styles.monoValue}>
                       {item.quantity}개 판매 ({won(item.totalSales)})
                     </span>
                   </li>
                 ))}
               </ol>
             ) : (
-              <p className="text-sm text-muted">판매 내역이 없습니다.</p>
+              <p className={styles.kpiCaption}>판매 내역이 없습니다.</p>
             )}
           </section>
 
           {/* 옵션별 재고 부족 목록 */}
-          <section aria-label="옵션 재고 부족" data-testid="tile-low-stock-variants" className="rounded border border-line p-4">
-            <h3 className="label mb-3">옵션별 재고 부족 (5개 이하)</h3>
+          <section aria-label="옵션 재고 부족" data-testid="tile-low-stock-variants" className={styles.analyticsCard}>
+            <div className={styles.analyticsCardHeader}>
+              <h3 className={styles.analyticsCardTitle}>옵션별 재고 부족 (5개 이하)</h3>
+              <span className={styles.kpiIndex}>VARIANT STOCK</span>
+            </div>
             {lowStockVariants && lowStockVariants.length > 0 ? (
-              <ul className="space-y-2 text-sm">
+              <ul className={styles.analyticsTable}>
                 {lowStockVariants.map((v) => (
-                  <li key={v.id} className="flex items-center justify-between">
-                    <span className="truncate mr-2">
-                      <span className="font-medium text-fg">{v.productName}</span>{" "}
-                      <span className="text-muted text-xs">({v.variantName})</span>
+                  <li key={v.id} className={styles.analyticsRow}>
+                    <span>
+                      <strong>{v.productName}</strong>{" "}
+                      <span className={styles.kpiIndex}>({v.variantName})</span>
                     </span>
-                    <span className="num text-red-600 font-semibold text-xs shrink-0">
-                      재고 {v.stock}개
-                    </span>
+                    <span className={styles.alertValue}>재고 {v.stock}개</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted">재고 부족 옵션이 없습니다.</p>
+              <p className={styles.kpiCaption}>재고 부족 옵션이 없습니다.</p>
             )}
           </section>
         </div>
@@ -323,17 +428,23 @@ function Tiles() {
 
 export default function AdminDashboardPage() {
   return (
-    <main className="page flex-1 pb-12 pt-2">
-      <h1 className="title mb-8">오늘 처리할 것</h1>
+    <div className={styles.dashboard}>
+      <header className={styles.pageHeader}>
+        <div>
+          <span className={styles.pageKicker}>Admin Operations · Overview</span>
+          <h1 className={styles.pageTitle}>오늘 처리할 것</h1>
+        </div>
+        <span className={styles.headerMeta}>KST (UTC+9) 기준 실시간 집계</span>
+      </header>
       <AdminOnly readOnlyNote={READ_ONLY} note={null}>
         <Tiles />
-        <nav aria-label="관리 화면" className="mt-12 flex flex-wrap gap-4 text-sm">
-          <Link href="/admin/settings">상점 설정</Link>
-          <Link href="/admin/legal">약관·방침</Link>
-          <Link href="/admin/reconciliation">PG 대사</Link>
-          <Link href="/admin/mcp">AI 도우미 연결(MCP)</Link>
+        <nav aria-label="관리 화면" className={styles.QuickLinksFooter}>
+          <Link href="/admin/settings" className={styles.quickLink}>상점 설정</Link>
+          <Link href="/admin/legal" className={styles.quickLink}>약관·방침</Link>
+          <Link href="/admin/reconciliation" className={styles.quickLink}>PG 대사</Link>
+          <Link href="/admin/mcp" className={styles.quickLink}>AI 도우미 연결(MCP)</Link>
         </nav>
       </AdminOnly>
-    </main>
+    </div>
   );
 }

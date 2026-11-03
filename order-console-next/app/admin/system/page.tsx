@@ -124,7 +124,10 @@ export default function AdminSystemPage() {
     <main className="page flex-1 pb-12 pt-2">
       <h1 className="title mb-6">시스템·API 금고 및 런타임 제어</h1>
 
-      <AdminOnly>
+      <AdminOnly
+        readOnlyNote="데모 관리자는 볼 수만 있습니다. 긴급 스위치 제어 및 API 키 저장·삭제는 실제 관리자(kim)만 할 수 있습니다."
+        note="외부 연동 API 키(AES-256-GCM 암호화 금고)와 유료 API 차단·점검 모드 등 런타임 긴급 스위치를 제어합니다."
+      >
         {error && <p role="alert" className="alert mb-6">{error}</p>}
 
         <div className="space-y-10">
