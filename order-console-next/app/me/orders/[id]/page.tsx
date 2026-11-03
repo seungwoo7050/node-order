@@ -9,7 +9,7 @@ import { useTRPC } from "@/lib/trpc";
 import { won } from "@/lib/orders";
 import { MyOrderList } from "../my-order-list";
 import { OrderStatus, orderDate } from "../order-status";
-import { ConfirmButton, ReturnForm, Returns, Shipments, Timeline } from "./fulfillment";
+import { ConfirmButton, OrderReviewSection, ReturnForm, Returns, Shipments, Timeline } from "./fulfillment";
 
 function MyOrderDetail({ id }: { id: number }) {
   const trpc = useTRPC();
@@ -101,6 +101,9 @@ function MyOrderDetail({ id }: { id: number }) {
             </section>
           )}
         </div>
+      )}
+      {data.status === "confirmed" && (
+        <OrderReviewSection orderId={data.id} items={data.items} reviews={(data as { reviews?: { id: number; productId: number; rating: number; content: string; createdAt: string }[] }).reviews} />
       )}
     </section>
   );
