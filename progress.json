@@ -13,9 +13,9 @@
     "note": "Next 16.4.0 빌드가 보안 업그레이드 안내로 불규칙하게 실패한다(재시도하면 통과). 25 첫 커밋에서 16.4.3으로 올린다"
   },
   "current": {
-    "branch": "35-coupons-reviews",
+    "branch": "36-storefront-designs",
     "stage": "ready",
-    "note": "34-catalog-admin(@ b5563ab) 구현·검증(verify)·독립 평가(7/7)·가이드/devlog 완료. 다음 세션에서 35-coupons-reviews 구현 시작"
+    "note": "35-coupons-reviews(@ ec1d520) 구현·검증(verify)·독립 평가(5/5)·devlog 완료. 36-storefront-designs 구현 진행"
   },
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
@@ -28,7 +28,7 @@
     "32-production-prep": "implemented @ a64d564 (런북·0원 운영 환경변수·지표 semver 라벨 보강, README 개편)",
     "33-member-guest": "implemented @ 69f3b22 (verify 통과: unit 174/174, harness 70/70, api e2e 247/247, web e2e 57/57, rules 통과, 평가 8/8 통과, 가이드·devlog 완료)",
     "34-catalog-admin": "implemented @ b5563ab (verify 통과: unit 174/174, harness 70/70, api e2e 252/252, web e2e 62/62, rules 통과, 평가 7/7 통과, 가이드·devlog 완료)",
-    "35-coupons-reviews": "planned (브리프 확정)",
+    "35-coupons-reviews": "implemented @ ec1d520 (verify 통과: unit 174/174, harness 70/70, api e2e 256/256, web e2e 65/65, rules 통과, 평가 5/5 통과, devlog 완료)",
     "36-storefront-designs": "planned (브리프 확정)"
   },
   "blocked": [
