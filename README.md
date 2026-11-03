@@ -1,4 +1,4 @@
-# 24: 무중단 배포
+# 30: 판매자용 AI MCP 서버와 상품 설명 스트리밍
 
 ![Language](https://img.shields.io/badge/language-TypeScript-blue?logo=typescript&logoColor=white)
 ![Stack](https://img.shields.io/badge/stack-NestJS%20%7C%20Next.js%20%7C%20Prisma%20%7C%20Caddy%20%7C%20k6%20%7C%20Playwright-lightgrey)
@@ -191,6 +191,12 @@ Execution Time: 5.082 ms
 ```
 
 </details>
+
+## 토스페이먼츠 결제와 부분 환불(27)
+
+- 국내 결제를 토스페이먼츠 결제위젯 SDK(`@tosspayments/tosspayments-sdk`)로 연동하고, 기존 Stripe와 공통 결제 게이트웨이 인터페이스로 추상화한다.
+- 클라이언트 위변조를 막기 위해 승인 요청 금액을 서버 주문 합계(상품 + 배송비)와 대조한 뒤 토스 승인 API를 호출한다.
+- 웹훅 수신 시 본문만 믿지 않고 토스 결제 조회 API를 역호출해 상태가 일치할 때만 결제 완료·취소를 반영하며, 관리자 부분 환불과 로컬/CI용 결제 시뮬레이터(`payments-sim`)를 포함한다.
 
 ## 주문 이행(28)
 
