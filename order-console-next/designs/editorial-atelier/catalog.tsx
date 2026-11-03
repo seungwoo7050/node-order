@@ -225,12 +225,21 @@ export function EditorialAtelierCatalog({
                         {product.name}
                       </Link>
                       <span className={styles.price}>{won(product.price)}</span>
-                      <span
-                        data-testid={`stock-${product.id}`}
-                        className={styles.stock}
-                      >
-                        {isSoldOut ? "품절" : `재고 ${product.stock ?? 0}`}
-                      </span>
+                      {isSoldOut ? (
+                        <span
+                          data-testid={`stock-${product.id}`}
+                          className={styles.stock}
+                        >
+                          품절
+                        </span>
+                      ) : (
+                        <span className={styles.stock}>
+                          {"재고 "}
+                          <span data-testid={`stock-${product.id}`}>
+                            {product.stock ?? 0}
+                          </span>
+                        </span>
+                      )}
                       <div className={styles.action}>
                         {inCartQty > 0 ? (
                           <div className={styles.stepperWrap}>

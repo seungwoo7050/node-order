@@ -91,11 +91,16 @@ test.describe("36-storefront-designs e2e", () => {
     const link = page.getByRole("link", { name: "마우스", exact: true });
     await expect(link).toHaveAttribute("href", /design=zavanas-archive/);
     await link.click();
-    await expect(page.getByRole("dialog").locator('[data-design="zavanas-archive"]')).toBeVisible();
+    const dialog = page.getByRole("dialog", { name: "마우스" });
+    await expect(dialog.locator('[data-design="zavanas-archive"]')).toBeVisible();
     await page.keyboard.press("Escape");
-    await page.goto("/cart");
-    await page.goto("/shop");
-    await expect(page.locator('[data-design="zavanas-archive"]')).toBeVisible();
+    await expect(dialog).toHaveCount(0);
+    await expect(page).toHaveURL(/\/shop\?design=zavanas-archive$/);
+    await page.getByTestId("cart-count").click();
+    await expect(page).toHaveURL(/\/cart\?design=zavanas-archive$/);
+    await page.getByTestId("header-store-name").click();
+    await expect(page).toHaveURL(/\/shop\?design=zavanas-archive$/);
+    await expect(page.locator('[data-design="zavanas-archive"]').first()).toBeVisible();
   });
 
   test("2. 카테고리 필터 바 및 정렬 옵션(가격순·리뷰순·최신순) 검증", async ({ page }) => {
