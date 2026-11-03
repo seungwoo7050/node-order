@@ -1,17 +1,27 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 import { LoadMore } from "@/app/load-more";
 import { Stepper } from "@/app/shop/stepper";
 import { useCartStore } from "@/lib/cart-store";
-import { eulReul, won, type SortOption } from "@/lib/storefront-view-model";
-import { StudioProductArtwork } from "../product-artwork";
+import {
+  eulReul,
+  won,
+  type CategoryItem,
+  type SortOption,
+} from "@/lib/storefront-view-model";
+import { EmptyState, SkeletonGrid } from "../shared/catalog-states";
+import { ProductMedia } from "../shared/product-media";
 import type { CatalogDesignProps } from "../types";
 import styles from "./muji-hara.module.css";
+
+type CatWithParent = CategoryItem & { parentId?: number | null };
 
 export function MujiHaraCatalog({
   categories,
   selectedCatId,
+  selectedCatName,
   onSelectCategory,
   sort,
   setSort,
@@ -25,221 +35,245 @@ export function MujiHaraCatalog({
   handleAddToCart,
   addedName,
   clearAdded,
+  linkFor,
 }: CatalogDesignProps) {
   const inCart = useCartStore((s) => s.items);
+  const toHref = linkFor ?? ((h: string) => h);
 
-  if (isPending) {
-    return (
-      <div data-design="muji-hara" className={styles.root} aria-busy="true">
-        <div className={`${styles.shell} ${styles.statusPad}`}>
-          <p className="text-sm text-muted">
-            카탈로그를 정돈하여 불러오는 중입니다.
-          </p>
-        </div>
-      </div>
+  const { rootCategories, subCategories, activeRootId } = useMemo(() => {
+    const cats = categories as CatWithParent[];
+    const hasParentField = cats.some(
+      (c) => c.parentId !== undefined && c.parentId !== null,
     );
-  }
 
-  if (error) {
-    return (
-      <div data-design="muji-hara" className={styles.root}>
-        <div className={`${styles.shell} ${styles.statusPad}`}>
-          <p role="alert" className="alert">
-            상품을 불러오지 못했습니다. (
-            {String((error as { message?: string })?.message ?? error)})
-          </p>
-        </div>
-      </div>
-    );
-  }
+    if (!hasParentField) {
+      return {
+        rootCategories: cats,
+        subCategories: [] as CatWithParent[],
+        activeRootId: null as number | null,
+      };
+    }
+
+    const roots = cats.filter((c) => !c.parentId);
+    let resolvedRootId: number | null = null;
+
+    if (selectedCatId !== null) {
+      const isRoot = roots.some((r) => r.id === selectedCatId);
+      if (isRoot) {
+        resolvedRootId = selectedCatId;
+      } else {
+        const parent = cats.find((c) => c.id === selectedCatId)?.parentId;
+        if (parent) resolvedRootId = parent;
+      }
+    }
+
+    const subs = resolvedRootId
+      ? cats.filter((c) => c.parentId === resolvedRootId)
+      : [];
+
+    return {
+      rootCategories: roots,
+      subCategories: subs,
+      activeRootId: resolvedRootId,
+    };
+  }, [categories, selectedCatId]);
 
   return (
-    <div data-design="muji-hara" className={styles.root}>
-      <div className={styles.shell}>
-        {/* Tactile Washi Philosophy Banner */}
-        <section className={styles.manifestoBar} aria-label="브랜드 철학">
-          <div className={styles.crimsonSeal} aria-hidden="true">
-            <span>無印</span>
-            <span>標本</span>
-          </div>
-          <div className={styles.manifestoCopy}>
-            <span className={styles.manifestoKicker}>
-              生活の原型 · TACTILE DAILY OBJECT ARCHIVE
-            </span>
-            <h2 className={styles.manifestoTitle}>
-              소재의 결을 살리고 과잉을 덜어낸 생활 도감
-            </h2>
-            <p className={styles.manifestoDesc}>
-              표백하지 않은 종이의 온기와 절제된 비례. 매일 손이 닿는 사물과 의복의
-              원형(Archetype)을 채집하여 소재 사양과 치수를 정직하게 기록합니다.
-            </p>
-          </div>
-          <div className={styles.manifestoStamp} aria-hidden="true">
-            <div>EDITION 02 // HARA KENYA</div>
-            <div>PAPER: UNBLEACHED WASHI</div>
-            <div>RECORDS: {products.length} ITEMS</div>
-          </div>
-        </section>
+    <div
+      data-design="muji-hara"
+      className={styles.root}
+      aria-busy={isPending ? "true" : undefined}
+    >
+      <div className={`${styles.wrap} ${styles.titleRow}`}>
+        <h2 className={styles.pageTitle}>{selectedCatName ?? "전체 상품"}</h2>
+      </div>
 
-        {/* Category Filter & Sort Bar */}
-        <div data-testid="category-filter-bar" className={styles.filterBar}>
-          <div className={styles.categoryPills}>
+      <div data-testid="category-filter-bar" className={styles.filterBar}>
+        <div className={styles.tabRow}>
+          <div className={`${styles.wrap} ${styles.tabInner}`}>
             <button
               type="button"
-              className={`${styles.catBtn} ${
-                selectedCatId === null ? styles.catBtnActive : ""
+              className={`${styles.tab} ${
+                selectedCatId === null ? styles.tabOn : ""
               }`}
               onClick={() => onSelectCategory(null, null)}
             >
               전체
             </button>
-            {categories.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                className={`${styles.catBtn} ${
-                  selectedCatId === c.id ? styles.catBtnActive : ""
-                }`}
-                onClick={() => onSelectCategory(c.id, c.name)}
-              >
-                {c.name}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2.5 text-xs">
-            <span className="text-[#6b6358] font-mono text-[11px]">
-              정렬 기준
-            </span>
-            <select
-              data-testid="sort-select"
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortOption)}
-              className={styles.sortSelect}
-            >
-              <option value="latest">최신순</option>
-              <option value="price_asc">낮은 가격순</option>
-              <option value="price_desc">높은 가격순</option>
-              <option value="reviews">리뷰 많은순</option>
-            </select>
+            {rootCategories.map((c) => {
+              const isSelected =
+                selectedCatId === c.id || activeRootId === c.id;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`${styles.tab} ${
+                    isSelected ? styles.tabOn : ""
+                  }`}
+                  onClick={() => onSelectCategory(c.id, c.name)}
+                >
+                  {c.name}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* 3-Column Collapsed-Border Washi Specimen Grid */}
-        <ul className={styles.specimenGrid}>
-          {products.map((p) => {
-            const quantity =
-              inCart.find((i) => i.productId === p.id)?.quantity ?? 0;
-            const soldOut = p.stock === 0;
+        {subCategories.length > 0 && (
+          <div className={styles.wrap}>
+            <div className={styles.subRow}>
+              {subCategories.map((sub) => {
+                const isSelected = selectedCatId === sub.id;
+                return (
+                  <button
+                    key={sub.id}
+                    type="button"
+                    className={`${styles.sub} ${
+                      isSelected ? styles.subOn : ""
+                    }`}
+                    onClick={() => onSelectCategory(sub.id, sub.name)}
+                  >
+                    {sub.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
 
-            return (
-              <li key={p.id} className={styles.specimenCell}>
-                <div>
-                  <div className={styles.cellHeader}>
-                    <span className={styles.specimenCode}>
-                      標本 NO.{String(p.id).padStart(3, "0")}
-                    </span>
-                    <span className={styles.specimenCat}>WASHI ARCHIVE</span>
-                  </div>
+      <div className={`${styles.wrap} ${styles.toolbar}`}>
+        <span className={styles.total}>{products.length}개 상품</span>
+        <label className={styles.sortLabel}>
+          <span className={styles.visuallyHidden}>정렬</span>
+          <select
+            data-testid="sort-select"
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortOption)}
+            className={styles.sortSelect}
+          >
+            <option value="latest">최신순</option>
+            <option value="price_asc">낮은 가격순</option>
+            <option value="price_desc">높은 가격순</option>
+            <option value="reviews">리뷰 많은순</option>
+          </select>
+        </label>
+      </div>
 
+      <div className={styles.wrap}>
+        {isPending ? (
+          <SkeletonGrid
+            count={8}
+            gridClassName={styles.skelGrid}
+            cardClassName={styles.skelCard}
+            plateClassName={styles.skelPlate}
+            lineClassName={styles.skelLine1}
+          />
+        ) : error ? (
+          <p role="alert" className={styles.alert}>
+            상품을 불러오지 못했습니다. (
+            {String((error as { message?: string })?.message ?? error)})
+          </p>
+        ) : products.length === 0 ? (
+          <EmptyState
+            title="선택한 카테고리에 상품이 없습니다."
+            actionLabel="전체 보기"
+            onReset={() => onSelectCategory(null, null)}
+            className={styles.empty}
+            titleClassName={styles.emptyTitle}
+            actionClassName={styles.emptyAction}
+          />
+        ) : (
+          <ul data-testid="product-list" className={styles.grid}>
+            {products.map((p, idx) => {
+              const quantity =
+                inCart.find((i) => i.productId === p.id)?.quantity ?? 0;
+              const soldOut = (p.stock ?? 0) <= 0;
+
+              return (
+                <li key={p.id} className={styles.card}>
                   <Link
-                    href={`/shop/${p.id}`}
+                    href={toHref(`/shop/${p.id}`)}
                     tabIndex={-1}
                     aria-hidden="true"
-                    className={styles.squareFrame}
+                    className={styles.plate}
                   >
-                    {p.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={p.imageUrl}
-                        alt={p.name}
-                        width={360}
-                        height={360}
-                        className={styles.squareImg}
-                        data-testid={`image-${p.id}`}
-                      />
-                    ) : (
-                      <StudioProductArtwork id={p.id} design="muji-hara" />
+                    <ProductMedia
+                      product={p}
+                      imgClassName={styles.plateImg}
+                      fallbackClassName={styles.plateFallback}
+                      withTestId={true}
+                      eager={idx < 4}
+                    />
+                    {sort === "reviews" && idx < 10 && (
+                      <span className={styles.rank}>{idx + 1}</span>
                     )}
                   </Link>
 
-                  <div className={styles.cellBody}>
-                    <h3 className={styles.itemTitle}>
-                      <Link
-                        href={`/shop/${p.id}`}
-                        className={styles.itemTitleLink}
-                      >
-                        {p.name}
-                      </Link>
-                    </h3>
+                  <Link
+                    href={toHref(`/shop/${p.id}`)}
+                    className={styles.name}
+                  >
+                    {p.name}
+                  </Link>
 
-                    {p.materialInfo && (
-                      <p className={styles.itemDesc}>{p.materialInfo}</p>
-                    )}
-
-                    <div className={styles.ledgerRow}>
-                      <span className={styles.itemPrice}>{won(p.price)}</span>
-                      <div className={styles.itemMeta}>
-                        {(p.reviewCount ?? 0) > 0 && (
-                          <span className="text-[#7f1d1d] font-medium">
-                            ★ {p.averageRating?.toFixed(1)} ({p.reviewCount})
-                          </span>
-                        )}
-                        {soldOut ? (
-                          <span className="text-danger font-medium">품절</span>
-                        ) : (
-                          <span>
-                            재고{" "}
-                            <span
-                              className="num font-medium text-[#26231f]"
-                              data-testid={`stock-${p.id}`}
-                            >
-                              {p.stock}
-                            </span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className={styles.cellAction}>
-                  {soldOut ? (
-                    <button
-                      type="button"
-                      className={styles.tactileBtn}
-                      disabled
-                    >
-                      품절
-                    </button>
-                  ) : quantity > 0 ? (
-                    <div className="flex w-full items-center justify-between border border-[#cec3ae] bg-[#f3eee4] px-3 py-1">
-                      <span className="text-[11px] text-[#6b6358]">
-                        담은 수량
+                  <div className={styles.priceRow}>
+                    <span className={styles.price}>{won(p.price)}</span>
+                    {(p.reviewCount ?? 0) > 0 && (
+                      <span className={styles.rating}>
+                        ★ {p.averageRating ? p.averageRating.toFixed(1) : "0.0"}{" "}
+                        ({p.reviewCount})
                       </span>
-                      <Stepper
-                        productId={p.id}
-                        name={p.name}
-                        quantity={quantity}
-                        max={p.stock ?? 0}
-                      />
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className={styles.tactileBtn}
-                      onClick={() => handleAddToCart(p)}
-                    >
-                      담기
-                    </button>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                    )}
+                  </div>
 
-        <div className="mt-10">
+                  {soldOut ? (
+                    <span className={styles.sold}>품절</span>
+                  ) : (
+                    <p className={styles.stock}>
+                      {"재고 "}
+                      <span data-testid={`stock-${p.id}`}>{p.stock}</span>
+                      {"개"}
+                    </p>
+                  )}
+
+                  <div className={styles.action}>
+                    {soldOut ? (
+                      <button
+                        type="button"
+                        disabled
+                        className={styles.addBtnDisabled}
+                      >
+                        품절
+                      </button>
+                    ) : quantity > 0 ? (
+                      <div className={styles.stepperWrap}>
+                        <Stepper
+                          productId={p.id}
+                          name={p.name}
+                          quantity={quantity}
+                          max={p.stock ?? 999}
+                        />
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className={styles.addBtn}
+                        onClick={() => handleAddToCart(p)}
+                      >
+                        담기
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {hasNextPage && (
+        <div className={`${styles.wrap} ${styles.more}`}>
           <LoadMore
             hasNextPage={hasNextPage}
             isFetchingNextPage={isFetchingNextPage}
@@ -250,27 +284,26 @@ export function MujiHaraCatalog({
             noun="상품"
           />
         </div>
+      )}
 
-        {addedName && (
-          <p
-            role="status"
-            className="fixed bottom-6 right-6 z-40 border border-[#7f1d1d] bg-[#26231f] px-5 py-3.5 text-xs text-[#f7f3eb]"
-          >
+      {addedName && (
+        <p role="status" className={styles.toast}>
+          <span>
             {addedName}
-            {eulReul(addedName)} 담았습니다.{" "}
-            <Link href="/cart" className="ml-3 underline text-[#f7f3eb]">
+            {eulReul(addedName)} 담았습니다.
+            <Link href={toHref("/cart")} className={styles.toastLink}>
               장바구니 보기
             </Link>
-            <button
-              type="button"
-              onClick={clearAdded}
-              className="ml-3 text-xs opacity-70 hover:opacity-100 cursor-pointer"
-            >
-              닫기
-            </button>
-          </p>
-        )}
-      </div>
+          </span>
+          <button
+            type="button"
+            onClick={clearAdded}
+            className={styles.toastClose}
+          >
+            닫기
+          </button>
+        </p>
+      )}
     </div>
   );
 }

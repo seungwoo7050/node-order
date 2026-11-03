@@ -1,16 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo, useState } from "react";
 import { Stepper } from "@/app/shop/stepper";
 import {
+  eulReul,
   useStorefrontDetailViewModel,
   won,
 } from "@/lib/storefront-view-model";
-import { StudioProductArtwork } from "../product-artwork";
+import { ProductMedia } from "../shared/product-media";
 import type { DetailDesignProps } from "../types";
 import styles from "./muji-hara.module.css";
 
-export function MujiHaraDetail({ id, initialProduct }: DetailDesignProps) {
+export function MujiHaraDetail({
+  id,
+  initialProduct,
+  linkFor,
+}: DetailDesignProps) {
   const {
     product,
     allVariants,
@@ -25,11 +31,31 @@ export function MujiHaraDetail({ id, initialProduct }: DetailDesignProps) {
     handleAddToCart,
     handleBuyNow,
     added,
+    clearAdded,
     reviewsData,
   } = useStorefrontDetailViewModel(id, initialProduct);
 
+  const toHref = linkFor ?? ((h: string) => h);
+
+  const allImages = useMemo(() => {
+    if (!product) return [];
+    const list: { id: number | string; url: string }[] = [];
+    if (product.imageUrl) list.push({ id: "main", url: product.imageUrl });
+    if (product.images) {
+      for (const img of product.images) {
+        if (img.imageUrl && img.imageUrl !== product.imageUrl) {
+          list.push({ id: img.id, url: img.imageUrl });
+        }
+      }
+    }
+    return list;
+  }, [product]);
+
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
   if (!product) return null;
 
+  const activeImageUrl = allImages[activeImageIndex]?.url ?? product.imageUrl;
   const reviewCount = reviewsData?.reviewCount ?? product.reviewCount ?? 0;
   const averageRating =
     reviewsData?.averageRating ?? product.averageRating ?? 0;
@@ -39,241 +65,266 @@ export function MujiHaraDetail({ id, initialProduct }: DetailDesignProps) {
     <article
       data-design="muji-hara"
       data-testid="product-detail"
-      className={styles.detailSheet}
+      className={styles.detail}
     >
-      <div className={styles.detailLayout}>
-        {/* Left: 1:1 Specimen Frame */}
-        <div className="space-y-4">
-          <div className="aspect-square w-full overflow-hidden border border-[#cec3ae] bg-[#e8e0d1]">
-            {product.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={product.imageUrl}
-                alt={product.name}
-                width={520}
-                height={520}
-                className="aspect-square size-full object-cover"
-              />
-            ) : (
-              <StudioProductArtwork id={product.id} design="muji-hara" />
-            )}
-          </div>
-          <div className="flex items-center justify-between border-t border-[#cec3ae] pt-2.5 font-mono text-[11px] text-[#6b6358]">
-            <span className="text-[#7f1d1d] font-semibold">
-              標本記録票 · SPECIMEN NO.{String(id).padStart(3, "0")}
-            </span>
-            <span>UNBLEACHED ARCHIVE SHEET</span>
-          </div>
+      <div className={`${styles.wrap} ${styles.pdp}`}>
+        <div className={styles.gallery}>
+          <figure className={styles.mainPlate}>
+            <ProductMedia
+              product={{
+                id: product.id,
+                name: product.name,
+                imageUrl: activeImageUrl,
+              }}
+              imgClassName={styles.mainImg}
+              fallbackClassName={styles.plateFallback}
+              eager={true}
+            />
+          </figure>
+          {allImages.length > 1 && (
+            <div className={styles.thumbs}>
+              {allImages.map((img, i) => (
+                <button
+                  key={img.id}
+                  type="button"
+                  className={`${styles.thumbBtn} ${
+                    i === activeImageIndex ? styles.thumbBtnActive : ""
+                  }`}
+                  onClick={() => setActiveImageIndex(i)}
+                  aria-label={`이미지 ${i + 1} 보기`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={img.url}
+                    alt=""
+                    width={160}
+                    height={160}
+                    className={styles.thumbImg}
+                  />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Right: Specimen Ledger & Actions */}
-        <div className="flex flex-col justify-between space-y-6">
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-xs text-[#6b6358]">
-              <span className="inline-block size-2 bg-[#7f1d1d]" />
-              <span>{product.categoryPath.join(" · ") || "생활 아카이브"}</span>
-            </div>
+        <div className={styles.info}>
+          {product.categoryPath && product.categoryPath.length > 0 && (
+            <p className={styles.path}>{product.categoryPath.join(" > ")}</p>
+          )}
 
-            <h1
-              id="product-title"
-              className={`${styles.detailSerif} text-3xl sm:text-4xl font-normal tracking-tight text-[#26231f]`}
-            >
-              {product.name}
-            </h1>
+          <h1 id="product-title" className={styles.title}>
+            {product.name}
+          </h1>
 
-            <div className="flex items-baseline justify-between border-y border-[#cec3ae] py-3.5">
-              <span className="num text-2xl font-semibold text-[#26231f]">
-                {won(currentPrice)}
+          <p className={styles.priceLine}>
+            <span>{won(currentPrice)}</span>
+            {selectedVariant && selectedVariant.priceDelta !== 0 && (
+              <span className={styles.delta}>
+                ({selectedVariant.priceDelta > 0 ? "+" : ""}
+                {won(selectedVariant.priceDelta)})
               </span>
-              <span className="text-xs text-[#6b6358]">
+            )}
+          </p>
+
+          <dl className={styles.rows}>
+            <div className={styles.row}>
+              <dt className={styles.rowLabel}>재고</dt>
+              <dd className={styles.rowValue}>
                 {isSoldOut ? (
-                  <span className="text-danger font-medium">품절</span>
+                  <span className={styles.sold}>품절</span>
                 ) : (
                   <span>
-                    재고{" "}
-                    <span
-                      className="num font-semibold text-[#26231f]"
-                      data-testid={`detail-stock-${id}`}
-                    >
+                    <span data-testid={`detail-stock-${id}`}>
                       {currentStock}
                     </span>
-                    개
+                    {"개"}
                   </span>
                 )}
-              </span>
+              </dd>
             </div>
 
-            {product.description && (
-              <p className="whitespace-pre-line text-sm leading-relaxed text-[#46413a]">
-                {product.description}
-              </p>
+            {product.materialInfo && (
+              <div className={styles.row}>
+                <dt className={styles.rowLabel}>소재</dt>
+                <dd className={styles.rowValue}>{product.materialInfo}</dd>
+              </div>
             )}
 
-            {/* Structured Washi Specification Ledger */}
-            <dl className="divide-y divide-[#ded4c1] border-y border-[#ded4c1] text-xs">
-              {product.materialInfo && (
-                <div className="grid grid-cols-[110px_1fr] py-2.5">
-                  <dt className="font-medium text-[#6b6358]">소재 사양</dt>
-                  <dd className="text-[#26231f]">{product.materialInfo}</dd>
-                </div>
-              )}
-              {product.sizeGuide && (
-                <div className="grid grid-cols-[110px_1fr] py-2.5">
-                  <dt className="font-medium text-[#6b6358]">치수 안내</dt>
-                  <dd className="text-[#26231f]">{product.sizeGuide}</dd>
-                </div>
-              )}
-              <div className="grid grid-cols-[110px_1fr] py-2.5">
-                <dt className="font-medium text-[#6b6358]">포장 사양</dt>
-                <dd className="text-[#26231f]">
-                  무표백 재생지 완충 포장 · 출고 검수 필
+            {hasVariants && (
+              <div className={styles.row}>
+                <dt className={styles.rowLabel}>옵션</dt>
+                <dd className={styles.rowValue}>
+                  <select
+                    data-testid="variant-select"
+                    className={styles.select}
+                    value={selectedVariantId ?? ""}
+                    onChange={(e) =>
+                      setSelectedVariantId(Number(e.target.value))
+                    }
+                  >
+                    {allVariants.map((v) => (
+                      <option key={v.id} value={v.id} disabled={v.stock <= 0}>
+                        {v.name}
+                        {v.priceDelta !== 0
+                          ? ` (${v.priceDelta > 0 ? "+" : ""}${won(v.priceDelta)})`
+                          : ""}{" "}
+                        {v.stock <= 0 ? "(품절)" : ""}
+                      </option>
+                    ))}
+                  </select>
                 </dd>
               </div>
-            </dl>
+            )}
+          </dl>
+
+          <div className={styles.total}>
+            <span>총 상품금액</span>
+            <strong>
+              {won(currentPrice * Math.max(1, inCartQuantity || 1))}
+            </strong>
           </div>
 
-          {/* Action / Buy Box */}
-          <div className="space-y-4 pt-2">
-            {hasVariants && (
-              <label className="grid gap-1.5">
-                <span className="text-xs font-medium text-[#6b6358]">
-                  규격 / 옵션 선택
-                </span>
-                <select
-                  data-testid="variant-select"
-                  className="border border-[#26231f] bg-[#fbf9f4] px-3 py-2.5 text-xs text-[#26231f]"
-                  value={selectedVariantId ?? ""}
-                  onChange={(e) => setSelectedVariantId(Number(e.target.value))}
-                >
-                  {allVariants.map((v) => (
-                    <option key={v.id} value={v.id} disabled={v.stock === 0}>
-                      {v.name}{" "}
-                      {v.priceDelta !== 0
-                        ? `(${v.priceDelta > 0 ? "+" : ""}${won(v.priceDelta)})`
-                        : ""}{" "}
-                      {v.stock === 0 ? "[품절]" : `(재고 ${v.stock}개)`}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-
+          <div className={styles.actions}>
             {isSoldOut ? (
-              <button type="button" className="btn w-full py-3.5" disabled>
-                품절된 상품입니다
+              <button type="button" disabled className={styles.btnDisabled}>
+                품절
               </button>
             ) : (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  {inCartQuantity > 0 ? (
-                    <div className="flex items-center justify-between border border-[#26231f] bg-[#fbf9f4] px-2">
-                      <Stepper
-                        productId={id}
-                        name={
-                          selectedVariant
-                            ? `${product.name} (${selectedVariant.name})`
-                            : product.name
-                        }
-                        quantity={inCartQuantity}
-                        max={currentStock}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddToCart}
-                        className="btn border-0 text-xs hover:underline"
-                      >
-                        담기
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleAddToCart}
-                      className="border border-[#26231f] bg-transparent py-3.5 text-xs font-medium text-[#26231f] hover:bg-[#26231f] hover:text-[#f7f3eb] transition-colors cursor-pointer"
-                    >
-                      담기
-                    </button>
-                  )}
-
+              <>
+                {inCartQuantity > 0 ? (
+                  <div className={styles.stepperWrap}>
+                    <Stepper
+                      productId={id}
+                      name={product.name}
+                      quantity={inCartQuantity}
+                      max={currentStock}
+                    />
+                  </div>
+                ) : (
                   <button
                     type="button"
-                    data-testid="buy-now-btn"
-                    onClick={handleBuyNow}
-                    className="border border-[#7f1d1d] bg-[#7f1d1d] py-3.5 text-xs font-medium text-[#f7f3eb] hover:opacity-90 transition-opacity cursor-pointer"
+                    className={styles.btnLine}
+                    onClick={handleAddToCart}
                   >
-                    바로 구매하기
+                    장바구니 담기
                   </button>
-                </div>
-
-                {added && (
-                  <p role="status" className="text-xs text-[#6b6358]">
-                    장바구니에 담았습니다.{" "}
-                    <Link
-                      href="/cart"
-                      className="underline font-medium text-[#7f1d1d]"
-                    >
-                      장바구니로 이동
-                    </Link>
-                  </p>
                 )}
-              </div>
+                <button
+                  type="button"
+                  data-testid="buy-now-btn"
+                  className={styles.btnSolid}
+                  onClick={handleBuyNow}
+                >
+                  바로 구매하기
+                </button>
+              </>
             )}
           </div>
+
+          {added && (
+            <p role="status" className={styles.notice}>
+              <span>
+                {product.name}
+                {eulReul(product.name)} 장바구니에 담았습니다.
+                <Link href={toHref("/cart")} className={styles.noticeLink}>
+                  장바구니 보기
+                </Link>
+              </span>
+              <button
+                type="button"
+                onClick={clearAdded}
+                className={styles.noticeClose}
+              >
+                닫기
+              </button>
+            </p>
+          )}
         </div>
       </div>
 
-      {/* Reviews Section */}
-      <section
-        className="mt-14 border-t border-[#cec3ae] pt-8"
-        data-testid="product-reviews"
-      >
-        <div className="flex items-baseline justify-between mb-6">
-          <h2 className={`${styles.detailSerif} text-xl font-normal text-[#26231f]`}>
-            사용자 기록 및 후기
+      <div className={`${styles.wrap} ${styles.below}`}>
+        <section
+          className={styles.section}
+          aria-labelledby="product-info-heading"
+        >
+          <h2 id="product-info-heading" className={styles.sectionTitle}>
+            상품 정보
           </h2>
-          <div className="flex items-center gap-2 text-xs">
-            <span
-              className="font-semibold text-[#7f1d1d]"
-              data-testid="product-average-rating"
-            >
-              ★ {averageRating > 0 ? averageRating.toFixed(1) : "0.0"}
-            </span>
-            <span className="text-[#6b6358]" data-testid="product-review-count">
-              ({reviewCount}개의 후기)
-            </span>
-          </div>
-        </div>
+          {product.description && (
+            <p className={styles.desc}>{product.description}</p>
+          )}
+          {(product.sizeGuide || product.materialInfo) && (
+            <table className={styles.specTable}>
+              <tbody>
+                {product.materialInfo && (
+                  <tr>
+                    <th scope="row">소재</th>
+                    <td>{product.materialInfo}</td>
+                  </tr>
+                )}
+                {product.sizeGuide && (
+                  <tr>
+                    <th scope="row">치수 안내</th>
+                    <td>{product.sizeGuide}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+        </section>
 
-        {reviews.length === 0 ? (
-          <p className="py-8 text-center text-xs text-[#6b6358] border border-dashed border-[#cec3ae]">
-            등록된 후기가 없습니다.
-          </p>
-        ) : (
-          <div className="divide-y divide-[#ded4c1]">
-            {reviews.map((r) => (
-              <div
-                key={r.id}
-                data-testid={`product-review-item-${r.id}`}
-                className="py-4 text-xs space-y-1.5"
-              >
-                <div className="flex items-center justify-between text-[#6b6358]">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[#7f1d1d]">
-                      {"★".repeat(r.rating)}
-                    </span>
-                    <span className="font-mono text-[#26231f] font-medium">
-                      {r.authorName}
-                    </span>
-                    {r.variantName && <span>[{r.variantName}]</span>}
-                  </div>
-                  <span>{new Date(r.createdAt).toLocaleDateString()}</span>
-                </div>
-                <p className="text-[#26231f] leading-relaxed">{r.content}</p>
-              </div>
-            ))}
+        <section
+          data-testid="product-reviews"
+          className={styles.section}
+          aria-labelledby="product-reviews-heading"
+        >
+          <h2 id="product-reviews-heading" className={styles.sectionTitle}>
+            리뷰
+          </h2>
+          <div className={styles.revSummary}>
+            <span
+              data-testid="product-average-rating"
+              className={styles.revRating}
+            >
+              ★ {averageRating.toFixed(1)}
+            </span>
+            <span
+              data-testid="product-review-count"
+              className={styles.revCount}
+            >
+              {reviewCount}개 리뷰
+            </span>
           </div>
-        )}
-      </section>
+
+          {reviews.length === 0 ? (
+            <p className={styles.revEmpty}>아직 작성된 후기가 없습니다.</p>
+          ) : (
+            <div className={styles.revList}>
+              {reviews.map((r) => (
+                <div
+                  key={r.id}
+                  data-testid={`product-review-item-${r.id}`}
+                  className={styles.revItem}
+                >
+                  <div className={styles.revMeta}>
+                    <span className={styles.revAuthor}>{r.authorName}</span>
+                    <span className={styles.revStars}>★ {r.rating}</span>
+                    {r.variantName && (
+                      <span className={styles.revVariant}>
+                        옵션: {r.variantName}
+                      </span>
+                    )}
+                    <time className={styles.revDate}>
+                      {new Date(r.createdAt).toLocaleDateString("ko-KR")}
+                    </time>
+                  </div>
+                  <p className={styles.revContent}>{r.content}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
     </article>
   );
 }

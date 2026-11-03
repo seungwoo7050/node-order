@@ -2,23 +2,23 @@
 
 import Link from "next/link";
 import { Stepper } from "@/app/shop/stepper";
-import {
-  useStorefrontDetailViewModel,
-  won,
-} from "@/lib/storefront-view-model";
-import { StudioProductArtwork } from "../product-artwork";
+import { useStorefrontDetailViewModel } from "@/lib/storefront-view-model";
 import type { DetailDesignProps } from "../types";
 import styles from "./editorial-atelier.module.css";
+
+function krw(n: number): string {
+  return "KRW " + n.toLocaleString("en-US");
+}
 
 export function EditorialAtelierDetail({
   id,
   initialProduct,
+  linkFor,
 }: DetailDesignProps) {
   const {
     product,
     allVariants,
     hasVariants,
-    selectedVariant,
     selectedVariantId,
     setSelectedVariantId,
     currentPrice,
@@ -31,6 +31,8 @@ export function EditorialAtelierDetail({
     reviewsData,
   } = useStorefrontDetailViewModel(id, initialProduct);
 
+  const getHref = linkFor ?? ((h: string) => h);
+
   if (!product) return null;
 
   const reviewCount = reviewsData?.reviewCount ?? product.reviewCount ?? 0;
@@ -38,269 +40,202 @@ export function EditorialAtelierDetail({
     reviewsData?.averageRating ?? product.averageRating ?? 0;
   const reviews = reviewsData?.reviews ?? [];
 
+  const allImages =
+    product.images && product.images.length > 0
+      ? product.images
+      : product.imageUrl
+        ? [{ id: 0, imageUrl: product.imageUrl, sortOrder: 0 }]
+        : [];
+
   return (
     <article
       data-design="editorial-atelier"
       data-testid="product-detail"
-      className={styles.detailRoot}
+      className={styles.detail}
     >
-      <div className={styles.detailGrid}>
-        {/* Left Column: 3:4 Portrait Lookbook Plate + Editorial Story & Reviews */}
-        <div className="space-y-12">
-          <div className={styles.detailVisualFrame}>
-            {product.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={product.imageUrl}
-                alt={product.name}
-                width={720}
-                height={960}
-                className="aspect-[3/4] size-full object-cover"
-              />
-            ) : (
-              <StudioProductArtwork
-                id={product.id}
-                design="editorial-atelier"
-              />
-            )}
-          </div>
+      <div className={styles.media}>
+        {allImages.length > 0 ? (
+          allImages.map((img, idx) => (
+            <figure key={img.id ?? idx} className={styles.mediaPlate}>
+              {img.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={img.imageUrl}
+                  alt=""
+                  width={1200}
+                  height={1500}
+                  loading={idx === 0 ? "eager" : "lazy"}
+                  decoding="async"
+                  className={styles.mediaPlateImg}
+                />
+              ) : (
+                <span aria-hidden="true" className={styles.fallbackMedia} />
+              )}
+            </figure>
+          ))
+        ) : (
+          <figure className={styles.mediaPlate}>
+            <span aria-hidden="true" className={styles.fallbackMedia} />
+          </figure>
+        )}
+      </div>
 
-          {product.description && (
-            <div className="space-y-3 border-t border-[#141413]/20 pt-8">
-              <h3 className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#68635a]">
-                01 // EDITORIAL NOTE & SILHOUETTE
-              </h3>
-              <p className="whitespace-pre-line text-sm font-light leading-relaxed text-[#2a2926]">
-                {product.description}
-              </p>
-            </div>
-          )}
+      <div className={styles.info}>
+        <h1 id="product-title" className={styles.title}>
+          {product.name}
+        </h1>
+        <p className={styles.priceLine}>{krw(currentPrice)}</p>
+        <p className={styles.stockLine}>
+          재고{" "}
+          <span data-testid={`detail-stock-${product.id}`}>
+            {isSoldOut ? 0 : currentStock}
+          </span>
+        </p>
 
-          {(product.materialInfo || product.sizeGuide) && (
-            <div className="space-y-4 border-t border-[#141413]/20 pt-8">
-              <h3 className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#68635a]">
-                02 // FABRICATION & MEASUREMENTS
-              </h3>
-              <div className="grid gap-4 sm:grid-cols-2 text-xs">
-                {product.materialInfo && (
-                  <div className="border border-[#141413]/15 bg-[#fbfaf7] p-4 space-y-1">
-                    <span className="block font-mono text-[10px] uppercase tracking-widest text-[#68635a]">
-                      소재 및 혼용률
-                    </span>
-                    <span className="block text-[#141413] leading-relaxed">
-                      {product.materialInfo}
-                    </span>
-                  </div>
-                )}
-                {product.sizeGuide && (
-                  <div className="border border-[#141413]/15 bg-[#fbfaf7] p-4 space-y-1">
-                    <span className="block font-mono text-[10px] uppercase tracking-widest text-[#68635a]">
-                      사이즈 및 핏 가이드
-                    </span>
-                    <span className="block text-[#141413] leading-relaxed">
-                      {product.sizeGuide}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Editorial Reviews Section */}
-          <section
-            className="border-t border-[#141413]/20 pt-8"
-            data-testid="product-reviews"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#68635a]">
-                03 // CLIENT IMPRESSIONS
-              </h3>
-              <div className="flex items-center gap-2 text-xs">
-                <span
-                  className="font-semibold text-[#141413]"
-                  data-testid="product-average-rating"
-                >
-                  ★ {averageRating > 0 ? averageRating.toFixed(1) : "0.0"}
-                </span>
-                <span
-                  className="text-[#68635a]"
-                  data-testid="product-review-count"
-                >
-                  ({reviewCount}개의 후기)
-                </span>
-              </div>
-            </div>
-
-            {reviews.length === 0 ? (
-              <p className="border border-dashed border-[#141413]/20 py-8 text-center text-xs text-[#68635a]">
-                등록된 고객 리뷰가 없습니다.
-              </p>
-            ) : (
-              <div className="divide-y divide-[#141413]/12 border-t border-[#141413]/12">
-                {reviews.map((r) => (
-                  <div
-                    key={r.id}
-                    data-testid={`product-review-item-${r.id}`}
-                    className="py-4 text-xs space-y-1.5"
-                  >
-                    <div className="flex items-center justify-between text-[#68635a]">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[#141413]">
-                          {"★".repeat(r.rating)}
-                        </span>
-                        <span className="font-mono text-[#141413] font-medium">
-                          {r.authorName}
-                        </span>
-                        {r.variantName && <span>· {r.variantName}</span>}
-                      </div>
-                      <span className="font-mono">
-                        {new Date(r.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <p className="text-[#2a2926] leading-relaxed">
-                      {r.content}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
-
-        {/* Right Column: Sticky Architectural Buy Box */}
-        <div className={styles.detailBuyBox}>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.2em] text-[#68635a]">
-              <span>{product.categoryPath.join(" / ") || "ARCHIVE"}</span>
-              <span>LOOK #{String(id).padStart(3, "0")}</span>
-            </div>
-
-            <h1
-              id="product-title"
-              className={`${styles.detailHeading} text-3xl sm:text-4xl font-normal tracking-tight text-[#141413]`}
+        {hasVariants && (
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>OPTION</span>
+            <select
+              data-testid="variant-select"
+              value={selectedVariantId ?? ""}
+              onChange={(e) => setSelectedVariantId(Number(e.target.value))}
+              className={styles.select}
             >
-              {product.name}
-            </h1>
+              {allVariants.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                  {v.priceDelta !== 0
+                    ? ` (${v.priceDelta > 0 ? "+" : ""}${v.priceDelta.toLocaleString("ko-KR")}원)`
+                    : ""}
+                  {v.stock <= 0 ? " [품절]" : ` (재고: ${v.stock})`}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
-            <div className="flex items-baseline justify-between border-y border-[#141413]/15 py-4">
-              <span className="num text-2xl font-normal text-[#141413]">
-                {won(currentPrice)}
-              </span>
-              <span className="font-mono text-xs text-[#68635a]">
-                {isSoldOut ? (
-                  <span className="text-danger font-medium">품절</span>
-                ) : (
-                  <span>
-                    재고{" "}
-                    <span
-                      className="num font-medium text-[#141413]"
-                      data-testid={`detail-stock-${id}`}
-                    >
-                      {currentStock}
-                    </span>
-                  </span>
-                )}
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-6">
-            {hasVariants && (
-              <label className="grid gap-2">
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#68635a]">
-                  SELECT SIZE / COLOR OPTION
-                </span>
-                <select
-                  data-testid="variant-select"
-                  className="border border-[#141413] bg-white p-3 text-xs text-[#141413] font-medium"
-                  value={selectedVariantId ?? ""}
-                  onChange={(e) => setSelectedVariantId(Number(e.target.value))}
+        <div className={styles.actions}>
+          {isSoldOut ? (
+            <button type="button" disabled className={styles.btnDisabled}>
+              품절
+            </button>
+          ) : (
+            <>
+              {inCartQuantity > 0 ? (
+                <div className={styles.pdpStepperWrap}>
+                  <Stepper
+                    productId={product.id}
+                    name={product.name}
+                    quantity={inCartQuantity}
+                    max={currentStock}
+                  />
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  className={styles.btn}
                 >
-                  {allVariants.map((v) => (
-                    <option key={v.id} value={v.id} disabled={v.stock === 0}>
-                      {v.name}{" "}
-                      {v.priceDelta !== 0
-                        ? `(${v.priceDelta > 0 ? "+" : ""}${won(v.priceDelta)})`
-                        : ""}{" "}
-                      {v.stock === 0 ? "[품절]" : `(재고 ${v.stock}개)`}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-
-            {isSoldOut ? (
+                  장바구니 담기
+                </button>
+              )}
               <button
                 type="button"
-                className="btn w-full py-4 uppercase text-xs tracking-wider"
-                disabled
+                data-testid="buy-now-btn"
+                onClick={handleBuyNow}
+                className={styles.btn}
               >
-                SOLD OUT
+                바로 구매하기
               </button>
-            ) : (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  {inCartQuantity > 0 ? (
-                    <div className="flex items-center justify-between border border-[#141413] bg-white px-2">
-                      <Stepper
-                        productId={id}
-                        name={
-                          selectedVariant
-                            ? `${product.name} (${selectedVariant.name})`
-                            : product.name
-                        }
-                        quantity={inCartQuantity}
-                        max={currentStock}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddToCart}
-                        className="btn border-0 text-xs hover:underline"
-                      >
-                        담기
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleAddToCart}
-                      className="border border-[#141413] bg-white py-4 text-xs font-medium tracking-[0.14em] uppercase text-[#141413] hover:bg-[#ece8e0] transition-colors cursor-pointer"
-                    >
-                      담기
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    data-testid="buy-now-btn"
-                    onClick={handleBuyNow}
-                    className="border border-[#141413] bg-[#141413] py-4 text-xs font-medium tracking-[0.14em] uppercase text-[#f6f4f0] hover:opacity-90 transition-opacity cursor-pointer"
-                  >
-                    바로 구매하기
-                  </button>
-                </div>
-
-                {added && (
-                  <p role="status" className="text-xs text-[#68635a] pt-1">
-                    선택한 상품을 장바구니에 담았습니다.{" "}
-                    <Link
-                      href="/cart"
-                      className="underline font-semibold text-[#141413]"
-                    >
-                      장바구니 보기
-                    </Link>
-                  </p>
-                )}
-              </div>
-            )}
-
-            <div className="border-t border-[#141413]/15 pt-4 space-y-1.5 text-[11px] text-[#68635a]">
-              <p>· 전 상품 아틀리에 전용 패키징으로 출고됩니다.</p>
-              <p>· 오후 2시 이전 결제 완료 시 당일 출고됩니다.</p>
-            </div>
-          </div>
+            </>
+          )}
         </div>
+
+        {added && (
+          <p role="status" className={styles.notice}>
+            <span>장바구니에 담았습니다.</span>
+            <Link href={getHref("/cart")} className={styles.noticeLink}>
+              장바구니 보기
+            </Link>
+          </p>
+        )}
+
+        {product.description && (
+          <details open className={styles.acc}>
+            <summary className={styles.summary}>
+              <span>DETAIL</span>
+              <span className={styles.accToggle} aria-hidden="true" />
+            </summary>
+            <div className={styles.accBody}>{product.description}</div>
+          </details>
+        )}
+
+        {product.materialInfo && (
+          <details className={styles.acc}>
+            <summary className={styles.summary}>
+              <span>MATERIAL</span>
+              <span className={styles.accToggle} aria-hidden="true" />
+            </summary>
+            <div className={styles.accBody}>{product.materialInfo}</div>
+          </details>
+        )}
+
+        {product.sizeGuide && (
+          <details className={styles.acc}>
+            <summary className={styles.summary}>
+              <span>SIZE</span>
+              <span className={styles.accToggle} aria-hidden="true" />
+            </summary>
+            <div className={styles.accBody}>{product.sizeGuide}</div>
+          </details>
+        )}
+
+        <section data-testid="product-reviews" className={styles.reviews}>
+          <div className={styles.revHead}>
+            <h2 className={styles.revTitle}>REVIEW</h2>
+            <span
+              data-testid="product-average-rating"
+              className={styles.revRating}
+            >
+              ★ {averageRating.toFixed(1)}
+            </span>
+            <span
+              data-testid="product-review-count"
+              className={styles.revCount}
+            >
+              ({reviewCount})
+            </span>
+          </div>
+
+          {reviews.length === 0 ? (
+            <p className={styles.revEmpty}>아직 작성된 후기가 없습니다.</p>
+          ) : (
+            <div className={styles.revList}>
+              {reviews.map((r) => (
+                <div
+                  key={r.id}
+                  data-testid={`product-review-item-${r.id}`}
+                  className={styles.rev}
+                >
+                  <div className={styles.revMeta}>
+                    <span className={styles.revAuthor}>{r.authorName}</span>
+                    <span className={styles.revDate}>
+                      {new Date(r.createdAt).toLocaleDateString("ko-KR")}
+                    </span>
+                    {r.variantName && (
+                      <span className={styles.revVariant}>{r.variantName}</span>
+                    )}
+                    <span className={styles.revScore}>★ {r.rating}</span>
+                  </div>
+                  <p className={styles.revContent}>{r.content}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </article>
   );
 }
+
+export default EditorialAtelierDetail;
