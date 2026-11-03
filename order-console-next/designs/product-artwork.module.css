@@ -1,0 +1,166 @@
+.atelierPlate {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 18px;
+  color: #1c1b19;
+}
+
+.atelierTone0 {
+  background: #ede9e1;
+}
+.atelierTone1 {
+  background: #e4e0d7;
+}
+.atelierTone2 {
+  background: #eae6df;
+}
+.atelierTone3 {
+  background: #dfd9ce;
+}
+
+.atelierTopMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.62;
+  font-family: var(--font-ibm-mono), monospace;
+  z-index: 2;
+}
+
+.plateSvg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.atelierBottomMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  z-index: 2;
+  border-top: 1px solid rgba(20, 20, 19, 0.12);
+  padding-top: 8px;
+}
+
+.atelierStudyLabel {
+  font-family: var(--font-instrument), var(--font-display), serif;
+  font-size: 13px;
+  font-style: italic;
+  letter-spacing: 0.02em;
+  opacity: 0.78;
+}
+
+.atelierRatioLabel {
+  font-family: var(--font-ibm-mono), monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  opacity: 0.5;
+}
+
+/* Muji Specimen Plate */
+.mujiPlate {
+  width: 100%;
+  height: 100%;
+  background: #efe8da;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px;
+  color: #26231f;
+}
+
+.mujiTopMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: #6b6358;
+  font-family: var(--font-ibm-mono), monospace;
+  z-index: 2;
+}
+
+.mujiCrimsonText {
+  color: #7f1d1d;
+  font-weight: 600;
+}
+
+.mujiBottomMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 2;
+  border-top: 1px solid #d6ccb9;
+  padding-top: 6px;
+  font-size: 10px;
+  color: #6b6358;
+}
+
+.mujiSerieLabel {
+  font-family: var(--font-cormorant), var(--font-display), serif;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.mujiSpecLabel {
+  font-family: var(--font-ibm-mono), monospace;
+  font-size: 9px;
+}
+
+/* Zavanas CAD Blueprint Plate */
+.zavanasPlate {
+  width: 100%;
+  height: 100%;
+  background: #f3f5f7;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 12px;
+  color: #111315;
+  font-family: var(--font-ibm-mono), monospace;
+}
+
+.zavanasTopMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  z-index: 2;
+}
+
+.zavanasCadBadge {
+  background: #111315;
+  color: #ffffff;
+  padding: 1px 5px;
+  font-weight: 600;
+}
+
+.zavanasLiveBadge {
+  color: #ff4d00;
+  font-weight: 600;
+}
+
+.zavanasBottomMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 9px;
+  color: #4b5563;
+  border-top: 1px solid #cfd6dd;
+  padding-top: 6px;
+  z-index: 2;
+}

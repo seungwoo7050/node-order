@@ -34,7 +34,7 @@ test.describe("36-storefront-designs e2e", () => {
     await page.close();
   });
 
-  test.afterAll(async ({ browser }) => {
+  test.afterAll(async ({ browser, request }) => {
     if (!originalSettings) return;
     const page = await browser.newPage({ serviceWorkers: "block" });
     await loginAsKim(page);
@@ -48,6 +48,27 @@ test.describe("36-storefront-designs e2e", () => {
     await page.getByRole("button", { name: "저장" }).click();
     await expect(page.getByTestId("save-done")).toBeVisible();
     await page.close();
+
+    // 테스트 중 생성된 임시 상품 소프트 삭제 정리
+    const loginRes = await request.post("http://localhost:4000/auth/login", {
+      data: { id: "kim", password: "1234" },
+    });
+    if (loginRes.ok()) {
+      const { accessToken } = await loginRes.json();
+      const listRes = await request.get("http://localhost:4000/admin/products", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (listRes.ok()) {
+        const items = (await listRes.json()) as { id: number; name: string }[];
+        for (const item of items) {
+          if (item.name.startsWith("디자인테스트셔츠-") || item.name.startsWith("옵션테스트셔츠-")) {
+            await request.delete(`http://localhost:4000/admin/products/${item.id}`, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+          }
+        }
+      }
+    }
   });
 
   test("1. 디자인 스위처 및 URL 쿼리(?design=) 연동과 3대 아키텍처 렌더링 검증", async ({ page }) => {

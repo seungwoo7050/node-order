@@ -1,0 +1,360 @@
+.root {
+  --muji-paper: #f3eee4;
+  --muji-cell: #f7f3eb;
+  --muji-surface: #e8e0d1;
+  --muji-ink: #26231f;
+  --muji-muted: #6b6358;
+  --muji-faint: #998f80;
+  --muji-crimson: #7f1d1d;
+  --muji-line: #cec3ae;
+  --font-muji-serif: var(--font-cormorant), var(--font-display), "Noto Serif KR", serif;
+  --font-muji-sans: var(--font-jakarta), var(--font-body), "Noto Sans KR", sans-serif;
+  --font-muji-mono: var(--font-ibm-mono), monospace;
+
+  width: 100%;
+  background: var(--muji-paper);
+  color: var(--muji-ink);
+  font-family: var(--font-muji-sans);
+  padding-bottom: 84px;
+}
+
+.shell {
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+  padding-inline: clamp(20px, 4vw, 56px);
+}
+
+.statusPad {
+  padding-top: 56px;
+}
+
+/* Tactile Philosophy Intro Header */
+.manifestoBar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 28px;
+  align-items: center;
+  padding: 32px 0;
+  border-bottom: 1px solid var(--muji-line);
+}
+
+.crimsonSeal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 68px;
+  height: 68px;
+  background: var(--muji-crimson);
+  color: #f7f3eb;
+  font-family: var(--font-muji-serif);
+  font-size: 13px;
+  line-height: 1.25;
+  letter-spacing: 0.14em;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.manifestoCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.manifestoKicker {
+  font-family: var(--font-muji-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--muji-crimson);
+  text-transform: uppercase;
+}
+
+.manifestoTitle {
+  font-family: var(--font-muji-serif);
+  font-size: clamp(1.5rem, 2.5vw, 2.25rem);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  color: var(--muji-ink);
+  margin: 0;
+}
+
+.manifestoDesc {
+  max-width: 64ch;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muji-muted);
+  margin: 0;
+}
+
+.manifestoStamp {
+  text-align: right;
+  font-family: var(--font-muji-mono);
+  font-size: 10px;
+  line-height: 1.7;
+  letter-spacing: 0.12em;
+  color: var(--muji-muted);
+  border-left: 1px solid var(--muji-line);
+  padding-left: 20px;
+}
+
+/* Taxonomy Filter Bar */
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 0;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--muji-line);
+}
+
+.categoryPills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.catBtn {
+  padding: 6px 14px;
+  border: 1px solid var(--muji-line);
+  background: var(--muji-cell);
+  color: var(--muji-muted);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.catBtn:hover {
+  border-color: var(--muji-crimson);
+  color: var(--muji-ink);
+}
+
+.catBtnActive {
+  border-color: var(--muji-crimson);
+  background: var(--muji-crimson);
+  color: #f7f3eb;
+  font-weight: 500;
+}
+
+.catBtnActive:hover {
+  color: #f7f3eb;
+}
+
+.sortSelect {
+  border: 1px solid var(--muji-line);
+  background: var(--muji-cell);
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--muji-ink);
+  cursor: pointer;
+}
+
+/* Collapsed Washi Specimen Ledger Grid */
+.specimenGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--muji-line);
+  border-left: 1px solid var(--muji-line);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.specimenCell {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px;
+  background: var(--muji-cell);
+  border-right: 1px solid var(--muji-line);
+  border-bottom: 1px solid var(--muji-line);
+  transition: background-color 180ms ease;
+}
+
+.specimenCell:hover {
+  background: #faf7f1;
+}
+
+.cellHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #e2d9c8;
+  font-family: var(--font-muji-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.specimenCode {
+  color: var(--muji-crimson);
+  font-weight: 600;
+}
+
+.specimenCat {
+  color: var(--muji-muted);
+}
+
+.squareFrame {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border: 1px solid #ded4c1;
+  background: var(--muji-surface);
+  text-decoration: none;
+  position: relative;
+}
+
+.squareImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 500ms ease;
+}
+
+.specimenCell:hover .squareImg {
+  transform: scale(1.025);
+}
+
+.cellBody {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.itemTitle {
+  font-family: var(--font-muji-serif);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.itemTitleLink {
+  color: var(--muji-ink);
+  text-decoration: none;
+}
+
+.itemTitleLink:hover {
+  color: var(--muji-crimson);
+}
+
+.itemDesc {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muji-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ledgerRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #dcd2be;
+  font-size: 13px;
+}
+
+.itemPrice {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--muji-ink);
+}
+
+.itemMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muji-muted);
+}
+
+.cellAction {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tactileBtn {
+  width: 100%;
+  padding: 9px 16px;
+  border: 1px solid var(--muji-ink);
+  background: transparent;
+  color: var(--muji-ink);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.tactileBtn:hover:not(:disabled) {
+  border-color: var(--muji-crimson);
+  background: var(--muji-crimson);
+  color: #f7f3eb;
+}
+
+.tactileBtn:disabled {
+  border-color: var(--muji-line);
+  color: var(--muji-faint);
+  cursor: not-allowed;
+}
+
+/* Detail Sheet */
+.detailSheet {
+  --font-muji-serif: var(--font-cormorant), var(--font-display), "Noto Serif KR", serif;
+  border-top: 4px solid #7f1d1d;
+  border-left: 1px solid #cec3ae;
+  border-right: 1px solid #cec3ae;
+  border-bottom: 1px solid #cec3ae;
+  background: #f7f3eb;
+  padding: clamp(24px, 4vw, 48px);
+}
+
+.detailSerif {
+  font-family: var(--font-muji-serif);
+}
+
+.detailLayout {
+  display: grid;
+  grid-template-columns: 0.95fr 1.05fr;
+  gap: 48px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .specimenGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .manifestoBar {
+    grid-template-columns: auto 1fr;
+  }
+  .manifestoStamp {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .detailLayout {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+}
+
+@media (max-width: 600px) {
+  .specimenGrid {
+    grid-template-columns: 1fr;
+  }
+}
