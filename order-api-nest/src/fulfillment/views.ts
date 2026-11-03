@@ -82,6 +82,9 @@ async function baseView(tx: Tx, row: Row, now: Date) {
   const canReturn = row.status === "delivered" && deadline !== null && now <= deadline && [...left.values()].some((q) => q > 0);
   return {
     ...rest,
+    items: row.items.map(({ variantKey, variantId, variantLabel, ...item }) =>
+      variantKey || variantId || variantLabel ? { ...item, variantKey, variantId, variantLabel } : item,
+    ),
     price: totalAmount,
     subtotal: totalAmount - row.shippingFee,
     shipping: recipientName ? { recipientName, recipientPhone, postalCode, address1, address2, deliveryMemo } : null,
@@ -90,8 +93,8 @@ async function baseView(tx: Tx, row: Row, now: Date) {
     returnDeadline: deadline,
     returnable: row.items.map((i) => ({
       productId: i.product.id,
-      variantId: i.variantId,
-      variantLabel: i.variantLabel,
+      ...(i.variantId ? { variantId: i.variantId } : {}),
+      ...(i.variantLabel ? { variantLabel: i.variantLabel } : {}),
       name: i.variantLabel ? `${i.product.name} (${i.variantLabel})` : i.product.name,
       quantity: Math.max(0, left.get(`${i.product.id}:${i.variantKey}`) ?? left.get(i.product.id) ?? 0),
     })),
