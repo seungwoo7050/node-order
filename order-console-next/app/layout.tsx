@@ -78,6 +78,7 @@ const nanumGothic = Nanum_Gothic({
 export const instant = false;
 
 export async function generateMetadata(): Promise<Metadata> {
+  await connection();
   let title = "Store";
   try {
     const info = await getStoreInfo();
