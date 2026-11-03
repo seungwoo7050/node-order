@@ -242,7 +242,10 @@ export default function AdminCategoriesPage() {
     <main className="page flex-1 pb-12 pt-2">
       <h1 className="title mb-6">카테고리 관리</h1>
 
-      <AdminOnly>
+      <AdminOnly
+        readOnlyNote="데모 관리자는 볼 수만 있습니다. 카테고리 추가·수정·삭제는 실제 관리자(kim)만 할 수 있습니다."
+        note="스토어프론트 상단 필터 바와 상품 분류에 사용되는 2단계 카테고리 계층 트리를 관리합니다."
+      >
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] items-start">
           <div>
             <h2 className="label mb-3">카테고리 계층 트리</h2>
