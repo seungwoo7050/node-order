@@ -11,22 +11,22 @@ import styles from "./admin.module.css";
 
 const NAV_GROUPS = [
   {
-    group: "Overview",
+    group: "현황",
     items: [{ href: "/admin", label: "대시보드", exact: true }],
   },
   {
-    group: "Catalog & Commerce",
+    group: "주문·카탈로그",
     items: [
+      { href: "/admin/orders", label: "주문 관리" },
       { href: "/admin/products", label: "상품 관리" },
       { href: "/admin/categories", label: "카테고리 관리" },
-      { href: "/admin/orders", label: "주문 관리" },
       { href: "/admin/coupons", label: "쿠폰 관리" },
       { href: "/admin/reviews", label: "리뷰 관리" },
       { href: "/admin/users", label: "회원 관리" },
     ],
   },
   {
-    group: "Operations & Governance",
+    group: "운영·시스템",
     items: [
       { href: "/admin/reconciliation", label: "PG 대사" },
       { href: "/admin/settings", label: "상점 설정" },
@@ -43,7 +43,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const queryClient = useQueryClient();
   const { data: profile } = useProfile();
   const { data: storeInfo } = useQuery(storeInfoOptions);
-  const storeName = storeInfo?.storeName ?? "Store";
+  const storeName = storeInfo?.storeName ?? "상점";
   const [notification, setNotification] = useState<string | null>(null);
 
   // Real-time admin notification
@@ -99,49 +99,51 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             data-testid="admin-sidebar"
             className={styles.sidebar}
           >
-            <div className={styles.brandHeader}>
-              <div className={styles.brandRow}>
-                <Link
-                  href="/shop"
-                  data-testid="admin-logo-store-name"
-                  className={styles.brandTitle}
-                >
-                  {storeName}
-                </Link>
-                {/* FIRST link with name '상품' must navigate to /shop for admin-edit.spec.ts */}
-                <Link
-                  href="/shop"
-                  className={styles.storefrontLink}
-                >
-                  상품
-                </Link>
-              </div>
-              <span className={styles.workspaceTag}>Back-Office Console</span>
-            </div>
-
-            <nav aria-label="관리자 메뉴" className={styles.navList}>
-              {NAV_GROUPS.map((section) => (
-                <div key={section.group}>
-                  <div className={styles.navGroupLabel}>{section.group}</div>
-                  {section.items.map((item) => {
-                    const isExact = "exact" in item && Boolean(item.exact);
-                    const active = isExact
-                      ? pathname === item.href
-                      : pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        aria-current={active ? "page" : undefined}
-                        className={`${styles.navItem} ${active ? styles.navItemActive : ""}`}
-                      >
-                        <span>{item.label}</span>
-                      </Link>
-                    );
-                  })}
+            <div className={styles.sidebarTop}>
+              <div className={styles.brandHeader}>
+                <div className={styles.brandRow}>
+                  <Link
+                    href="/shop"
+                    data-testid="admin-logo-store-name"
+                    className={styles.brandTitle}
+                  >
+                    {storeName}
+                  </Link>
+                  {/* FIRST link with name '상품' must navigate to /shop for admin-edit.spec.ts */}
+                  <Link
+                    href="/shop"
+                    className={styles.storefrontLink}
+                  >
+                    상품
+                  </Link>
                 </div>
-              ))}
-            </nav>
+                <span className={styles.workspaceTag}>상점 관리 콘솔</span>
+              </div>
+
+              <nav aria-label="관리자 메뉴" className={styles.navList}>
+                {NAV_GROUPS.map((section) => (
+                  <div key={section.group} className={styles.navSection}>
+                    <div className={styles.navGroupLabel}>{section.group}</div>
+                    {section.items.map((item) => {
+                      const isExact = "exact" in item && Boolean(item.exact);
+                      const active = isExact
+                        ? pathname === item.href
+                        : pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          aria-current={active ? "page" : undefined}
+                          className={`${styles.navItem} ${active ? styles.navItemActive : ""}`}
+                        >
+                          <span>{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ))}
+              </nav>
+            </div>
 
             <div className={styles.sidebarFooter}>
               <div className={styles.operatorInfo}>
@@ -149,11 +151,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <>
                     <span className={styles.operatorName}>{profile.name} ({profile.id})</span>
                     <span className={styles.operatorRole}>
-                      {profile.role === "demo_admin" ? "READ-ONLY DEMO" : "FULL ADMIN · CRUD"}
+                      {profile.role === "demo_admin" ? "데모 관리자 · 읽기 전용" : "최고 관리자"}
                     </span>
                   </>
                 ) : (
-                  <span className={styles.operatorRole}>OPERATOR SESSION</span>
+                  <span className={styles.operatorRole}>관리자 세션</span>
                 )}
               </div>
               <button

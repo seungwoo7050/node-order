@@ -23,9 +23,15 @@ type Coupon = {
 
 export default function AdminCouponsPage() {
   return (
-    <AdminOnly note="프로모션 할인 쿠폰 코드를 발행하고 관리합니다.">
-      <CouponsContent />
-    </AdminOnly>
+    <main className="page flex-1 pb-12 pt-2 space-y-6">
+      <div>
+        <h1 className="title">쿠폰 관리</h1>
+        <p className="text-xs text-muted mt-1">프로모션 할인 쿠폰 코드를 발행하고 사용 내역·상태를 관리합니다.</p>
+      </div>
+      <AdminOnly note={null}>
+        <CouponsContent />
+      </AdminOnly>
+    </main>
   );
 }
 
@@ -111,25 +117,20 @@ function CouponsContent() {
   };
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">쿠폰 관리</h1>
-        <p className="text-sm text-neutral-500 mt-1">할인 쿠폰을 생성하고 수정·삭제할 수 있습니다.</p>
-      </div>
-
+    <div className="space-y-6">
       {error && (
-        <div role="alert" className="p-4 bg-red-50 text-red-700 rounded-lg text-sm border border-red-200">
+        <div role="alert" className="alert">
           {error}
         </div>
       )}
 
       {/* 쿠폰 생성 폼 */}
-      <div className="bg-white p-6 rounded-xl border border-neutral-200 shadow-sm">
-        <h2 className="text-lg font-semibold mb-4">새 쿠폰 발행</h2>
+      <div className="bg-white p-5 rounded-lg border border-line">
+        <h2 className="subtitle mb-4">새 쿠폰 발행</h2>
         <form onSubmit={handleSubmit} data-testid="coupon-create-form" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-neutral-600 mb-1">쿠폰 코드 (대문자)</label>
+              <label className="block text-xs font-medium text-muted mb-1">쿠폰 코드 (대문자)</label>
               <input
                 type="text"
                 value={code}
@@ -137,12 +138,12 @@ function CouponsContent() {
                 placeholder="예: SUMMER2026"
                 disabled={readOnly}
                 data-testid="coupon-code-input"
-                className="w-full px-3 py-2 border rounded-md text-sm font-mono uppercase focus:ring-1 focus:ring-black"
+                className="w-full px-3 py-2 border border-line rounded text-sm font-mono uppercase bg-bg"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-neutral-600 mb-1">쿠폰명</label>
+              <label className="block text-xs font-medium text-muted mb-1">쿠폰명</label>
               <input
                 type="text"
                 value={name}
@@ -150,7 +151,7 @@ function CouponsContent() {
                 placeholder="예: 여름 맞이 10% 특별 할인"
                 disabled={readOnly}
                 data-testid="coupon-name-input"
-                className="w-full px-3 py-2 border rounded-md text-sm focus:ring-1 focus:ring-black"
+                className="w-full px-3 py-2 border border-line rounded text-sm bg-bg"
                 required
               />
             </div>
@@ -158,20 +159,20 @@ function CouponsContent() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-medium text-neutral-600 mb-1">할인 종류</label>
+              <label className="block text-xs font-medium text-muted mb-1">할인 종류</label>
               <select
                 value={discountType}
                 onChange={(e) => setDiscountType(e.target.value as "fixed" | "percent")}
                 disabled={readOnly}
                 data-testid="coupon-discount-type"
-                className="w-full px-3 py-2 border rounded-md text-sm focus:ring-1 focus:ring-black"
+                className="w-full px-3 py-2 border border-line rounded text-sm bg-bg"
               >
                 <option value="fixed">정액 할인 (원)</option>
                 <option value="percent">정률 할인 (%)</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-neutral-600 mb-1">
+              <label className="block text-xs font-medium text-muted mb-1">
                 {discountType === "fixed" ? "할인 금액 (원)" : "할인율 (%)"}
               </label>
               <input
@@ -182,12 +183,12 @@ function CouponsContent() {
                 onChange={(e) => setDiscountValue(Number(e.target.value))}
                 disabled={readOnly}
                 data-testid="coupon-discount-value"
-                className="w-full px-3 py-2 border rounded-md text-sm focus:ring-1 focus:ring-black"
+                className="num w-full px-3 py-2 border border-line rounded text-sm bg-bg"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-neutral-600 mb-1">최소 주문 금액 (원)</label>
+              <label className="block text-xs font-medium text-muted mb-1">최소 주문 금액 (원)</label>
               <input
                 type="number"
                 min={0}
@@ -195,14 +196,14 @@ function CouponsContent() {
                 onChange={(e) => setMinOrderAmount(Number(e.target.value))}
                 disabled={readOnly}
                 data-testid="coupon-min-order-amount"
-                className="w-full px-3 py-2 border rounded-md text-sm focus:ring-1 focus:ring-black"
+                className="num w-full px-3 py-2 border border-line rounded text-sm bg-bg"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-medium text-neutral-600 mb-1">최대 할인 한도 (정률 시, 원)</label>
+              <label className="block text-xs font-medium text-muted mb-1">최대 할인 한도 (정률 시, 원)</label>
               <input
                 type="number"
                 min={1}
@@ -211,11 +212,11 @@ function CouponsContent() {
                 placeholder="비워두면 무제한"
                 disabled={readOnly || discountType === "fixed"}
                 data-testid="coupon-max-discount-amount"
-                className="w-full px-3 py-2 border rounded-md text-sm focus:ring-1 focus:ring-black disabled:bg-neutral-100"
+                className="num w-full px-3 py-2 border border-line rounded text-sm bg-bg disabled:bg-neutral-100"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-neutral-600 mb-1">총 사용 가능 횟수</label>
+              <label className="block text-xs font-medium text-muted mb-1">총 사용 가능 횟수</label>
               <input
                 type="number"
                 min={1}
@@ -224,18 +225,18 @@ function CouponsContent() {
                 placeholder="비워두면 무제한"
                 disabled={readOnly}
                 data-testid="coupon-max-uses"
-                className="w-full px-3 py-2 border rounded-md text-sm focus:ring-1 focus:ring-black"
+                className="num w-full px-3 py-2 border border-line rounded text-sm bg-bg"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-neutral-600 mb-1">만료 일시 (선택)</label>
+              <label className="block text-xs font-medium text-muted mb-1">만료 일시 (선택)</label>
               <input
                 type="datetime-local"
                 value={expiresAt}
                 onChange={(e) => setExpiresAt(e.target.value)}
                 disabled={readOnly}
                 data-testid="coupon-expires-at"
-                className="w-full px-3 py-2 border rounded-md text-sm focus:ring-1 focus:ring-black"
+                className="w-full px-3 py-2 border border-line rounded text-sm bg-bg"
               />
             </div>
           </div>
@@ -245,7 +246,7 @@ function CouponsContent() {
               type="submit"
               disabled={readOnly || createMutation.isPending}
               data-testid="coupon-create-submit"
-              className="px-5 py-2.5 bg-black text-white text-sm font-medium rounded-lg hover:bg-neutral-800 disabled:opacity-50"
+              className="btn btn-primary text-sm font-medium rounded"
             >
               {createMutation.isPending ? "발행 중..." : "쿠폰 발행"}
             </button>
@@ -254,18 +255,18 @@ function CouponsContent() {
       </div>
 
       {/* 쿠폰 목록 테이블 */}
-      <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden shadow-sm" data-testid="coupon-list">
-        <div className="p-4 border-b border-neutral-200 font-semibold text-sm">
+      <div className="bg-white rounded-lg border border-line overflow-hidden" data-testid="coupon-list">
+        <div className="p-4 border-b border-line font-semibold text-sm">
           쿠폰 목록 ({coupons.length}개)
         </div>
         {isPending ? (
-          <div className="p-8 text-center text-sm text-neutral-500">쿠폰 목록을 불러오는 중...</div>
+          <div className="p-8 text-center text-sm text-muted">쿠폰 목록을 불러오는 중...</div>
         ) : coupons.length === 0 ? (
-          <div className="p-8 text-center text-sm text-neutral-500">등록된 쿠폰이 없습니다.</div>
+          <div className="p-8 text-center text-sm text-muted">등록된 쿠폰이 없습니다.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-neutral-50 border-b border-neutral-200 text-xs font-medium text-neutral-500 uppercase">
+              <thead className="bg-neutral-50 border-b border-line text-xs font-medium text-muted">
                 <tr>
                   <th className="px-4 py-3">코드</th>
                   <th className="px-4 py-3">쿠폰명</th>
@@ -282,29 +283,29 @@ function CouponsContent() {
                   <tr key={coupon.id} data-testid={`coupon-row-${coupon.id}`} className="hover:bg-neutral-50/50">
                     <td className="px-4 py-3 font-mono font-semibold text-neutral-900">{coupon.code}</td>
                     <td className="px-4 py-3 font-medium text-neutral-900">{coupon.name}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 num">
                       {coupon.discountType === "fixed" ? (
-                        <span className="text-blue-600 font-medium">{coupon.discountValue.toLocaleString()}원 할인</span>
+                        <span className="font-medium text-fg">{coupon.discountValue.toLocaleString()}원 할인</span>
                       ) : (
-                        <span className="text-emerald-600 font-medium">
+                        <span className="font-medium text-fg">
                           {coupon.discountValue}% 할인
                           {coupon.maxDiscountAmount && ` (최대 ${coupon.maxDiscountAmount.toLocaleString()}원)`}
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-neutral-600">
+                    <td className="px-4 py-3 num text-muted">
                       {coupon.minOrderAmount > 0 ? `${coupon.minOrderAmount.toLocaleString()}원` : "제한 없음"}
                     </td>
-                    <td className="px-4 py-3 text-neutral-600">
+                    <td className="px-4 py-3 num text-muted">
                       {coupon.usedCount}회 {coupon.maxUses != null ? `/ ${coupon.maxUses}회` : "/ 무제한"}
                     </td>
-                    <td className="px-4 py-3 text-xs text-neutral-500">
+                    <td className="px-4 py-3 num text-xs text-muted">
                       {coupon.expiresAt ? `${new Date(coupon.expiresAt).toLocaleDateString()}까지` : "상시"}
                     </td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                          coupon.active ? "bg-emerald-100 text-emerald-800" : "bg-neutral-100 text-neutral-600"
+                          coupon.active ? "bg-emerald-50 border border-emerald-200 text-emerald-800" : "bg-neutral-100 text-neutral-600"
                         }`}
                       >
                         {coupon.active ? "활성" : "비활성"}
@@ -315,7 +316,7 @@ function CouponsContent() {
                         onClick={() => toggleMutation.mutate({ id: coupon.id, active: !coupon.active })}
                         disabled={readOnly || toggleMutation.isPending}
                         data-testid={`toggle-coupon-${coupon.id}`}
-                        className="px-2.5 py-1 text-xs border rounded hover:bg-neutral-100 disabled:opacity-50"
+                        className="px-2.5 py-1 text-xs border border-line rounded hover:bg-neutral-100 disabled:opacity-50 cursor-pointer"
                       >
                         {coupon.active ? "비활성화" : "활성화"}
                       </button>
@@ -327,7 +328,7 @@ function CouponsContent() {
                         }}
                         disabled={readOnly || deleteMutation.isPending}
                         data-testid={`delete-coupon-${coupon.id}`}
-                        className="px-2.5 py-1 text-xs border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-50"
+                        className="px-2.5 py-1 text-xs border border-red-200 text-red-700 bg-red-50 rounded hover:bg-red-100 disabled:opacity-50 cursor-pointer"
                       >
                         삭제
                       </button>

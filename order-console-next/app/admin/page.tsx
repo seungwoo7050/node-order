@@ -49,7 +49,6 @@ type Dashboard = {
 const READ_ONLY = "데모 관리자는 볼 수만 있습니다. 타일의 링크로 각 목록을 열어 볼 수 있고, 바꾸는 동작은 진짜 관리자만 할 수 있습니다.";
 
 function TileCard({
-  index,
   title,
   href,
   testId,
@@ -57,7 +56,6 @@ function TileCard({
   children,
   linkLabel = "목록 보기",
 }: {
-  index: string;
   title: string;
   href: string;
   testId: string;
@@ -74,7 +72,6 @@ function TileCard({
       <div>
         <div className={styles.kpiHeader}>
           <h2 className={styles.kpiTitle}>{title}</h2>
-          <span className={styles.kpiIndex}>{index}</span>
         </div>
         <div className={styles.kpiBody}>{children}</div>
       </div>
@@ -122,22 +119,77 @@ function Tiles() {
     dataOrigin,
   } = data;
 
+  const activeSummary = dataOrigin
+    ? scope === "post_seed"
+      ? {
+          orders: dataOrigin.postSeedOrders,
+          amount: dataOrigin.postSeedPaidAmount,
+          users: dataOrigin.postSeedUsers,
+          note: "시드 이후 스토어프론트에서 실제 발생한 주문·고객만 집계 중입니다.",
+        }
+      : scope === "seed_only"
+        ? {
+            orders: dataOrigin.seedOrders,
+            amount: dataOrigin.seedPaidAmount,
+            users: dataOrigin.seedUsers,
+            note: "시드 스크립트 기본 계정(kim·lee·park·choi) 및 임시 데모 데이터만 집계 중입니다.",
+          }
+        : {
+            orders: dataOrigin.seedOrders + dataOrigin.postSeedOrders,
+            amount: dataOrigin.seedPaidAmount + dataOrigin.postSeedPaidAmount,
+            users: dataOrigin.seedUsers + dataOrigin.postSeedUsers,
+            note: "시드 초기 데이터와 실제 체크아웃 유입 데이터를 모두 합산해 표시합니다.",
+          }
+    : null;
+
   return (
     <div className={styles.dashboard}>
-      {/* 시드 기본 데이터 vs 시드 이후 실유입 데이터 구분 매트릭스 */}
-      {dataOrigin && (
+      {/* 데이터 출처 세그먼트 컨트롤 바 */}
+      {dataOrigin && activeSummary && (
         <section
           aria-label="데이터 출처 구분"
           data-testid="dashboard-origin-filter"
           className={styles.originPanel}
         >
-          <div className={styles.originHeader}>
-            <div className={styles.originTitleGroup}>
-              <h2 className={styles.originTitle}>Data Origin Filter · 시드 기본 vs 실유입 분리</h2>
-              <p className={styles.originDesc}>
-                시드 스크립트(manual 샘플 결제·데모 계정)로 생성된 데이터와 실제 스토어프론트 체크아웃으로 쌓인 데이터를 분리해 집계합니다.
-              </p>
+          <div className={styles.originTopRow}>
+            <div className={styles.originSegmentGroup} role="group" aria-label="집계 데이터 범위">
+              <button
+                type="button"
+                data-testid="scope-all"
+                onClick={() => setScope("all")}
+                className={`${styles.originTab} ${scope === "all" ? styles.originTabActive : ""}`}
+              >
+                <span>전체 합산</span>
+                <span className={styles.originTabCount}>
+                  {dataOrigin.seedOrders + dataOrigin.postSeedOrders}건
+                </span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="scope-post-seed"
+                onClick={() => setScope("post_seed")}
+                className={`${styles.originTab} ${scope === "post_seed" ? styles.originTabActive : ""}`}
+              >
+                <span>시드 이후 실유입</span>
+                <span className={styles.originTabCount}>
+                  {dataOrigin.postSeedOrders}건
+                </span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="scope-seed-only"
+                onClick={() => setScope("seed_only")}
+                className={`${styles.originTab} ${scope === "seed_only" ? styles.originTabActive : ""}`}
+              >
+                <span>시드 초기 데이터</span>
+                <span className={styles.originTabCount}>
+                  {dataOrigin.seedOrders}건
+                </span>
+              </button>
             </div>
+
             <Link
               href={
                 scope === "post_seed"
@@ -152,86 +204,36 @@ function Tiles() {
             </Link>
           </div>
 
-          <div className={styles.originGrid}>
-            <button
-              type="button"
-              data-testid="scope-all"
-              onClick={() => setScope("all")}
-              className={`${styles.originTab} ${scope === "all" ? styles.originTabActive : ""}`}
-            >
-              <div className={styles.originTabTop}>
-                <span className={styles.originTabLabel}>전체 합산 (All Records)</span>
-                {scope === "all" ? (
-                  <span className={styles.originStateBadge}>ACTIVE</span>
-                ) : (
-                  <span className={styles.originStateBadgeIdle}>01</span>
-                )}
-              </div>
-              <span className={styles.originMetric}>
-                주문 {dataOrigin.seedOrders + dataOrigin.postSeedOrders}건 · {won(dataOrigin.seedPaidAmount + dataOrigin.postSeedPaidAmount)}
+          <div className={styles.originSummaryBar}>
+            <div className={styles.originSummaryStats}>
+              <span className={styles.originStatItem}>
+                <span className={styles.originStatLabel}>선택 범위 주문</span>
+                <span className={styles.originStatValue}>{activeSummary.orders}건</span>
               </span>
-              <span className={styles.originSub}>
-                전체 등록 고객 {dataOrigin.seedUsers + dataOrigin.postSeedUsers}명 합산
+              <span className={styles.originStatItem}>
+                <span className={styles.originStatLabel}>누적 결제액</span>
+                <span className={styles.originStatValue}>{won(activeSummary.amount)}</span>
               </span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="scope-post-seed"
-              onClick={() => setScope("post_seed")}
-              className={`${styles.originTab} ${scope === "post_seed" ? styles.originTabActive : ""}`}
-            >
-              <div className={styles.originTabTop}>
-                <span className={styles.originTabLabel}>시드 이후 실유입 데이터만 (Live Only)</span>
-                {scope === "post_seed" ? (
-                  <span className={styles.originStateBadge}>ACTIVE</span>
-                ) : (
-                  <span className={styles.originStateBadgeIdle}>02</span>
-                )}
-              </div>
-              <span className={styles.originMetric}>
-                주문 {dataOrigin.postSeedOrders}건 · {won(dataOrigin.postSeedPaidAmount)}
+              <span className={styles.originStatItem}>
+                <span className={styles.originStatLabel}>등록 고객</span>
+                <span className={styles.originStatValue}>{activeSummary.users}명</span>
               </span>
-              <span className={styles.originSub}>
-                시드 이후 신규·비회원 고객 {dataOrigin.postSeedUsers}명 (실제 체크아웃 유입)
-              </span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="scope-seed-only"
-              onClick={() => setScope("seed_only")}
-              className={`${styles.originTab} ${scope === "seed_only" ? styles.originTabActive : ""}`}
-            >
-              <div className={styles.originTabTop}>
-                <span className={styles.originTabLabel}>시드·데모 초기 데이터만 (Seed Baseline)</span>
-                {scope === "seed_only" ? (
-                  <span className={styles.originStateBadge}>ACTIVE</span>
-                ) : (
-                  <span className={styles.originStateBadgeIdle}>03</span>
-                )}
-              </div>
-              <span className={styles.originMetric}>
-                주문 {dataOrigin.seedOrders}건 · {won(dataOrigin.seedPaidAmount)}
-              </span>
-              <span className={styles.originSub}>
-                기본 시드 계정(kim·lee·park·choi) 및 임시 데모 계정 {dataOrigin.seedUsers}명
-              </span>
-            </button>
+            </div>
+            <p className={styles.originDesc}>{activeSummary.note}</p>
           </div>
         </section>
       )}
 
-      {/* 기본 운영 5대 타일 (Interlocking 1px Bento Ledger) */}
+      {/* 기본 운영 5대 지표 카드 */}
       <div className={styles.kpiMatrix}>
-        <TileCard index="01" title={`오늘(${today.date}) 결제된 주문`} href={today.href} testId="tile-today" featured>
+        <TileCard title={`오늘(${today.date}) 결제된 주문`} href={today.href} testId="tile-today" featured>
           <Big>{today.orders}건 · {won(today.netSales)}</Big>
           <p className={styles.kpiCaption}>
             순매출 = 결제 {won(today.paidAmount)} − 환불 {won(today.refundedAmount)} (한국 시각 자정 기준)
           </p>
         </TileCard>
 
-        <TileCard index="02" title="처리 대기" href={pending.paid.href} testId="tile-pending" linkLabel="배송 준비할 주문 보기">
+        <TileCard title="처리 대기" href={pending.paid.href} testId="tile-pending" linkLabel="배송 준비할 주문 보기">
           <ul className={styles.kpiList}>
             <li className={styles.kpiListRow}>
               <Link href={pending.paid.href} className={styles.kpiListLink}>결제 완료(배송 준비 전)</Link>
@@ -248,7 +250,7 @@ function Tiles() {
           </ul>
         </TileCard>
 
-        <TileCard index="03" title={`재고 부족(${lowStock.threshold}개 이하)`} href={lowStock.href} testId="tile-low-stock" linkLabel="상품 관리">
+        <TileCard title={`재고 부족(${lowStock.threshold}개 이하)`} href={lowStock.href} testId="tile-low-stock" linkLabel="상품 관리">
           <Big>{lowStock.count}개 상품</Big>
           {lowStock.items.length > 0 && (
             <ul className={styles.kpiList}>
@@ -262,7 +264,7 @@ function Tiles() {
           )}
         </TileCard>
 
-        <TileCard index="04" title="못 찾은 검색어(최근 7일)" href={zeroResultQueries.href} testId="tile-zero-search" linkLabel="검색 화면">
+        <TileCard title="못 찾은 검색어(최근 7일)" href={zeroResultQueries.href} testId="tile-zero-search" linkLabel="검색 화면">
           {zeroResultQueries.items.length === 0 ? (
             <p className={styles.kpiCaption}>결과가 0건인 검색어가 없습니다.</p>
           ) : (
@@ -277,7 +279,7 @@ function Tiles() {
           )}
         </TileCard>
 
-        <TileCard index="05" title="PG 대사 미해결" href={reconciliation.href} testId="tile-reconciliation" linkLabel="불일치 목록">
+        <TileCard title="PG 대사 미해결" href={reconciliation.href} testId="tile-reconciliation" linkLabel="불일치 목록">
           <Big>{reconciliation.unresolved}건</Big>
           <p className={styles.kpiCaption}>PG 결제 원장과 내부 주문 DB 간 미해결 대사 건수</p>
         </TileCard>
@@ -287,43 +289,37 @@ function Tiles() {
       <div className={styles.analyticsSection}>
         <div className={styles.sectionHeaderBar}>
           <h2 className={styles.sectionHeading}>주문 파이프라인 및 비즈니스 현황</h2>
-          <span className={styles.sectionSub}>Fulfillment &amp; Commerce Ledger</span>
+          <span className={styles.sectionSub}>주문 단계별 누적 현황과 매출·재고 요약</span>
         </div>
 
         {/* 주문 파이프라인 퍼널 */}
         <section aria-label="주문 파이프라인 퍼널" data-testid="tile-pipeline-funnel" className={styles.funnelPanel}>
           <div className={styles.funnelPanelHeader}>
-            <h3 className={styles.funnelPanelTitle}>주문 처리 파이프라인 (6-Stage Lifecycle)</h3>
-            <span className={styles.kpiIndex}>STAGE 01 — 06</span>
+            <h3 className={styles.funnelPanelTitle}>주문 처리 단계별 현황</h3>
+            <span className={styles.funnelPanelMeta}>결제 대기부터 구매 확정까지 전체 흐름</span>
           </div>
           <div className={styles.funnelGrid}>
             <div className={styles.funnelStep}>
-              <span className={styles.funnelStepIndex}>01 / PENDING</span>
               <span className={styles.funnelStepLabel}>결제 대기</span>
               <span className={styles.funnelStepValue}>{pipelineFunnel?.pendingPayment ?? 0}</span>
             </div>
             <div className={styles.funnelStep}>
-              <span className={styles.funnelStepIndex}>02 / PAID</span>
               <span className={styles.funnelStepLabel}>결제 완료</span>
               <span className={styles.funnelStepValue}>{pipelineFunnel?.paid ?? 0}</span>
             </div>
             <div className={styles.funnelStep}>
-              <span className={styles.funnelStepIndex}>03 / PREPARING</span>
               <span className={styles.funnelStepLabel}>배송 준비 중</span>
               <span className={styles.funnelStepValue}>{pipelineFunnel?.preparing ?? 0}</span>
             </div>
             <div className={styles.funnelStep}>
-              <span className={styles.funnelStepIndex}>04 / SHIPPED</span>
               <span className={styles.funnelStepLabel}>출고·배송 중</span>
               <span className={styles.funnelStepValue}>{pipelineFunnel?.shipped ?? 0}</span>
             </div>
             <div className={styles.funnelStep}>
-              <span className={styles.funnelStepIndex}>05 / DELIVERED</span>
               <span className={styles.funnelStepLabel}>배송 완료</span>
               <span className={styles.funnelStepValue}>{pipelineFunnel?.delivered ?? 0}</span>
             </div>
             <div className={styles.funnelStepHighlight}>
-              <span className={styles.funnelStepIndex}>06 / CONFIRMED</span>
               <span className={styles.funnelStepLabel}>구매 확정</span>
               <span className={styles.funnelStepValue}>{pipelineFunnel?.confirmed ?? 0}</span>
             </div>
@@ -334,8 +330,8 @@ function Tiles() {
           {/* 회원 vs 비회원 비율 */}
           <section aria-label="회원 vs 비회원 비율" data-testid="tile-member-ratio" className={styles.analyticsCard}>
             <div className={styles.analyticsCardHeader}>
-              <h3 className={styles.analyticsCardTitle}>고객 및 주문 구성</h3>
-              <span className={styles.kpiIndex}>MEMBER VS GUEST</span>
+              <h3 className={styles.analyticsCardTitle}>고객 유형별 주문 비중</h3>
+              <span className={styles.analyticsCardSub}>회원 · 비회원</span>
             </div>
             <div className={styles.analyticsTable}>
               <div className={styles.analyticsRow}>
@@ -356,8 +352,8 @@ function Tiles() {
           {/* 최근 7일 매출 추이 */}
           <section aria-label="최근 매출 추이" data-testid="tile-recent-sales" className={styles.analyticsCard}>
             <div className={styles.analyticsCardHeader}>
-              <h3 className={styles.analyticsCardTitle}>최근 매출 요약</h3>
-              <span className={styles.kpiIndex}>RECENT 7 DAYS</span>
+              <h3 className={styles.analyticsCardTitle}>최근 7일 일자별 매출</h3>
+              <span className={styles.analyticsCardSub}>결제 승인 기준</span>
             </div>
             {recentSales && recentSales.length > 0 ? (
               <div className={styles.analyticsTable}>
@@ -369,22 +365,22 @@ function Tiles() {
                 ))}
               </div>
             ) : (
-              <p className={styles.kpiCaption}>매출 내역이 없습니다.</p>
+              <p className={styles.kpiCaption}>최근 매출 내역이 없습니다.</p>
             )}
           </section>
 
           {/* 베스트셀러 TOP 5 */}
           <section aria-label="베스트셀러 TOP 5" data-testid="tile-best-sellers" className={styles.analyticsCard}>
             <div className={styles.analyticsCardHeader}>
-              <h3 className={styles.analyticsCardTitle}>베스트셀러 TOP 5</h3>
-              <span className={styles.kpiIndex}>BY VOLUME</span>
+              <h3 className={styles.analyticsCardTitle}>베스트셀러 상위 5개 상품</h3>
+              <span className={styles.analyticsCardSub}>누적 판매량 순</span>
             </div>
             {bestSellers && bestSellers.length > 0 ? (
               <ol className={styles.analyticsTable}>
                 {bestSellers.map((item, idx) => (
                   <li key={item.productId} className={styles.analyticsRow}>
                     <span>
-                      <span className={styles.rankIndex}>0{idx + 1}</span>
+                      <span className={styles.rankBadge}>{idx + 1}</span>
                       {item.name}
                     </span>
                     <span className={styles.monoValue}>
@@ -402,15 +398,15 @@ function Tiles() {
           <section aria-label="옵션 재고 부족" data-testid="tile-low-stock-variants" className={styles.analyticsCard}>
             <div className={styles.analyticsCardHeader}>
               <h3 className={styles.analyticsCardTitle}>옵션별 재고 부족 (5개 이하)</h3>
-              <span className={styles.kpiIndex}>VARIANT STOCK</span>
+              <span className={styles.analyticsCardSub}>품절 임박 옵션</span>
             </div>
             {lowStockVariants && lowStockVariants.length > 0 ? (
               <ul className={styles.analyticsTable}>
                 {lowStockVariants.map((v) => (
                   <li key={v.id} className={styles.analyticsRow}>
                     <span>
-                      <strong>{v.productName}</strong>{" "}
-                      <span className={styles.kpiIndex}>({v.variantName})</span>
+                      <strong>{v.productName}</strong>
+                      <span className={styles.variantOptionTag}>({v.variantName})</span>
                     </span>
                     <span className={styles.alertValue}>재고 {v.stock}개</span>
                   </li>
@@ -430,11 +426,11 @@ export default function AdminDashboardPage() {
   return (
     <div className={styles.dashboard}>
       <header className={styles.pageHeader}>
-        <div>
-          <span className={styles.pageKicker}>Admin Operations · Overview</span>
+        <div className={styles.pageTitleGroup}>
           <h1 className={styles.pageTitle}>오늘 처리할 것</h1>
+          <p className={styles.pageDesc}>오늘 접수된 주문, 출고·반품 대기, 재고 부족 및 PG 정산 대사 현황을 한눈에 확인합니다.</p>
         </div>
-        <span className={styles.headerMeta}>KST (UTC+9) 기준 실시간 집계</span>
+        <span className={styles.headerMeta}>한국 표준시(KST) 실시간 집계</span>
       </header>
       <AdminOnly readOnlyNote={READ_ONLY} note={null}>
         <Tiles />
