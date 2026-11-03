@@ -319,7 +319,7 @@ export default function AdminSystemPage() {
                 <div key={inf.id} className="rounded border border-line p-3 text-xs space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-sm text-fg">{inf.name}</span>
-                    <span className="rounded bg-neutral-100 text-neutral-700 px-1.5 py-0.5 text-[10px]">
+                    <span className="rounded bg-neutral-100 text-neutral-700 px-1.5 py-0.5 text-xs">
                       {inf.billingType}
                     </span>
                   </div>
