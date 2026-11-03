@@ -27,6 +27,15 @@ const GROUPS: { legend: string; fields: Field[] }[] = [
     ],
   },
   {
+    legend: "브랜딩·디자인(스토어프론트에 바로 반영됩니다)",
+    fields: [
+      { name: "storeDesign", label: "기본 스토어 디자인", hint: "muji-hara | editorial-atelier | zavanas-archive" },
+      { name: "heroTitle", label: "히어로 타이틀", hint: "에디토리얼 상단 대형 문구" },
+      { name: "heroSubtitle", label: "히어로 서브타이틀", hint: "에디토리얼 상단 보조 문구" },
+      { name: "announcementText", label: "상단 공지 문구", hint: "최상단 공지 바 문구" },
+    ],
+  },
+  {
     legend: "배송·재고(새 주문부터 적용, 지난 주문은 그대로)",
     fields: [
       { name: "shippingFee", label: "배송비(원)", type: "number" },
@@ -40,7 +49,14 @@ const NUMBER_FIELDS = new Set(GROUPS.flatMap((g) => g.fields).filter((f) => f.ty
 
 const READ_ONLY = "데모 관리자는 볼 수만 있습니다. 상점 설정 저장은 진짜 관리자만 할 수 있어 입력을 꺼 두었습니다.";
 
-const toForm = (s: StoreSettings) => Object.fromEntries(GROUPS.flatMap((g) => g.fields).map((f) => [f.name, String(s[f.name])])) as Record<keyof Input, string>;
+const toForm = (s: Partial<StoreSettings>) =>
+  Object.fromEntries(
+    GROUPS.flatMap((g) => g.fields).map((f) => {
+      let val = s[f.name];
+      if (f.name === "storeDesign" && !val) val = "editorial-atelier";
+      return [f.name, String(val ?? "")];
+    })
+  ) as Record<keyof Input, string>;
 
 function Integrations() {
   const { data } = useQuery(featuresOptions);
@@ -80,7 +96,11 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
     startTransition(async () => {
       let token = useAuthStore.getState().accessToken ?? (await refreshAccessToken());
       if (!token) return setResult({ ok: false, status: 401, message: "로그인이 필요합니다." });
-      const input = Object.fromEntries(Object.entries(form).map(([k, v]) => [k, NUMBER_FIELDS.has(k as keyof Input) ? Number(v) : v])) as Input;
+      const input = Object.fromEntries(
+        Object.entries(form)
+          .filter(([k, v]) => !(k === "storeDesign" && !v))
+          .map(([k, v]) => [k, NUMBER_FIELDS.has(k as keyof Input) ? Number(v) : v])
+      ) as Input;
       let saved = await saveStoreSettings(token, version, input);
       if (!saved.ok && saved.status === 401 && (token = await refreshAccessToken())) saved = await saveStoreSettings(token, version, input);
       setResult(saved);
@@ -88,6 +108,7 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
         setVersion(saved.value.version);
         setForm(toForm(saved.value));
         queryClient.setQueryData(["admin-settings"], saved.value);
+        void queryClient.invalidateQueries({ queryKey: ["admin-branding"] });
         void queryClient.invalidateQueries({ queryKey: storeInfoOptions.queryKey });
       }
     });
@@ -96,7 +117,7 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
   // 충돌: 다른 곳에서 먼저 저장했다. 지금 값을 불러와 다시 고친 뒤 저장한다(입력값은 버린다)
   function reloadCurrent(current: StoreSettings) {
     setVersion(current.version);
-    setForm(toForm(current));
+    setForm((prev) => toForm({ ...prev, ...current }));
     setResult(null);
   }
 
@@ -112,12 +133,29 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
             return (
               <label key={f.name} className="grid gap-1">
                 <span className="text-sm">{f.label}</span>
-                <input
-                  name={f.name} className={`border bg-bg px-3 py-2 ${f.type === "number" ? "num" : ""} ${err ? "border-danger" : "border-line-strong"}`}
-                  type={f.type === "number" ? "text" : (f.type ?? "text")} inputMode={f.type === "number" ? "numeric" : undefined}
-                  value={form[f.name]} onChange={(e) => setForm((s) => ({ ...s, [f.name]: e.target.value }))}
-                  disabled={readOnly} aria-invalid={err ? true : undefined} aria-describedby={describedBy}
-                />
+                {f.name === "storeDesign" ? (
+                  <select
+                    name={f.name}
+                    aria-label={f.label}
+                    data-testid="store-design-select"
+                    className="border bg-bg px-3 py-2 border-line-strong text-sm"
+                    value={form[f.name]}
+                    onChange={(e) => setForm((s) => ({ ...s, [f.name]: e.target.value }))}
+                    disabled={readOnly}
+                    aria-describedby={describedBy}
+                  >
+                    <option value="editorial-atelier">editorial-atelier (에디토리얼 룩북)</option>
+                    <option value="muji-hara">muji-hara (무지·하라 촉각 카탈로그)</option>
+                    <option value="zavanas-archive">zavanas-archive (자바나스 스펙 매트릭스)</option>
+                  </select>
+                ) : (
+                  <input
+                    name={f.name} aria-label={f.label} className={`border bg-bg px-3 py-2 ${f.type === "number" ? "num" : ""} ${err ? "border-danger" : "border-line-strong"}`}
+                    type={f.type === "number" ? "text" : (f.type ?? "text")} inputMode={f.type === "number" ? "numeric" : undefined}
+                    value={form[f.name]} onChange={(e) => setForm((s) => ({ ...s, [f.name]: e.target.value }))}
+                    disabled={readOnly} aria-invalid={err ? true : undefined} aria-describedby={describedBy}
+                  />
+                )}
                 {f.hint && <span id={`${f.name}-hint`} className="text-[0.75rem] text-muted">{f.hint}</span>}
                 {err && <span id={`${f.name}-error`} className="text-[0.8rem] text-danger" data-testid={`error-${f.name}`}>{err}</span>}
               </label>
@@ -142,11 +180,22 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
 }
 
 function Settings() {
-  const { data, error, isPending, refetch } = useQuery({ queryKey: ["admin-settings"], queryFn: () => authFetch<StoreSettings>("/admin/settings"), staleTime: Infinity });
-  if (isPending) return <p role="status" className="text-sm text-muted">설정을 불러오는 중입니다.</p>;
-  if (error)
-    return <p role="alert" className="alert">설정을 불러오지 못했습니다. ({error.message}) <button type="button" className="btn ml-2" onClick={() => void refetch()}>다시 시도</button></p>;
-  return <SettingsForm initial={data} />;
+  const settingsQuery = useQuery({ queryKey: ["admin-settings"], queryFn: () => authFetch<StoreSettings>("/admin/settings"), staleTime: Infinity });
+  const brandingQuery = useQuery({ queryKey: ["admin-branding"], queryFn: () => authFetch<Record<string, string>>("/admin/settings/branding"), staleTime: Infinity });
+
+  if (settingsQuery.isPending || brandingQuery.isPending) return <p role="status" className="text-sm text-muted">설정을 불러오는 중입니다.</p>;
+  if (settingsQuery.error)
+    return <p role="alert" className="alert">설정을 불러오지 못했습니다. ({settingsQuery.error.message}) <button type="button" className="btn ml-2" onClick={() => void settingsQuery.refetch()}>다시 시도</button></p>;
+
+  const initial = {
+    ...settingsQuery.data!,
+    storeDesign: brandingQuery.data?.storeDesign ?? "editorial-atelier",
+    heroTitle: brandingQuery.data?.heroTitle ?? "CONTEMPORARY ARCHIVE COLLECTION",
+    heroSubtitle: brandingQuery.data?.heroSubtitle ?? "소재의 본질과 절제된 실루엣에 집중한 데일리 에센셜 아카이브",
+    announcementText: brandingQuery.data?.announcementText ?? "전 상품 50,000원 이상 구매 시 무료배송 · 신규 가입 웰컴 쿠폰 증정",
+  };
+
+  return <SettingsForm initial={initial} />;
 }
 
 export default function AdminSettingsPage() {

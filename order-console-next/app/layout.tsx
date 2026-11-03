@@ -7,6 +7,7 @@ import { SwRegister } from './sw-resgister';
 import { OnlineBanner } from "./online-banner";
 import { StoreFooter } from "./store-footer";
 import { StoreFooterWrapper } from "./store-footer-wrapper";
+import { getStoreInfo } from "@/lib/store-cache";
 import { Suspense } from "react";
 import "./globals.css";
 
@@ -15,10 +16,17 @@ const display = Noto_Serif_KR({ variable: "--font-display", weight: ["400"], pre
 
 export const instant = false;
 
-export const metadata: Metadata = {
-  title: "Brown Store.",
-  description: "상품 주문·결제와 실시간 알림을 다루는 학습용 서비스",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  let title = "Store";
+  try {
+    const info = await getStoreInfo();
+    if (info?.storeName) title = info.storeName;
+  } catch {}
+  return {
+    title,
+    description: "상품 주문·결제와 실시간 알림을 다루는 서비스",
+  };
+}
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   await connection();
