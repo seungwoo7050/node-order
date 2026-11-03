@@ -124,7 +124,6 @@ export class StoreSettingsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async saveBranding(dto: BrandingDto): Promise<BrandingView> {
-    const current = await this.getFull();
     const dataToUpdate: Partial<BrandingView> = {};
     if (dto.storeDesign !== undefined) dataToUpdate.storeDesign = dto.storeDesign;
     if (dto.heroTitle !== undefined) dataToUpdate.heroTitle = dto.heroTitle;
@@ -198,12 +197,13 @@ export class StoreSettingsService implements OnModuleInit, OnModuleDestroy {
     this.invalidate(count > 0 ? expectedVersion + 1 : undefined);
     if (count === 0) {
       const current = await this.get();
+      const branding = await this.getBranding();
       throw new ConflictException({
         statusCode: 409,
         error: "Conflict",
         message: "다른 곳에서 먼저 설정을 저장했습니다. 지금 값을 다시 불러온 뒤 저장해 주세요",
         currentVersion: current.version,
-        current,
+        current: { ...current, ...branding },
       });
     }
     await this.pub.publish(SETTINGS_CHANNEL, String(expectedVersion + 1)).catch((err: Error) => this.logger.warn(`설정 변경을 알리지 못했다: ${err.message}`));
