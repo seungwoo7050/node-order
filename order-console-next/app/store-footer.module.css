@@ -1,0 +1,121 @@
+.footer {
+  width: 100%;
+  margin-top: 120px;
+  background: var(--bg);
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+}
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-block: 48px 40px;
+}
+
+.brand {
+  font-family: var(--font-instrument), var(--font-display), serif;
+  font-size: 28px;
+  line-height: 1;
+  text-transform: lowercase;
+  color: var(--fg);
+  margin: 0;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 11px;
+}
+
+.nav a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.nav a:hover {
+  color: var(--fg);
+  text-decoration: underline;
+}
+
+.biz {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 0;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Muji Hara */
+:global(html[data-store-design="muji-hara"]) .footer {
+  background: #f5f5f7;
+  margin-top: 120px;
+  border-top: 0;
+}
+
+:global(html[data-store-design="muji-hara"]) .inner {
+  padding-block: 48px 56px;
+  gap: 20px;
+}
+
+:global(html[data-store-design="muji-hara"]) .brand {
+  font-family: var(--font-inter), var(--font-body), sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  text-transform: none;
+  letter-spacing: -0.02em;
+}
+
+:global(html[data-store-design="muji-hara"]) .nav {
+  gap: 8px 24px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+:global(html[data-store-design="muji-hara"]) .biz {
+  gap: 4px 20px;
+  font-size: 12px;
+  line-height: 20px;
+  color: #6e6e73;
+}
+
+/* Zavanas Archive */
+:global(html[data-store-design="zavanas-archive"]) .footer {
+  margin-top: 96px;
+  background: transparent;
+  border-top: 0;
+}
+
+:global(html[data-store-design="zavanas-archive"]) .inner {
+  border-top: 1px solid #e5e5e5;
+  padding-block: 40px 60px;
+  gap: 20px;
+}
+
+:global(html[data-store-design="zavanas-archive"]) .brand {
+  font-family: var(--font-raleway), var(--font-nanum-gothic), sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+}
+
+:global(html[data-store-design="zavanas-archive"]) .nav {
+  gap: 8px 24px;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+:global(html[data-store-design="zavanas-archive"]) .biz {
+  gap: 4px 16px;
+  font-size: 11px;
+  line-height: 20px;
+  color: #555;
+}

@@ -1,0 +1,151 @@
+.searchRow {
+  width: 100%;
+  background: var(--bg);
+}
+
+.searchInner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-block: 12px;
+}
+
+/* Base / Editorial Atelier Search styling */
+.searchInner form {
+  width: 240px;
+}
+
+.searchInner form > div {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #000;
+  border-radius: 0;
+}
+
+.searchInner form input[type="search"] {
+  font-size: 11px;
+  padding: 4px 8px;
+  color: var(--fg);
+}
+
+.searchInner form button[type="submit"] {
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  padding: 4px 8px;
+  color: var(--fg);
+}
+
+/* Fallback box alignment */
+.searchInner > div {
+  width: 240px;
+  border: 0;
+  border-bottom: 1px solid #000;
+  background: transparent;
+}
+
+.searchInner > div > span {
+  font-size: 11px;
+  border: 0;
+  padding: 4px 8px;
+}
+
+/* Muji Hara */
+:global(html[data-store-design="muji-hara"]) .searchInner {
+  padding-block: 16px;
+}
+
+:global(html[data-store-design="muji-hara"]) .searchInner form {
+  width: 320px;
+  height: 40px;
+}
+
+:global(html[data-store-design="muji-hara"]) .searchInner form > div {
+  height: 40px;
+  background: #f5f5f7;
+  border: 0;
+}
+
+:global(html[data-store-design="muji-hara"]) .searchInner form input[type="search"] {
+  font-size: 14px;
+  padding: 8px 16px;
+}
+
+:global(html[data-store-design="muji-hara"]) .searchInner form button[type="submit"] {
+  border: 0;
+  font-size: 14px;
+  padding: 8px 16px;
+}
+
+:global(html[data-store-design="muji-hara"]) .searchInner > div {
+  width: 320px;
+  height: 40px;
+  background: #f5f5f7;
+  border: 0;
+}
+
+:global(html[data-store-design="muji-hara"]) .searchInner > div > span {
+  font-size: 14px;
+  padding: 8px 16px;
+}
+
+/* Zavanas Archive */
+:global(html[data-store-design="zavanas-archive"]) .searchInner {
+  border-bottom: 1px solid #e5e5e5;
+  padding-block: 12px;
+}
+
+:global(html[data-store-design="zavanas-archive"]) .searchInner form {
+  width: 220px;
+}
+
+:global(html[data-store-design="zavanas-archive"]) .searchInner form > div {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #ccc;
+  border-radius: 0;
+}
+
+:global(html[data-store-design="zavanas-archive"]) .searchInner form input[type="search"] {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+}
+
+:global(html[data-store-design="zavanas-archive"]) .searchInner form button[type="submit"] {
+  border: 0;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+}
+
+:global(html[data-store-design="zavanas-archive"]) .searchInner > div {
+  width: 220px;
+  border: 0;
+  border-bottom: 1px solid #ccc;
+  background: transparent;
+}
+
+:global(html[data-store-design="zavanas-archive"]) .searchInner > div > span {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+}
+
+/* Suggestion dropdown (all designs) */
+.searchInner form ul[role="listbox"] {
+  border: 1px solid var(--fg);
+  background: var(--bg);
+  box-shadow: none;
+  padding-block: 4px;
+}
+
+.searchInner form li[role="option"] {
+  font-size: 12px;
+  padding: 8px 12px;
+  color: var(--fg);
+}
+
+.searchInner form li[role="option"][aria-selected="true"] {
+  background: var(--surface);
+}

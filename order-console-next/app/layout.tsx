@@ -1,18 +1,16 @@
 import type { Metadata } from "next";
 import {
-  Cormorant_Garamond,
   Gothic_A1,
-  IBM_Plex_Mono,
-  IBM_Plex_Sans_KR,
   Instrument_Serif,
   Inter,
+  Nanum_Gothic,
   Noto_Sans_KR,
   Noto_Serif_KR,
-  Plus_Jakarta_Sans,
-  Space_Grotesk,
+  Raleway,
 } from "next/font/google";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { resolveActiveDesign, type StoreDesignId } from "@/designs/types";
 import { getStoreInfo } from "@/lib/store-cache";
 import { Nav } from "./nav";
 import { OnlineBanner } from "./online-banner";
@@ -31,21 +29,6 @@ const body = Noto_Sans_KR({
 const display = Noto_Serif_KR({
   variable: "--font-display",
   weight: ["400", "600"],
-  preload: false,
-  display: "swap",
-});
-const cormorant = Cormorant_Garamond({
-  variable: "--font-cormorant",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
-  style: ["normal", "italic"],
-  preload: false,
-  display: "swap",
-});
-const jakarta = Plus_Jakarta_Sans({
-  variable: "--font-jakarta",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
   preload: false,
   display: "swap",
 });
@@ -70,23 +53,16 @@ const gothicA1 = Gothic_A1({
   preload: false,
   display: "swap",
 });
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-space-grotesk",
+const raleway = Raleway({
+  variable: "--font-raleway",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   preload: false,
   display: "swap",
 });
-const ibmSansKr = IBM_Plex_Sans_KR({
-  variable: "--font-ibm-sans-kr",
-  weight: ["300", "400", "500", "600"],
-  preload: false,
-  display: "swap",
-});
-const ibmMono = IBM_Plex_Mono({
-  variable: "--font-ibm-mono",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+const nanumGothic = Nanum_Gothic({
+  variable: "--font-nanum-gothic",
+  weight: ["400", "700", "800"],
   preload: false,
   display: "swap",
 });
@@ -108,23 +84,29 @@ export async function generateMetadata(): Promise<Metadata> {
 const fontVariables = [
   body.variable,
   display.variable,
-  cormorant.variable,
-  jakarta.variable,
   instrumentSerif.variable,
   inter.variable,
   gothicA1.variable,
-  spaceGrotesk.variable,
-  ibmSansKr.variable,
-  ibmMono.variable,
+  raleway.variable,
+  nanumGothic.variable,
 ].join(" ");
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   await connection();
+  let defaultDesign: StoreDesignId = "editorial-atelier";
+  try {
+    defaultDesign = resolveActiveDesign((await getStoreInfo())?.storeDesign);
+  } catch {}
+
   return (
-    <html lang="ko" className={`${fontVariables} h-full antialiased`}>
+    <html
+      lang="ko"
+      data-store-design={defaultDesign}
+      className={`${fontVariables} h-full antialiased`}
+    >
       <body className="min-h-full flex flex-col">
-        <Providers>
-          <Nav />
+        <Providers defaultDesign={defaultDesign}>
+          <Nav defaultDesign={defaultDesign} />
           <SwRegister />
           <OnlineBanner />
           {children}

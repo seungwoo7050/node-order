@@ -71,35 +71,31 @@ test.describe("36-storefront-designs e2e", () => {
     }
   });
 
-  test("1. 디자인 스위처 및 URL 쿼리(?design=) 연동과 3대 아키텍처 렌더링 검증", async ({ page }) => {
+  test("1. 디자인은 URL(?design=)로만 바뀌고, 전환 버튼은 없으며, CSS Modules가 실제로 적용된다", async ({ page }) => {
     await page.goto("/shop");
-
-    const switcher = page.getByTestId("design-switcher");
-    await expect(switcher).toBeVisible();
-
-    // 1-1. 무지·하라 (muji-hara) 선택
-    await page.getByTestId("design-option-muji-hara").click();
-    await expect(page).toHaveURL(/design=muji-hara/);
-    const mujiRoot = page.locator('[data-design="muji-hara"]');
-    await expect(mujiRoot).toBeVisible();
-
-    // 1-2. 자바나스 아카이브 (zavanas-archive) 선택
-    await page.getByTestId("design-option-zavanas-archive").click();
-    await expect(page).toHaveURL(/design=zavanas-archive/);
-    const zavanasRoot = page.locator('[data-design="zavanas-archive"]');
-    await expect(zavanasRoot).toBeVisible();
-
-    // 1-3. 에디토리얼 아틀리에 (editorial-atelier) 선택
-    await page.getByTestId("design-option-editorial-atelier").click();
-    await expect(page).toHaveURL(/design=editorial-atelier/);
-    const atelierRoot = page.locator('[data-design="editorial-atelier"]');
-    await expect(atelierRoot).toBeVisible();
-    // 에디토리얼 캠페인 히어로 배너 확인
+    await expect(page.getByTestId("design-switcher")).toHaveCount(0);
+    await expect(page.locator("[data-design]")).toHaveCount(1);
+    for (const id of ["muji-hara", "zavanas-archive", "editorial-atelier"] as const) {
+      await page.goto(`/shop?design=${id}`);
+      const root = page.locator(`[data-design="${id}"]`);
+      await expect(root).toBeVisible();
+      await expect(root.getByTestId("product-list")).toHaveCSS("display", "grid");
+    }
     await expect(page.getByTestId("hero-banner")).toBeVisible();
-
-    // 1-4. PDP에서도 쿼리 파라미터가 유지되며 해당 디자인으로 렌더링
     await page.goto("/shop/6?design=muji-hara");
     await expect(page.locator('[data-design="muji-hara"]')).toBeVisible();
+  });
+
+  test("1b. ?design= 으로 고른 디자인이 상품 링크, 모달, 다음 페이지에서도 유지된다", async ({ page }) => {
+    await page.goto("/shop?design=zavanas-archive");
+    const link = page.getByRole("link", { name: "마우스", exact: true });
+    await expect(link).toHaveAttribute("href", /design=zavanas-archive/);
+    await link.click();
+    await expect(page.getByRole("dialog").locator('[data-design="zavanas-archive"]')).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.goto("/cart");
+    await page.goto("/shop");
+    await expect(page.locator('[data-design="zavanas-archive"]')).toBeVisible();
   });
 
   test("2. 카테고리 필터 바 및 정렬 옵션(가격순·리뷰순·최신순) 검증", async ({ page }) => {

@@ -69,10 +69,66 @@ export type CategoryItem = {
   id: number;
   name: string;
   sortOrder: number;
+  parentId?: number | null;
 };
+
+export type CategoryNode = CategoryItem & {
+  children: CategoryNode[];
+  depth: number;
+};
+
+export function rootCategories(cats: CategoryItem[]): CategoryItem[] {
+  return cats.filter((c) => !c.parentId);
+}
+
+export function descendantsOf(
+  cats: CategoryItem[],
+  rootId: number,
+): (CategoryItem & { depth: number })[] {
+  const result: (CategoryItem & { depth: number })[] = [];
+  function walk(parentId: number, depth: number) {
+    const children = cats.filter((c) => c.parentId === parentId);
+    for (const child of children) {
+      result.push({ ...child, depth });
+      walk(child.id, depth + 1);
+    }
+  }
+  walk(rootId, 1);
+  return result;
+}
+
+export function rootIdOf(cats: CategoryItem[], id: number): number {
+  let curr = cats.find((c) => c.id === id);
+  while (curr?.parentId) {
+    const parent = cats.find((c) => c.id === curr?.parentId);
+    if (!parent) break;
+    curr = parent;
+  }
+  return curr?.id ?? id;
+}
+
+export function categoryTree(cats: CategoryItem[]): CategoryNode[] {
+  function buildNodes(
+    parentId: number | null | undefined,
+    depth: number,
+  ): CategoryNode[] {
+    return cats
+      .filter((c) => (c.parentId ?? null) === (parentId ?? null))
+      .map((c) => ({
+        ...c,
+        depth,
+        children: buildNodes(c.id, depth + 1),
+      }));
+  }
+  return buildNodes(null, 0);
+}
 
 export function won(n: number): string {
   return `${n.toLocaleString("ko-KR")}원`;
+}
+
+export function krw(n: number): string {
+  return "KRW " + n.toLocaleString("en-US");
 }
 
 export function eulReul(word: string): string {

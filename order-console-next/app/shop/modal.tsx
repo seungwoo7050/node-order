@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
+import styles from "./modal.module.css";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -43,20 +44,17 @@ export function Modal({ children }: { children: ReactNode }) {
     <dialog
       ref={ref}
       aria-labelledby="product-title"
-      className="m-auto max-h-[90vh] w-[min(1140px,calc(100vw-32px))] overflow-auto border border-fg bg-bg p-6 sm:p-10 text-fg backdrop:bg-black/55"
+      className={styles.dialog}
       onClose={() => router.back()}
       onKeyDown={keepTabInside}
       onClick={(e) => {
         if (e.target === e.currentTarget) router.back();
       }}
     >
-      <div className="mb-6 flex items-center justify-between border-b border-line pb-3">
-        <span className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted">
-          QUICK VIEW // ARCHIVE EDITION
-        </span>
+      <div className={styles.bar}>
         <button
           type="button"
-          className="btn text-xs tracking-wider"
+          className={styles.closeBtn}
           onClick={() => router.back()}
         >
           닫기
