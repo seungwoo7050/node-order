@@ -10,6 +10,7 @@ export const fulfillmentSelect = {
   id: true, userId: true, totalAmount: true, shippingFee: true, paid: true, canceledAt: true, createdAt: true,
   status: true, statusChangedAt: true, deliveredAt: true,
   isGuest: true, returnShippingFee: true,
+  couponId: true, couponCode: true, discountAmount: true,
   recipientName: true, recipientPhone: true, postalCode: true, address1: true, address2: true, deliveryMemo: true,
   items: { select: { quantity: true, unitPrice: true, variantKey: true, variantId: true, variantLabel: true, product: { select: { id: true, name: true } } }, orderBy: [{ productId: "asc" }, { variantKey: "asc" }] },
   history: { select: { fromStatus: true, toStatus: true, actorType: true, reason: true, createdAt: true }, orderBy: { id: "asc" } },
@@ -23,6 +24,7 @@ export const fulfillmentSelect = {
     orderBy: { id: "asc" },
   },
   payment: { select: { provider: true, status: true, amount: true } },
+  reviews: { select: { id: true, productId: true, rating: true, content: true, createdAt: true } },
 } as const satisfies Prisma.OrderSelect;
 
 type Row = Prisma.OrderGetPayload<{ select: typeof fulfillmentSelect }>;
@@ -86,10 +88,13 @@ async function baseView(tx: Tx, row: Row, now: Date) {
       variantKey || variantId || variantLabel ? { ...item, variantKey, variantId, variantLabel } : item,
     ),
     price: totalAmount,
-    subtotal: totalAmount - row.shippingFee,
+    subtotal: totalAmount - row.shippingFee + (row.discountAmount ?? 0),
+    discountAmount: row.discountAmount ?? 0,
+    couponCode: row.couponCode ?? null,
     shipping: recipientName ? { recipientName, recipientPhone, postalCode, address1, address2, deliveryMemo } : null,
     shipments: row.shipments.map(shipmentView),
     returns: row.returns.map((r) => ({ ...r, refund: refunds.get(r.id) ?? null })),
+    reviews: row.reviews ?? [],
     returnDeadline: deadline,
     returnable: row.items.map((i) => ({
       productId: i.product.id,
@@ -100,6 +105,7 @@ async function baseView(tx: Tx, row: Row, now: Date) {
     })),
     canReturn,
     canConfirm: row.status === "delivered" && !openReturn,
+    canReview: row.status === "confirmed",
   };
 }
 

@@ -253,8 +253,12 @@ export class FulfillmentService {
         if (order.status !== "pending_payment" && order.status !== "paid") {
           throw new BadRequestException("결제 대기 또는 결제 완료 상태의 주문만 취소할 수 있습니다");
         }
-        await transitionOrder(tx, orderId, "cancel", { type: "customer", id: userId }, { reason });
-        await restoreOrderStock(tx, orderId);
+        if (order.status === "pending_payment") {
+          await cancelUnpaidOrder(tx, orderId);
+        } else {
+          await transitionOrder(tx, orderId, "cancel", { type: "admin", id: userId }, { reason });
+          await restoreOrderStock(tx, orderId);
+        }
       });
       this.logger.log(`고객 주문 취소: #${orderId} (${userId}) (재고 복구) - ${reason}`);
     } catch (err) {
@@ -538,9 +542,9 @@ export class FulfillmentService {
   // 커밋 뒤 환불(27). PG를 거치지 않은 결제(manual)나 결제가 없는 주문, 0원은 돌려줄 PG 결제가 없어 건너뛴다.
   // amount가 없으면 전액: 결제 금액에서 이 키가 아닌 환불(나갔거나 나갔을 수 있는 것)을 뺀 값. 다시 불러도 같은 금액이 나와야 같은 키로 재응답된다
   private async refundOrder(orderId: number, key: string, reason: string, amount?: number): Promise<RefundView | null> {
-    const payment = await this.prisma.asAdmin((tx) => tx.payment.findUnique({ where: { orderId }, select: { id: true, provider: true, amount: true } }));
-    if (!payment || payment.provider === "manual") {
-      this.logger.log(`환불 건너뜀: 주문 #${orderId} (${payment ? "manual 결제" : "결제 없음"}) - ${key}`);
+    const payment = await this.prisma.asAdmin((tx) => tx.payment.findUnique({ where: { orderId }, select: { id: true, provider: true, amount: true, status: true } }));
+    if (!payment || payment.provider === "manual" || (payment.status !== "paid" && payment.status !== "partial_refunded")) {
+      this.logger.log(`환불 건너뜀: 주문 #${orderId} (${payment ? `${payment.status} 결제` : "결제 없음"}) - ${key}`);
       return null;
     }
     let refundAmount = amount;

@@ -30,7 +30,7 @@ describe("34-catalog-admin E2E Tests", () => {
   });
 
   beforeEach(async () => {
-    await adminDb.$executeRaw`TRUNCATE categories, refresh_tokens, outbox_events, idempotency_keys, return_items, returns, shipments, payments, refunds, order_status_history, order_items, orders, product_images, product_variants, products, integration_secrets, users RESTART IDENTITY CASCADE`;
+    await adminDb.$executeRaw`TRUNCATE coupons, reviews, categories, refresh_tokens, outbox_events, idempotency_keys, return_items, returns, shipments, payments, refunds, order_status_history, order_items, orders, product_images, product_variants, products, integration_secrets, users RESTART IDENTITY CASCADE`;
     await adminDb.$executeRaw`UPDATE system_controls SET pause_paid_apis = false, maintenance_mode = false`;
 
     await adminDb.user.create({ data: { id: "admin", name: "관리자", role: "admin", passwordHash: await hashPassword("admin1234!") } });
