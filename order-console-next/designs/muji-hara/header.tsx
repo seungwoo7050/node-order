@@ -45,13 +45,13 @@ export function MujiHaraHeader({
             {loggedIn ? (
               <>
                 <StoreNavLink
-                  href={toHref("/orders")}
+                  href={toHref("/me/orders")}
                   className={styles.navLink}
                 >
                   내 주문
                 </StoreNavLink>
                 <StoreNavLink
-                  href={toHref("/profile")}
+                  href={toHref("/me/profile")}
                   exact
                   className={styles.navLink}
                 >
@@ -68,7 +68,7 @@ export function MujiHaraHeader({
             ) : (
               <>
                 <StoreNavLink
-                  href={toHref("/order-lookup")}
+                  href={toHref("/guest/orders")}
                   exact
                   className={styles.navLink}
                 >

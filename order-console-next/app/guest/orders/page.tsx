@@ -127,51 +127,54 @@ export default function GuestOrdersPage() {
   };
 
   return (
-    <div className="max-w-xl py-8">
-      <h1 className="title mb-6">비회원 주문 조회</h1>
+    <main className="page flex-1 pb-12 pt-8">
+      <div className="mx-auto max-w-xl">
+        <div className="mx-auto max-w-sm">
+          <h1 className="title mb-6">비회원 주문 조회</h1>
 
-      <form onSubmit={handleLookup} className="grid gap-4 max-w-sm text-sm mb-8 border-b border-line pb-8" data-testid="guest-lookup-form">
-        <label className="grid gap-1">
-          <span className="text-muted">주문번호</span>
-          <input
-            type="number"
-            value={orderId}
-            onChange={(e) => setOrderId(e.target.value)}
-            required
-            placeholder="숫자만 입력 (예: 12)"
-            className="border border-line px-3 py-1.5 num"
-            data-testid="guest-order-id"
-          />
-        </label>
+          <form onSubmit={handleLookup} className="grid gap-4 text-sm mb-8 border-b border-line pb-8" data-testid="guest-lookup-form">
+            <label className="grid gap-1">
+              <span className="text-muted">주문번호</span>
+              <input
+                type="number"
+                value={orderId}
+                onChange={(e) => setOrderId(e.target.value)}
+                required
+                placeholder="숫자만 입력 (예: 12)"
+                className="border border-line px-3 py-1.5 num"
+                data-testid="guest-order-id"
+              />
+            </label>
 
-        <label className="grid gap-1">
-          <span className="text-muted">비회원 주문 비밀번호</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            placeholder="주문 시 설정한 비밀번호"
-            className="border border-line px-3 py-1.5"
-            data-testid="guest-lookup-password"
-          />
-        </label>
+            <label className="grid gap-1">
+              <span className="text-muted">비회원 주문 비밀번호</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                placeholder="주문 시 설정한 비밀번호"
+                className="border border-line px-3 py-1.5"
+                data-testid="guest-lookup-password"
+              />
+            </label>
 
-        {error && (
-          <p role="alert" className="alert" data-testid="guest-lookup-error">
-            {error}
-          </p>
-        )}
+            {error && (
+              <p role="alert" className="alert" data-testid="guest-lookup-error">
+                {error}
+              </p>
+            )}
 
-        <button
-          type="submit"
-          className="btn"
-          disabled={isLoading}
-          data-testid="guest-lookup-submit"
-        >
-          {isLoading ? "조회 중…" : "주문 조회"}
-        </button>
-      </form>
+            <button
+              type="submit"
+              className="btn"
+              disabled={isLoading}
+              data-testid="guest-lookup-submit"
+            >
+              {isLoading ? "조회 중…" : "주문 조회"}
+            </button>
+          </form>
+        </div>
 
       {order && (
         <section data-testid="guest-order-detail" className="grid gap-6 border-t border-line pt-6">
@@ -292,6 +295,7 @@ export default function GuestOrdersPage() {
           </div>
         </section>
       )}
-    </div>
+      </div>
+    </main>
   );
 }

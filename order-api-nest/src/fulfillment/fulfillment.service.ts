@@ -41,12 +41,31 @@ export class FulfillmentService {
 
   // ── 관리자 ────────────────────────────────────────────
 
-  async list(query: { limit: number; cursor?: string; status?: OrderStatus; returns?: "requested"; guest?: boolean; q?: string }) {
+  async list(query: { limit: number; cursor?: string; status?: OrderStatus; returns?: "requested"; guest?: boolean; origin?: "all" | "post_seed" | "seed_only"; q?: string }) {
     const q = query.q?.trim();
+    const seedFilter: Prisma.OrderWhereInput =
+      query.origin === "seed_only"
+        ? {
+            OR: [
+              { payment: { is: { provider: "manual" } } },
+              { payment: { is: null }, recipientName: null },
+              { user: { is: { expiresAt: { not: null } } } },
+            ],
+          }
+        : query.origin === "post_seed"
+          ? {
+              AND: [
+                { OR: [{ payment: { is: null } }, { payment: { is: { provider: { not: "manual" } } } }] },
+                { NOT: { payment: { is: null }, recipientName: null } },
+                { user: { is: { expiresAt: null } } },
+              ],
+            }
+          : {};
     const where: Prisma.OrderWhereInput = {
       status: query.status,
       ...(query.returns ? { returns: { some: { status: query.returns } } } : {}),
       ...(query.guest !== undefined ? { isGuest: query.guest } : {}),
+      ...seedFilter,
       ...afterOrder(query.cursor),
     };
     if (q) {
@@ -69,12 +88,34 @@ export class FulfillmentService {
     }
     const rows = await this.prisma.asAdmin((tx) => tx.order.findMany({
       where,
-      select: { id: true, userId: true, status: true, totalAmount: true, shippingFee: true, recipientName: true, createdAt: true, statusChangedAt: true, isGuest: true },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        totalAmount: true,
+        shippingFee: true,
+        recipientName: true,
+        createdAt: true,
+        statusChangedAt: true,
+        isGuest: true,
+        payment: { select: { provider: true } },
+        user: { select: { expiresAt: true } },
+      },
       orderBy: [...orderListOrder],
       take: query.limit + 1,
     }));
     const page = toPage(rows, query.limit, encodeOrderCursor);
-    return { items: page.items.map(({ totalAmount, ...r }) => ({ ...r, price: totalAmount })), nextCursor: page.nextCursor };
+    return {
+      items: page.items.map(({ totalAmount, payment, user, ...r }) => ({
+        ...r,
+        price: totalAmount,
+        isSeed:
+          payment?.provider === "manual" ||
+          (!payment && !r.recipientName) ||
+          Boolean(user?.expiresAt),
+      })),
+      nextCursor: page.nextCursor,
+    };
   }
 
   async adminDetail(orderId: number) {

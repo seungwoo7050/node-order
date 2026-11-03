@@ -41,18 +41,29 @@ export default function AdminUsersPage() {
   const [q, setQ] = useState("");
   const [filterGuest, setFilterGuest] = useState<boolean | undefined>(undefined);
   const [filterActive, setFilterActive] = useState<boolean | undefined>(undefined);
+  const [filterOrigin, setFilterOrigin] = useState<"all" | "post_seed" | "seed_only">("all");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const isSeedAccount = (id: string) =>
+    ["kim", "lee", "park", "choi"].includes(id) || id.startsWith("demo-");
 
   const queryParams = new URLSearchParams();
   if (q.trim()) queryParams.set("q", q.trim());
   if (filterGuest !== undefined) queryParams.set("guest", String(filterGuest));
   if (filterActive !== undefined) queryParams.set("active", String(filterActive));
 
-  const { data: users, isPending } = useQuery<UserItem[]>({
+  const { data: rawUsers, isPending } = useQuery<UserItem[]>({
     queryKey: ["admin-users", q, filterGuest, filterActive],
     queryFn: () => authFetch<UserItem[]>(`/admin/users?${queryParams.toString()}`),
   });
+  const users = rawUsers?.filter((u) =>
+    filterOrigin === "post_seed"
+      ? !isSeedAccount(u.id)
+      : filterOrigin === "seed_only"
+        ? isSeedAccount(u.id)
+        : true,
+  );
 
   const { data: userDetail, isPending: detailPending } = useQuery<UserDetail>({
     queryKey: ["admin-user-detail", selectedUserId],
@@ -149,6 +160,31 @@ export default function AdminUsersPage() {
             >
               정지 계정
             </button>
+            <span className="mx-1 text-line">|</span>
+            <button
+              type="button"
+              data-testid="user-origin-post-seed"
+              className={`rounded px-3 py-1 text-xs font-medium ${
+                filterOrigin === "post_seed"
+                  ? "bg-emerald-700 text-white"
+                  : "text-emerald-800 bg-emerald-50 hover:bg-emerald-100"
+              }`}
+              onClick={() => setFilterOrigin(filterOrigin === "post_seed" ? "all" : "post_seed")}
+            >
+              시드 이후 유입만
+            </button>
+            <button
+              type="button"
+              data-testid="user-origin-seed-only"
+              className={`rounded px-3 py-1 text-xs font-medium ${
+                filterOrigin === "seed_only"
+                  ? "bg-amber-700 text-white"
+                  : "text-amber-800 bg-amber-50 hover:bg-amber-100"
+              }`}
+              onClick={() => setFilterOrigin(filterOrigin === "seed_only" ? "all" : "seed_only")}
+            >
+              시드·데모 계정만
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -196,16 +232,29 @@ export default function AdminUsersPage() {
                 users.map((u) => (
                   <tr key={u.id} className="border-b border-line hover:bg-neutral-50/50">
                     <td className="py-3 font-medium text-fg">
-                      <span className="flex items-center gap-2">
+                      <span className="flex flex-wrap items-center gap-1.5">
                         {u.id}
                         {u.role === "admin" && (
-                          <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[10px] text-white">
+                          <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[11px] text-white">
                             관리자
                           </span>
                         )}
                         {u.role === "demo_admin" && (
-                          <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-800">
+                          <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[11px] text-neutral-800">
                             데모
+                          </span>
+                        )}
+                        {["kim", "lee", "park", "choi"].includes(u.id) ? (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-normal text-amber-800">
+                            시드 기본
+                          </span>
+                        ) : u.id.startsWith("demo-") ? (
+                          <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-normal text-amber-700">
+                            데모 임시
+                          </span>
+                        ) : (
+                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-normal text-emerald-800">
+                            시드 이후
                           </span>
                         )}
                       </span>

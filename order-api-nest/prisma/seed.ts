@@ -48,12 +48,12 @@ const categoryIds = new Map(catalog.categories.map((c) => [c.name, c.id]));
 for (const p of catalog.products) {
   const categoryId = categoryIds.get(p.category);
   if (categoryId === undefined) throw new Error(`catalog.json: 없는 카테고리 "${p.category}" (${p.name})`);
-  const data = { name: p.name, price: p.price, stock: p.stock, description: p.description, categoryId, imageKey: noPhoto.has(p.photo) ? null : `seed/${p.photo}` };
+  const data = { name: p.name, price: p.price, stock: p.stock, description: p.description, categoryId, imageKey: noPhoto.has(p.photo) ? null : `seed/${p.photo}`, isVisible: true, deletedAt: null };
   await prisma.product.upsert({ where: { id: p.id }, create: { id: p.id, ...data }, update: data });
 }
 const productIds = catalog.products.map((p) => p.id);
-await prisma.product.deleteMany({ where: { id: { notIn: productIds }, items: { none: {} } } });
-await prisma.product.updateMany({ where: { id: { notIn: productIds } }, data: { stock: 0 } });
+await prisma.product.deleteMany({ where: { id: { notIn: productIds }, items: { none: {} }, returnItems: { none: {} } } });
+await prisma.product.updateMany({ where: { id: { notIn: productIds } }, data: { stock: 0, isVisible: false, deletedAt: new Date() } });
 await prisma.$executeRaw`SELECT setval(pg_get_serial_sequence('categories', 'id'), (SELECT max(id) FROM categories))`;
 await prisma.$executeRaw`SELECT setval(pg_get_serial_sequence('products', 'id'), (SELECT max(id) FROM products))`;
 
@@ -66,8 +66,13 @@ const seedUsers = [
 ];
 for (const u of seedUsers) {
   const passwordHash = await hashPassword(process.env.DEMO_PASSWORD!);
-  await prisma.user.upsert({ where: { id: u.id }, create: { ...u, passwordHash }, update: { passwordHash } });
+  await prisma.user.upsert({ where: { id: u.id }, create: { ...u, passwordHash, isActive: true }, update: { passwordHash, isActive: true, role: u.role } });
 }
+await prisma.systemControl.upsert({
+  where: { id: 1 },
+  create: { id: 1, pausePaidApis: false, maintenanceMode: false },
+  update: { pausePaidApis: false, maintenanceMode: false },
+});
 
 const seedOrders: { userId: string; paid: boolean; items: [productId: number, quantity: number][] }[] = [
   { userId: "kim", paid: true, items: [[6, 1], [16, 2]] },

@@ -318,17 +318,27 @@ export default function ProfilePage() {
   });
 
   if (isLoading) {
-    return <p className="text-sm text-muted py-8">내 정보를 불러오는 중입니다…</p>;
+    return (
+      <main className="page flex-1 pb-12 pt-8">
+        <p className="mx-auto max-w-xl text-sm text-muted py-8">내 정보를 불러오는 중입니다…</p>
+      </main>
+    );
   }
 
   if (error || !profile) {
-    return <p role="alert" className="alert my-8">로그인이 필요하거나 정보를 불러오지 못했습니다.</p>;
+    return (
+      <main className="page flex-1 pb-12 pt-8">
+        <p role="alert" className="alert mx-auto max-w-xl my-8">로그인이 필요하거나 정보를 불러오지 못했습니다.</p>
+      </main>
+    );
   }
 
   return (
-    <div className="max-w-xl py-8">
-      <h1 className="title mb-8">내 정보 관리</h1>
-      <ProfileForm profile={profile} key={profile.id} />
-    </div>
+    <main className="page flex-1 pb-12 pt-8">
+      <div className="mx-auto max-w-xl">
+        <h1 className="title mb-8">내 정보 관리</h1>
+        <ProfileForm profile={profile} key={profile.id} />
+      </div>
+    </main>
   );
 }

@@ -159,7 +159,9 @@ export function EditorialAtelierDetail({
             </Link>
           </p>
         )}
+      </div>
 
+      <div className={styles.mediaDetails}>
         {product.description && (
           <details open className={styles.acc}>
             <summary className={styles.summary}>

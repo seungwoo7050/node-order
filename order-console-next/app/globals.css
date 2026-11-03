@@ -31,13 +31,13 @@ html[data-store-design="editorial-atelier"] {
 }
 
 html[data-store-design="muji-hara"] {
-  --bg: #fff;
-  --surface: #f5f5f7;
-  --fg: #1d1d1f;
-  --muted: #6e6e73;
-  --faint: #9d9da0;
-  --line: #e5e5e5;
-  --line-strong: #1d1d1f;
+  --bg: #f3eee4;
+  --surface: #e8e0d1;
+  --fg: #26231f;
+  --muted: #655c50;
+  --faint: #8f8474;
+  --line: #d4cab7;
+  --line-strong: #7f1d1d;
   --store-max: 1360px;
   --store-gutter: 32px;
   --store-font: var(--font-inter), var(--font-body), sans-serif;

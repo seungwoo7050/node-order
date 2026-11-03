@@ -1,7 +1,10 @@
 import { Injectable } from "@nestjs/common";
+import { Prisma } from "../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { SearchStats } from "../search/search-stats.js";
 import { StoreSettingsService } from "./store-settings.service.js";
+
+export type DashboardScope = "all" | "post_seed" | "seed_only";
 
 type Tile<T> = T & { href: string };
 export type Dashboard = {
@@ -28,7 +31,26 @@ export type Dashboard = {
   bestSellers: { productId: number; name: string; quantity: number; totalSales: number }[];
   lowStockVariants: { id: number; productId: number; productName: string; variantName: string; stock: number }[];
   recentSales: { date: string; amount: number }[];
+  dataOrigin: {
+    scope: DashboardScope;
+    seedOrders: number;
+    postSeedOrders: number;
+    seedPaidAmount: number;
+    postSeedPaidAmount: number;
+    seedUsers: number;
+    postSeedUsers: number;
+  };
 };
+
+// 시드·데모 초기 샘플 데이터 조건:
+// 1) payment.provider = 'manual' (seed.ts 및 createDemoUser가 생성한 샘플 결제)
+// 2) payment가 없고 배송지(recipient_name)도 없는 초기 미결제 시드 주문
+// 3) 임시 데모 사용자(expires_at IS NOT NULL)의 주문
+const SEED_ORDER_COND = Prisma.sql`(
+  EXISTS (SELECT 1 FROM payments sp WHERE sp.order_id = o.id AND sp.provider = 'manual')
+  OR (NOT EXISTS (SELECT 1 FROM payments sp WHERE sp.order_id = o.id) AND o.recipient_name IS NULL)
+  OR EXISTS (SELECT 1 FROM users su WHERE su.id = o.user_id AND su.expires_at IS NOT NULL)
+)`;
 
 // 하루 경계는 서버·DB 세션 시간대에 기대지 않고 쿼리에 Asia/Seoul을 적는다.
 // 칸은 timestamp(시간대 없음, UTC로 저장)라서 KST 자정을 UTC 시각으로 바꿔 범위로 비교한다(인덱스를 쓸 수 있게).
@@ -42,9 +64,22 @@ export class DashboardService {
     private readonly settings: StoreSettingsService,
   ) {}
 
-  async get(now: Date = new Date()): Promise<Dashboard> {
+  async get(now: Date = new Date(), scope: DashboardScope = "all"): Promise<Dashboard> {
     const at = now.toISOString();
     const { lowStockThreshold } = await this.settings.get();
+    const orderScopeCond =
+      scope === "post_seed"
+        ? Prisma.sql`AND NOT ${SEED_ORDER_COND}`
+        : scope === "seed_only"
+          ? Prisma.sql`AND ${SEED_ORDER_COND}`
+          : Prisma.empty;
+    const paymentScopeCond =
+      scope === "post_seed"
+        ? Prisma.sql`AND p.provider != 'manual' AND NOT EXISTS (SELECT 1 FROM orders so JOIN users su ON su.id = so.user_id WHERE so.id = p.order_id AND su.expires_at IS NOT NULL)`
+        : scope === "seed_only"
+          ? Prisma.sql`AND (p.provider = 'manual' OR EXISTS (SELECT 1 FROM orders so JOIN users su ON su.id = so.user_id WHERE so.id = p.order_id AND su.expires_at IS NOT NULL))`
+          : Prisma.empty;
+
     const [
       today,
       pending,
@@ -57,22 +92,23 @@ export class DashboardService {
       bestSellerRows,
       lowStockVariantRows,
       recentSalesRows,
+      originSummaryRows,
     ] = await Promise.all([
       // 오늘 결제된 주문(승인 시각 기준)과 순매출 = 오늘 승인된 결제액 − 오늘 요청해 성공한 환불액(어제 주문의 환불도 오늘 매출에서 뺀다)
       this.prisma.asAdmin((tx) => tx.$queryRaw<{ date: string; orders: number; paid: number; refunded: number }[]>`
         WITH day AS (SELECT (date_trunc('day', ${at}::timestamptz AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'UTC' AS start)
         SELECT to_char(${at}::timestamptz AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') AS date,
           (SELECT count(*)::int FROM payments p, day WHERE p.approved_at >= day.start AND p.approved_at < day.start + interval '1 day'
-             AND p.status IN ('paid', 'partial_refunded', 'refunded')) AS orders,
+             AND p.status IN ('paid', 'partial_refunded', 'refunded') ${paymentScopeCond}) AS orders,
           (SELECT coalesce(sum(p.amount), 0)::int FROM payments p, day WHERE p.approved_at >= day.start AND p.approved_at < day.start + interval '1 day'
-             AND p.status IN ('paid', 'partial_refunded', 'refunded')) AS paid,
-          (SELECT coalesce(sum(r.amount), 0)::int FROM refunds r, day WHERE r.created_at >= day.start AND r.created_at < day.start + interval '1 day'
-             AND r.status = 'succeeded') AS refunded`),
+             AND p.status IN ('paid', 'partial_refunded', 'refunded') ${paymentScopeCond}) AS paid,
+          (SELECT coalesce(sum(r.amount), 0)::int FROM refunds r JOIN payments p ON p.id = r.payment_id, day WHERE r.created_at >= day.start AND r.created_at < day.start + interval '1 day'
+             AND r.status = 'succeeded' ${paymentScopeCond}) AS refunded`),
       // 처리 대기: 결제 완료(배송 준비 전), 배송 준비 중, 반품·교환 요청
       this.prisma.asAdmin((tx) => tx.$queryRaw<{ paid: number; preparing: number; returns: number }[]>`
-        SELECT (SELECT count(*)::int FROM orders WHERE status = 'paid') AS paid,
-               (SELECT count(*)::int FROM orders WHERE status = 'preparing') AS preparing,
-               (SELECT count(*)::int FROM returns WHERE status = 'requested') AS returns`),
+        SELECT (SELECT count(*)::int FROM orders o WHERE o.status = 'paid' ${orderScopeCond}) AS paid,
+               (SELECT count(*)::int FROM orders o WHERE o.status = 'preparing' ${orderScopeCond}) AS preparing,
+               (SELECT count(*)::int FROM returns rt JOIN orders o ON o.id = rt.order_id WHERE rt.status = 'requested' ${orderScopeCond}) AS returns`),
       this.prisma.product.count({ where: { deletedAt: null, stock: { lte: lowStockThreshold } } }),
       this.prisma.product.findMany({
         where: { deletedAt: null, stock: { lte: lowStockThreshold } },
@@ -85,16 +121,17 @@ export class DashboardService {
 
       // 6단계 주문 파이프라인 퍼널 (상태별 전체 주문 수)
       this.prisma.asAdmin((tx) => tx.$queryRaw<{ status: string; count: number }[]>`
-        SELECT status::text AS status, count(*)::int AS count
-        FROM orders
-        GROUP BY status`),
+        SELECT o.status::text AS status, count(*)::int AS count
+        FROM orders o
+        WHERE 1=1 ${orderScopeCond}
+        GROUP BY o.status`),
 
       // 회원 vs 비회원 비중 (취소 제외)
       this.prisma.asAdmin((tx) => tx.$queryRaw<{ is_guest: boolean; count: number }[]>`
-        SELECT is_guest, count(*)::int AS count
-        FROM orders
-        WHERE status != 'canceled'
-        GROUP BY is_guest`),
+        SELECT o.is_guest, count(*)::int AS count
+        FROM orders o
+        WHERE o.status != 'canceled' ${orderScopeCond}
+        GROUP BY o.is_guest`),
 
       // 베스트셀러 TOP 5 (취소되지 않은 주문의 상품별 판매량 및 매출)
       this.prisma.asAdmin((tx) => tx.$queryRaw<{ product_id: number; name: string; quantity: number; sales: number }[]>`
@@ -104,7 +141,7 @@ export class DashboardService {
         FROM order_items oi
         JOIN orders o ON o.id = oi.order_id
         JOIN products p ON p.id = oi.product_id
-        WHERE o.status != 'canceled'
+        WHERE o.status != 'canceled' ${orderScopeCond}
         GROUP BY p.id, p.name
         ORDER BY quantity DESC, sales DESC
         LIMIT 5`),
@@ -120,18 +157,39 @@ export class DashboardService {
 
       // 최근 결제일자 기준 7일 매출 추이 (DB에 존재하는 최근 결제일 기준, `now`와 무관하여 불일치 방지)
       this.prisma.asAdmin((tx) => tx.$queryRaw<{ date: string; amount: number }[]>`
-        SELECT to_char(approved_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') AS date,
-               COALESCE(SUM(amount), 0)::int AS amount
-        FROM payments
-        WHERE status IN ('paid', 'partial_refunded', 'refunded')
-          AND approved_at IS NOT NULL
-        GROUP BY to_char(approved_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD')
+        SELECT to_char(p.approved_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') AS date,
+               COALESCE(SUM(p.amount), 0)::int AS amount
+        FROM payments p
+        WHERE p.status IN ('paid', 'partial_refunded', 'refunded')
+          AND p.approved_at IS NOT NULL
+          ${paymentScopeCond}
+        GROUP BY to_char(p.approved_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD')
         ORDER BY date DESC
         LIMIT 7`),
+
+      // 시드 데이터 vs 시드 이후 데이터 구분 집계
+      this.prisma.asAdmin((tx) => tx.$queryRaw<{
+        seed_orders: number;
+        post_seed_orders: number;
+        seed_paid_amount: number;
+        post_seed_paid_amount: number;
+        seed_users: number;
+        post_seed_users: number;
+      }[]>`
+        SELECT
+          (SELECT count(*)::int FROM orders o WHERE ${SEED_ORDER_COND}) AS seed_orders,
+          (SELECT count(*)::int FROM orders o WHERE NOT ${SEED_ORDER_COND}) AS post_seed_orders,
+          (SELECT coalesce(sum(p.amount), 0)::int FROM payments p WHERE p.status IN ('paid', 'partial_refunded', 'refunded')
+             AND (p.provider = 'manual' OR EXISTS (SELECT 1 FROM orders so JOIN users su ON su.id = so.user_id WHERE so.id = p.order_id AND su.expires_at IS NOT NULL))) AS seed_paid_amount,
+          (SELECT coalesce(sum(p.amount), 0)::int FROM payments p WHERE p.status IN ('paid', 'partial_refunded', 'refunded')
+             AND p.provider != 'manual' AND NOT EXISTS (SELECT 1 FROM orders so JOIN users su ON su.id = so.user_id WHERE so.id = p.order_id AND su.expires_at IS NOT NULL)) AS post_seed_paid_amount,
+          (SELECT count(*)::int FROM users u WHERE u.id IN ('kim', 'lee', 'park', 'choi') OR u.expires_at IS NOT NULL) AS seed_users,
+          (SELECT count(*)::int FROM users u WHERE u.id NOT IN ('kim', 'lee', 'park', 'choi') AND u.expires_at IS NULL) AS post_seed_users`),
     ]);
 
     const t = today[0]!;
     const p = pending[0]!;
+    const origin = originSummaryRows[0]!;
 
     const funnelMap = new Map(funnelRows.map((r) => [r.status, r.count]));
     const pipelineFunnel = {
@@ -191,6 +249,15 @@ export class DashboardService {
       bestSellers,
       lowStockVariants,
       recentSales,
+      dataOrigin: {
+        scope,
+        seedOrders: origin.seed_orders,
+        postSeedOrders: origin.post_seed_orders,
+        seedPaidAmount: origin.seed_paid_amount,
+        postSeedPaidAmount: origin.post_seed_paid_amount,
+        seedUsers: origin.seed_users,
+        postSeedUsers: origin.post_seed_users,
+      },
     };
   }
 }
