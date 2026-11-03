@@ -21,6 +21,7 @@ export type StoreDesign = (typeof STORE_DESIGNS)[number];
 
 export class BrandingDto {
   @IsOptional()
+  @Transform(({ value }) => (value === "" ? undefined : value))
   @IsIn(STORE_DESIGNS, { message: "스토어 디자인은 muji-hara, editorial-atelier, zavanas-archive 중 하나여야 합니다" })
   storeDesign?: StoreDesign;
 
@@ -61,6 +62,7 @@ export class StoreSettingsDto {
   @IsInt({ message: "재고 부족 기준은 정수입니다" }) @Min(0) @Max(100_000) lowStockThreshold!: number;
 
   @IsOptional()
+  @Transform(({ value }) => (value === "" ? undefined : value))
   @IsIn(STORE_DESIGNS, { message: "스토어 디자인은 muji-hara, editorial-atelier, zavanas-archive 중 하나여야 합니다" })
   storeDesign?: StoreDesign;
 
