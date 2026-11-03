@@ -35,6 +35,9 @@ export class CheckoutDto {
 
   // 고르지 않으면 Stripe, Stripe가 꺼져 있으면 토스(GET /features가 켜진 수단을 알려 준다)
   @IsOptional() @IsIn(PROVIDERS) provider?: ProviderId;
+
+  // 적용할 쿠폰 코드 (선택)
+  @IsOptional() @IsString() couponCode?: string;
 }
 
 export class GuestCheckoutDto extends CheckoutDto {

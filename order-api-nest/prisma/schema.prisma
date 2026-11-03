@@ -33,6 +33,7 @@ model User {
   orders        Order[]
   refreshTokens RefreshToken[]
   accessTokens  AccessToken[]
+  reviews       Review[]
 
   @@index([expiresAt])
   @@map("users")
@@ -66,11 +67,16 @@ model Order {
   isGuest           Boolean     @default(false) @map("is_guest")
   guestPasswordHash String?     @map("guest_password_hash")
   returnShippingFee Int         @default(6000) @map("return_shipping_fee")
+  couponId          Int?        @map("coupon_id")
+  couponCode        String?     @map("coupon_code")
+  discountAmount    Int         @default(0) @map("discount_amount")
+  coupon            Coupon?     @relation(fields: [couponId], references: [id], onDelete: SetNull)
   items             OrderItem[]
   payment           Payment?
   history           OrderStatusHistory[]
   shipments         Shipment[]
   returns           Return[]
+  reviews           Review[]
 
   @@index([createdAt, id])
   @@index([userId, createdAt, id])
@@ -266,6 +272,7 @@ model Product {
   returnItems   ReturnItem[]
   variants      ProductVariant[]
   images        ProductImage[]
+  reviews       Review[]
   categoryId    Int?             @map("category_id")
   category      Category?        @relation(fields: [categoryId], references: [id])
 
@@ -540,4 +547,45 @@ model SystemControl {
 
   @@map("system_controls")
 }
+
+model Coupon {
+  id                Int       @id @default(autoincrement())
+  code              String    @unique
+  name              String
+  discountType      String    @map("discount_type")
+  discountValue     Int       @map("discount_value")
+  minOrderAmount    Int       @default(0) @map("min_order_amount")
+  maxDiscountAmount Int?      @map("max_discount_amount")
+  maxUses           Int?      @map("max_uses")
+  usedCount         Int       @default(0) @map("used_count")
+  active            Boolean   @default(true)
+  startsAt          DateTime? @map("starts_at")
+  expiresAt         DateTime? @map("expires_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  orders            Order[]
+
+  @@map("coupons")
+}
+
+model Review {
+  id          Int      @id @default(autoincrement())
+  orderId     Int      @map("order_id")
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   Int      @map("product_id")
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  authorName  String   @map("author_name")
+  rating      Int
+  content     String
+  variantName String?  @map("variant_name")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([orderId, productId])
+  @@index([productId, createdAt])
+  @@map("reviews")
+}
+
 

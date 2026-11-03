@@ -18,7 +18,12 @@ import { AuthService } from "../auth/auth.service.js";
 import { hashPassword } from "../auth/password.js";
 
 export type Order = { id: number; user: string; price: number; paid: boolean; }
-export type CheckoutResult = Order & { shippingFee: number; items: { productId: number; variantId?: number | null; variantLabel?: string; quantity: number; unitPrice: number }[] };
+export type CheckoutResult = Order & {
+  shippingFee: number;
+  items: { productId: number; variantId?: number | null; variantLabel?: string; quantity: number; unitPrice: number }[];
+  couponCode?: string | null;
+  discountAmount?: number;
+};
 type Consent = { version: number; at: Date };
 export type CheckoutResponse = CheckoutResult & { checkoutUrl: string; provider: ProviderId };
 
@@ -82,7 +87,7 @@ export class OrdersService {
     return Object.fromEntries(rows.map((r) => [r.userId, r._sum.totalAmount ?? 0]));
   }
 
-  async checkout(userId: string, items: CheckoutItemDto[], shipping: ShippingAddressDto, consent: { privacyConsentVersion: number }, idempotencyKey?: string, provider?: ProviderId): Promise<CheckoutResponse> {
+  async checkout(userId: string, items: CheckoutItemDto[], shipping: ShippingAddressDto, consent: { privacyConsentVersion: number }, idempotencyKey?: string, provider?: ProviderId, couponCode?: string): Promise<CheckoutResponse> {
     if (this.runtimeSecrets?.isMaintenanceMode()) {
       throw new ServiceUnavailableException("현재 상점 점검(휴면) 모드입니다. 잠시 후 다시 이용해 주세요");
     }
@@ -112,7 +117,7 @@ export class OrdersService {
       });
     }
 
-    const placed = await this.placeOrReplay(userId, items, trimmed, { version: privacy.version, at: new Date() }, policy, idempotencyKey);
+    const placed = await this.placeOrReplay(userId, items, trimmed, { version: privacy.version, at: new Date() }, policy, idempotencyKey, undefined, couponCode);
     const attemptKey = idempotencyKey && createHash("sha256").update(`${userId}:${idempotencyKey}:${placed.id}`).digest("hex");
     try {
       const started = await gateway.startCheckout({ id: placed.id, price: placed.price, name: `주문 #${placed.id}` }, attemptKey);
@@ -173,6 +178,7 @@ export class OrdersService {
       policy,
       idempotencyKey,
       { isGuest: true, guestPasswordHash },
+      dto.couponCode,
     );
 
     const attemptKey = idempotencyKey && createHash("sha256").update(`${guestUserId}:${idempotencyKey}:${placed.id}`).digest("hex");
@@ -206,14 +212,15 @@ export class OrdersService {
   private async placeOrReplay(
     userId: string, items: CheckoutItemDto[], shipping: ShippingAddressDto, consent: Consent, policy: ShippingPolicy, idempotencyKey?: string,
     guestMeta?: { isGuest?: boolean; guestPasswordHash?: string },
+    couponCode?: string,
   ): Promise<CheckoutResult> {
-    const requestHash = createHash("sha256").update(JSON.stringify({ items, shipping })).digest("hex");
+    const requestHash = createHash("sha256").update(JSON.stringify({ items, shipping, couponCode })).digest("hex");
     try {
       const result = await this.prisma.asUser(userId, async (tx) => {
         if (idempotencyKey) {
           await tx.idempotencyKey.create({ data: { userId, key: idempotencyKey, requestHash } });
         }
-        const placed = await this.placeOrder(tx, userId, items, shipping, consent, policy, guestMeta);
+        const placed = await this.placeOrder(tx, userId, items, shipping, consent, policy, guestMeta, couponCode);
         await tx.outboxEvent.create({ data: { type: "order.created", userId, payload: placed } });
         if (idempotencyKey) {
           await tx.idempotencyKey.update({
@@ -243,6 +250,7 @@ export class OrdersService {
   private async placeOrder(
     tx: Prisma.TransactionClient, userId: string, items: CheckoutItemDto[], shipping: ShippingAddressDto, consent: Consent, policy: ShippingPolicy,
     guestMeta?: { isGuest?: boolean; guestPasswordHash?: string },
+    couponCode?: string,
   ): Promise<CheckoutResult> {
     const ids = [...new Set(items.map((i) => i.productId))];
     const products = await tx.$queryRaw<{ id: number; name: string; price: number; stock: number; is_visible: boolean; deleted_at: Date | null }[]>`
@@ -302,20 +310,120 @@ export class OrdersService {
       }
     }
 
+    // 쿠폰 적용 및 검증 (행 잠금 FOR UPDATE)
+    let couponRow: {
+      id: number;
+      code: string;
+      name: string;
+      discount_type: string;
+      discount_value: number;
+      min_order_amount: number;
+      max_discount_amount: number | null;
+      max_uses: number | null;
+      used_count: number;
+      active: boolean;
+      starts_at: Date | null;
+      expires_at: Date | null;
+    } | null = null;
+    let discountAmount = 0;
+
+    const trimmedCode = couponCode?.trim().toUpperCase();
+    if (trimmedCode) {
+      const rows = await tx.$queryRaw<{
+        id: number;
+        code: string;
+        name: string;
+        discount_type: string;
+        discount_value: number;
+        min_order_amount: number;
+        max_discount_amount: number | null;
+        max_uses: number | null;
+        used_count: number;
+        active: boolean;
+        starts_at: Date | null;
+        expires_at: Date | null;
+      }[]>`
+        SELECT id, code, name, discount_type, discount_value, min_order_amount,
+               max_discount_amount, max_uses, used_count, active, starts_at, expires_at
+        FROM coupons
+        WHERE UPPER(code) = UPPER(${trimmedCode})
+        FOR UPDATE
+      `;
+      if (rows.length === 0) {
+        throw new BadRequestException("존재하지 않는 쿠폰입니다");
+      }
+      couponRow = rows[0];
+      if (!couponRow.active) {
+        throw new BadRequestException("비활성화된 쿠폰입니다");
+      }
+      const now = new Date();
+      if (couponRow.starts_at && couponRow.starts_at > now) {
+        throw new BadRequestException("아직 사용할 수 없는 쿠폰입니다");
+      }
+      if (couponRow.expires_at && couponRow.expires_at < now) {
+        throw new BadRequestException("유효기간이 만료된 쿠폰입니다");
+      }
+      if (couponRow.max_uses != null && couponRow.used_count >= couponRow.max_uses) {
+        throw new ConflictException("쿠폰 사용 한도가 초과되었습니다");
+      }
+      if (total < couponRow.min_order_amount) {
+        throw new BadRequestException(
+          `최소 주문 금액(${couponRow.min_order_amount.toLocaleString()}원) 이상일 때 사용 가능합니다`,
+        );
+      }
+
+      if (couponRow.discount_type === "fixed") {
+        discountAmount = Math.min(total, couponRow.discount_value);
+      } else if (couponRow.discount_type === "percent") {
+        const raw = Math.floor((total * couponRow.discount_value) / 100);
+        const capped = couponRow.max_discount_amount != null ? Math.min(raw, couponRow.max_discount_amount) : raw;
+        discountAmount = Math.min(total, capped);
+      }
+
+      await tx.coupon.update({
+        where: { id: couponRow.id },
+        data: { usedCount: { increment: 1 } },
+      });
+    }
+
     // 배송비는 주문에 따로 저장하고 total_amount에 더한다. PG 승인 금액 대조(27)는 이 total과 비교한다
     const shippingFee = shippingFeeFor(total, policy);
+    const totalAmount = Math.max(0, total - discountAmount) + shippingFee;
+
     const order = await tx.order.create({
       data: {
-        userId, totalAmount: total + shippingFee, shippingFee, paid: false, status: "pending_payment", ...shipping,
-        privacyConsentVersion: consent.version, privacyConsentedAt: consent.at,
+        userId,
+        totalAmount,
+        shippingFee,
+        paid: false,
+        status: "pending_payment",
+        ...shipping,
+        privacyConsentVersion: consent.version,
+        privacyConsentedAt: consent.at,
         returnShippingFee: policy.returnShippingFee,
         isGuest: guestMeta?.isGuest ?? false,
         guestPasswordHash: guestMeta?.guestPasswordHash ?? null,
+        couponId: couponRow?.id ?? null,
+        couponCode: couponRow?.code ?? null,
+        discountAmount,
         items: { create: orderItemsData },
       },
-      select: { ...orderSelect, shippingFee: true, items: { select: { productId: true, variantId: true, variantLabel: true, quantity: true, unitPrice: true } } },
+      select: {
+        ...orderSelect,
+        shippingFee: true,
+        couponId: true,
+        couponCode: true,
+        discountAmount: true,
+        items: { select: { productId: true, variantId: true, variantLabel: true, quantity: true, unitPrice: true } },
+      },
     });
-    return { ...toOrder(order), shippingFee: order.shippingFee, items: order.items };
+    return {
+      ...toOrder(order),
+      shippingFee: order.shippingFee,
+      items: order.items,
+      couponCode: order.couponCode,
+      discountAmount: order.discountAmount,
+    };
   }
 }
 

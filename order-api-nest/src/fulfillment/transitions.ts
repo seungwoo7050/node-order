@@ -69,7 +69,7 @@ export async function transitionOrder(...args: Parameters<typeof attemptTransiti
   return result;
 }
 
-// 주문 항목 수량만큼 재고를 돌려놓는다(취소). 상품 id 순서로 잠가 다른 재고 변경과 교착되지 않게 한다
+// 주문 항목 수량만큼 재고를 돌려놓는다(취소). 사용한 쿠폰이 있으면 사용 횟수도 1 복구한다. 상품 id 순서로 잠가 다른 재고 변경과 교착되지 않게 한다
 export async function restoreOrderStock(tx: Tx, orderId: number): Promise<void> {
   const items = await tx.orderItem.findMany({
     where: { orderId },
@@ -83,5 +83,18 @@ export async function restoreOrderStock(tx: Tx, orderId: number): Promise<void> 
     } else {
       await tx.product.update({ where: { id: item.productId }, data: { stock: { increment: item.quantity } } });
     }
+  }
+
+  const order = await tx.order.findUnique({
+    where: { id: orderId },
+    select: { couponId: true },
+  });
+  if (order?.couponId) {
+    await tx.$executeRaw`
+      UPDATE coupons
+      SET used_count = GREATEST(0, used_count - 1),
+          updated_at = NOW()
+      WHERE id = ${order.couponId}
+    `;
   }
 }
