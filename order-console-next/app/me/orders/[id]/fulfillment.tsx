@@ -143,3 +143,156 @@ export function ReturnForm({ orderId, returnable, deadline, returnShippingFee }:
     </form>
   );
 }
+
+type ReviewItem = { id: number; productId: number; rating: number; content: string; createdAt: string };
+
+export function OrderReviewSection({
+  orderId,
+  items,
+  reviews = [],
+}: {
+  orderId: number;
+  items: { product: { id: number; name: string }; variantLabel?: string | null }[];
+  reviews?: ReviewItem[];
+}) {
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+  const [activeProductId, setActiveProductId] = useState<number | null>(null);
+  const [rating, setRating] = useState(5);
+  const [content, setContent] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const reviewMutation = useMutation({
+    mutationFn: (productId: number) =>
+      authFetch(`/me/orders/${orderId}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId, rating, content }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: trpc.me.order.queryKey({ id: orderId }) });
+      void queryClient.invalidateQueries({ queryKey: trpc.me.orders.pathKey() });
+      setActiveProductId(null);
+      setContent("");
+      setRating(5);
+      setError(null);
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const reviewedProductIds = new Set(reviews.map((r) => r.productId));
+
+  return (
+    <section className="mt-8 border-t border-line pt-6" data-testid="order-reviews-section">
+      <h2 className="subtitle mb-3">상품 구매 후기</h2>
+      <div className="space-y-4">
+        {items.map(({ product, variantLabel }) => {
+          const isReviewed = reviewedProductIds.has(product.id);
+          const existingReview = reviews.find((r) => r.productId === product.id);
+
+          return (
+            <div
+              key={product.id}
+              className="border border-line rounded-lg p-4 bg-neutral-50/50"
+              data-testid={`order-item-review-${product.id}`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-sm">{product.name}</p>
+                  {variantLabel && <p className="text-xs text-muted">옵션: {variantLabel}</p>}
+                </div>
+                {isReviewed ? (
+                  <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded font-medium">
+                    작성 완료
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveProductId(activeProductId === product.id ? null : product.id);
+                      setError(null);
+                    }}
+                    data-testid={`open-review-form-${product.id}`}
+                    className="btn btn-secondary text-xs px-3 py-1"
+                  >
+                    {activeProductId === product.id ? "닫기" : "리뷰 작성"}
+                  </button>
+                )}
+              </div>
+
+              {isReviewed && existingReview && (
+                <div className="mt-3 text-xs bg-white p-3 rounded border border-line space-y-1">
+                  <div className="text-amber-500 font-bold">{"★".repeat(existingReview.rating)} ({existingReview.rating}점)</div>
+                  <p className="text-fg">{existingReview.content}</p>
+                </div>
+              )}
+
+              {activeProductId === product.id && !isReviewed && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!content.trim()) {
+                      setError("리뷰 내용을 입력해 주세요.");
+                      return;
+                    }
+                    reviewMutation.mutate(product.id);
+                  }}
+                  data-testid="review-form"
+                  className="mt-4 border-t border-line pt-4 space-y-3"
+                >
+                  {error && <p role="alert" className="alert text-xs">{error}</p>}
+                  <div>
+                    <label className="block text-xs text-muted mb-1">별점</label>
+                    <select
+                      value={rating}
+                      onChange={(e) => setRating(Number(e.target.value))}
+                      data-testid={`review-rating-${product.id}`}
+                      className="border border-line px-2 py-1 text-sm rounded"
+                    >
+                      <option value={5}>★★★★★ (5점 - 아주 만족해요)</option>
+                      <option value={4}>★★★★☆ (4점 - 만족해요)</option>
+                      <option value={3}>★★★☆☆ (3점 - 보통이에요)</option>
+                      <option value={2}>★★☆☆☆ (2점 - 그냥 그래요)</option>
+                      <option value={1}>★☆☆☆☆ (1점 - 실망이에요)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-muted mb-1">후기 내용</label>
+                    <textarea
+                      rows={3}
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      placeholder="상품의 품질, 착용감, 디자인 등에 대한 솔직한 후기를 남겨주세요."
+                      data-testid={`review-content-${product.id}`}
+                      className="w-full border border-line p-2 text-sm rounded focus:ring-1 focus:ring-black"
+                      required
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveProductId(null)}
+                      className="btn btn-secondary text-xs"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={reviewMutation.isPending}
+                      data-testid={`review-submit-${product.id}`}
+                      className="btn btn-primary text-xs"
+                    >
+                      {reviewMutation.isPending ? "등록 중..." : "리뷰 등록"}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}

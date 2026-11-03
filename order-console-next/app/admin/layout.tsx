@@ -11,6 +11,8 @@ const NAV_ITEMS = [
   { href: "/admin", label: "대시보드", exact: true },
   { href: "/admin/products", label: "상품 관리" },
   { href: "/admin/categories", label: "카테고리 관리" },
+  { href: "/admin/coupons", label: "쿠폰 관리" },
+  { href: "/admin/reviews", label: "리뷰 관리" },
   { href: "/admin/orders", label: "주문 관리" },
   { href: "/admin/users", label: "회원 관리" },
   { href: "/admin/reconciliation", label: "PG 대사" },

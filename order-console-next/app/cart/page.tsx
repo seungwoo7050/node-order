@@ -68,6 +68,11 @@ export default function CartPage() {
   const loadedRef = useRef(false);
   const [guestPassword, setGuestPassword] = useState("");
 
+  // 쿠폰 적용 상태
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; name: string; discountAmount: number } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+
   const hasDefaultShipping = !!(profileQuery.data?.postalCode && profileQuery.data?.address1);
 
   const applyDefaultShipping = () => {
@@ -114,6 +119,31 @@ export default function CartPage() {
   const privacy = useQuery(privacyOptions);
   const [agreed, setAgreed] = useState(false);
 
+  const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+
+  const validateCoupon = useMutation({
+    mutationFn: async (code: string) => {
+      const res = await fetch(`${API_URL}/coupons/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, subtotal }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { message?: string | string[] };
+        throw new Error(Array.isArray(body.message) ? body.message.join(", ") : (body.message ?? "유효하지 않은 쿠폰입니다."));
+      }
+      return (await res.json()) as { valid: boolean; code: string; name: string; discountAmount: number };
+    },
+    onSuccess: (data) => {
+      setAppliedCoupon({ code: data.code, name: data.name, discountAmount: data.discountAmount });
+      setCouponError(null);
+    },
+    onError: (err: Error) => {
+      setCouponError(err.message);
+      setAppliedCoupon(null);
+    },
+  });
+
   const checkout = useMutation({
     mutationFn: async () => {
       const key = useCartStore.getState().beginCheckout();
@@ -127,6 +157,7 @@ export default function CartPage() {
             shipping,
             privacyConsentVersion: privacy.data?.version,
             password: guestPassword,
+            couponCode: appliedCoupon?.code,
             items: items.map((i) => ({
               productId: i.productId,
               quantity: i.quantity,
@@ -149,6 +180,7 @@ export default function CartPage() {
           provider,
           shipping,
           privacyConsentVersion: privacy.data?.version,
+          couponCode: appliedCoupon?.code,
           items: items.map((i) => ({
             productId: i.productId,
             quantity: i.quantity,
@@ -175,9 +207,9 @@ export default function CartPage() {
     },
   });
 
-  const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const discountAmount = appliedCoupon ? appliedCoupon.discountAmount : 0;
   const fee = store.data ? shippingFeeFor(subtotal, store.data) : null;
-  const total = subtotal + (fee ?? 0);
+  const total = Math.max(0, subtotal - discountAmount) + (fee ?? 0);
   const showSummaryCard = isMember && hasDefaultShipping;
 
   return (
@@ -285,9 +317,70 @@ export default function CartPage() {
               </fieldset>
             )}
 
+            {/* 쿠폰 입력 영역 */}
+            <fieldset className="mb-5 border-t border-line pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <legend className="label">쿠폰 할인</legend>
+                {appliedCoupon && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAppliedCoupon(null);
+                      setCouponInput("");
+                      setCouponError(null);
+                    }}
+                    data-testid="remove-coupon-btn"
+                    className="text-xs text-muted underline hover:text-fg"
+                  >
+                    적용 취소
+                  </button>
+                )}
+              </div>
+              {!appliedCoupon ? (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    placeholder="쿠폰 코드 입력"
+                    data-testid="coupon-code-input"
+                    className="w-full border border-line px-2 py-1.5 text-sm uppercase font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!couponInput.trim()) return;
+                      validateCoupon.mutate(couponInput.trim());
+                    }}
+                    disabled={validateCoupon.isPending || !couponInput.trim()}
+                    data-testid="apply-coupon-btn"
+                    className="border border-line px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {validateCoupon.isPending ? "검사 중" : "적용"}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between bg-emerald-50 text-emerald-800 text-xs p-2.5 rounded border border-emerald-200" data-testid="applied-coupon-info">
+                  <span className="font-medium font-mono">[{appliedCoupon.code}] {appliedCoupon.name}</span>
+                  <span className="font-semibold">-{won(appliedCoupon.discountAmount)}</span>
+                </div>
+              )}
+              {couponError && (
+                <p role="alert" className="mt-1.5 text-xs text-red-600" data-testid="coupon-error">
+                  {couponError}
+                </p>
+              )}
+            </fieldset>
+
             <dl className="mb-5 grid grid-cols-[1fr_auto] gap-y-1 text-sm">
               <dt className="text-muted">상품 합계</dt>
               <dd className="num text-right">{won(subtotal)}</dd>
+              {discountAmount > 0 && (
+                <>
+                  <dt className="text-emerald-700 font-medium">쿠폰 할인</dt>
+                  <dd className="num text-right text-emerald-700 font-medium" data-testid="coupon-discount-amount">-{won(discountAmount)}</dd>
+                </>
+              )}
               <dt className="text-muted">배송비</dt>
               <dd className="num text-right" data-testid="shipping-fee">{fee === null ? "확인 중" : fee === 0 ? "무료" : won(fee)}</dd>
               <dt className="label self-baseline pt-2">합계</dt>

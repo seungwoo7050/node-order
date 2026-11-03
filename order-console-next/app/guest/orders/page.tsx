@@ -5,7 +5,7 @@ import { useState } from "react";
 import { API_URL, authFetch } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/auth-store";
 import { dateTime, won, ORDER_STATUS_LABEL, type OrderStatusCode, type RETURN_KIND_LABEL, type RETURN_REASON_LABEL, type RETURN_STATUS_LABEL, type REFUND_STATUS_LABEL } from "@/lib/orders";
-import { ConfirmButton, ReturnForm, Returns, Shipments, Timeline } from "@/app/me/orders/[id]/fulfillment";
+import { ConfirmButton, OrderReviewSection, ReturnForm, Returns, Shipments, Timeline } from "@/app/me/orders/[id]/fulfillment";
 
 type HistoryItem = { toStatus: OrderStatusCode; createdAt: string };
 type ShipmentItem = { id: number; returnId: number | null; carrierName: string; trackingNumber: string; trackingUrl: string | null; shippedAt: string };
@@ -274,6 +274,15 @@ export default function GuestOrdersPage() {
                 returnShippingFee={order.returnShippingFee}
               />
             </section>
+          )}
+
+          {/* 구매 후기 작성 */}
+          {order.status === "confirmed" && (
+            <OrderReviewSection
+              orderId={order.id}
+              items={order.items}
+              reviews={(order as { reviews?: { id: number; productId: number; rating: number; content: string; createdAt: string }[] }).reviews}
+            />
           )}
 
           <div className="mt-4">
