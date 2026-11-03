@@ -7,6 +7,7 @@ import { AdminViewGuard } from "../auth/admin-view.guard.js";
 import { PAGE_QUERY } from "../pagination/page-query.pipe.js";
 import { LegalDocumentDto } from "./legal.dto.js";
 import { LegalService, legalKind } from "./legal.service.js";
+import { BrandingDto } from "./store-settings.dto.js";
 import { SETTINGS_BODY, StoreSettingsService, parseIfMatch, type StoreSettingsInput } from "./store-settings.service.js";
 
 // 관리자 상점 설정·법적 고지. 읽기는 데모 관리자도 되고(AdminViewGuard), 쓰기는 진짜 관리자만(AdminGuard)
@@ -38,6 +39,18 @@ export class AdminSettingsController {
     const saved = await this.settings.save(dto, version);
     res.setHeader("ETag", `"${saved.version}"`);
     return saved;
+  }
+
+  @Get("settings/branding")
+  @UseGuards(AdminViewGuard)
+  getBranding() {
+    return this.settings.getBranding();
+  }
+
+  @Put("settings/branding")
+  @UseGuards(AdminGuard)
+  saveBranding(@Body() dto: BrandingDto) {
+    return this.settings.saveBranding(dto);
   }
 
   @Get("legal/:kind")

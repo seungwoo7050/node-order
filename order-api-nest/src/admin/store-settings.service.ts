@@ -3,16 +3,42 @@ import { Redis } from "ioredis";
 import type { StoreSettings } from "../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type { ShippingPolicy } from "../fulfillment/policy.js";
-import { StoreSettingsDto } from "./store-settings.dto.js";
+import { StoreSettingsDto, type BrandingDto } from "./store-settings.dto.js";
 
 // 인스턴스가 여럿이면 저장한 쪽이 이 채널로 알리고, 받은 쪽은 메모리 캐시를 버린다
 export const SETTINGS_CHANNEL = process.env.STORE_SETTINGS_CHANNEL ?? "store-settings:changed";
 // pub/sub 알림을 놓쳐도(Redis가 잠깐 끊김) 이 시간 뒤에는 DB에서 다시 읽는다
 const CACHE_TTL_MS = Number(process.env.STORE_SETTINGS_CACHE_MS ?? 60_000);
 
-export type SettingsView = Omit<StoreSettings, "id">;
+export type FullStoreSettings = Omit<StoreSettings, "id">;
+
+// GET /admin/settings는 admin-secrets.e2e-spec.ts 하위 호환성을 위해 정확히 14개 키만 돌려준다
+export interface SettingsView {
+  address: string;
+  businessNumber: string;
+  email: string;
+  freeShippingThreshold: number;
+  lowStockThreshold: number;
+  mailOrderNumber: string;
+  phone: string;
+  privacyOfficer: string;
+  representative: string;
+  returnShippingFee: number;
+  shippingFee: number;
+  storeName: string;
+  updatedAt: Date;
+  version: number;
+}
+
+export interface BrandingView {
+  storeDesign: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  announcementText: string;
+}
+
 // 상점 바닥글·장바구니에 보이는 값(누구나 읽는다). 재고 부족 기준·version은 관리자 화면에만 있다
-export type PublicStoreSettings = Omit<SettingsView, "lowStockThreshold" | "version" | "updatedAt">;
+export type PublicStoreSettings = Omit<FullStoreSettings, "lowStockThreshold" | "version" | "updatedAt">;
 
 // 칸별 오류를 { 칸: 문구 }로 돌려준다(설정 화면이 칸 아래에 그대로 보인다).
 // 컨트롤러의 인자 타입을 DTO 클래스로 두면 전역 ValidationPipe가 먼저 문자열 배열로 400을 낸다:
@@ -38,8 +64,8 @@ export function parseIfMatch(header: string | undefined): number | null {
 @Injectable()
 export class StoreSettingsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(StoreSettingsService.name);
-  private cached?: { value: SettingsView; at: number };
-  private loading?: Promise<SettingsView>;
+  private cached?: { value: FullStoreSettings; at: number };
+  private loading?: Promise<FullStoreSettings>;
   // 캐시 경합 막기: 저장 전에 시작한 읽기가 무효화 뒤에 끝나 옛 값을 다시 캐시하면 TTL 동안 옛 값을 보인다.
   //   generation: 무효화할 때마다 오른다. 그 전에 시작한 읽기의 결과는 캐시에 넣지 않는다(이 인스턴스의 경합)
   //   minVersion: 무효화 때 받은 version(저장한 판, pub/sub 메시지). 이보다 낮은 값은 넣지 않는다(다른 인스턴스와의 경합)
@@ -80,13 +106,46 @@ export class StoreSettingsService implements OnModuleInit, OnModuleDestroy {
     if (version !== undefined && version > this.minVersion) this.minVersion = version;
   }
 
-  async get(): Promise<SettingsView> {
+  async getFull(): Promise<FullStoreSettings> {
     if (this.cached && Date.now() - this.cached.at < CACHE_TTL_MS) return this.cached.value;
     this.loading ??= this.load();
     return this.loading;
   }
 
-  private async load(): Promise<SettingsView> {
+  async get(): Promise<SettingsView> {
+    const full = await this.getFull();
+    const { storeDesign: _d, heroTitle: _t, heroSubtitle: _s, announcementText: _a, ...standard } = full;
+    return standard;
+  }
+
+  async getBranding(): Promise<BrandingView> {
+    const { storeDesign, heroTitle, heroSubtitle, announcementText } = await this.getFull();
+    return { storeDesign, heroTitle, heroSubtitle, announcementText };
+  }
+
+  async saveBranding(dto: BrandingDto): Promise<BrandingView> {
+    const current = await this.getFull();
+    const dataToUpdate: Partial<BrandingView> = {};
+    if (dto.storeDesign !== undefined) dataToUpdate.storeDesign = dto.storeDesign;
+    if (dto.heroTitle !== undefined) dataToUpdate.heroTitle = dto.heroTitle;
+    if (dto.heroSubtitle !== undefined) dataToUpdate.heroSubtitle = dto.heroSubtitle;
+    if (dto.announcementText !== undefined) dataToUpdate.announcementText = dto.announcementText;
+
+    const updated = await this.prisma.storeSettings.update({
+      where: { id: 1 },
+      data: { ...dataToUpdate, version: { increment: 1 }, updatedAt: new Date() },
+    });
+    this.invalidate(updated.version);
+    await this.pub.publish(SETTINGS_CHANNEL, String(updated.version)).catch((err: Error) => this.logger.warn(`설정 변경을 알리지 못했다: ${err.message}`));
+    return {
+      storeDesign: updated.storeDesign,
+      heroTitle: updated.heroTitle,
+      heroSubtitle: updated.heroSubtitle,
+      announcementText: updated.announcementText,
+    };
+  }
+
+  private async load(): Promise<FullStoreSettings> {
     const generation = this.generation;
     try {
       const { id: _id, ...value } = await this.prisma.storeSettings.findUniqueOrThrow({ where: { id: 1 } });
@@ -100,7 +159,7 @@ export class StoreSettingsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async publicView(): Promise<PublicStoreSettings> {
-    const { lowStockThreshold: _l, version: _v, updatedAt: _u, ...rest } = await this.get();
+    const { lowStockThreshold: _l, version: _v, updatedAt: _u, ...rest } = await this.getFull();
     return rest;
   }
 
@@ -111,9 +170,30 @@ export class StoreSettingsService implements OnModuleInit, OnModuleDestroy {
 
   // 낙관적 잠금: 화면이 읽은 version과 지금 version이 같을 때만 저장한다. 다르면 409와 지금 값
   async save(input: StoreSettingsInput, expectedVersion: number): Promise<SettingsView> {
+    const dataToUpdate: Record<string, unknown> = {
+      storeName: input.storeName,
+      representative: input.representative,
+      businessNumber: input.businessNumber,
+      mailOrderNumber: input.mailOrderNumber,
+      address: input.address,
+      phone: input.phone,
+      email: input.email,
+      privacyOfficer: input.privacyOfficer,
+      shippingFee: input.shippingFee,
+      freeShippingThreshold: input.freeShippingThreshold,
+      returnShippingFee: input.returnShippingFee,
+      lowStockThreshold: input.lowStockThreshold,
+      version: { increment: 1 },
+      updatedAt: new Date(),
+    };
+    if (input.storeDesign !== undefined) dataToUpdate.storeDesign = input.storeDesign;
+    if (input.heroTitle !== undefined) dataToUpdate.heroTitle = input.heroTitle;
+    if (input.heroSubtitle !== undefined) dataToUpdate.heroSubtitle = input.heroSubtitle;
+    if (input.announcementText !== undefined) dataToUpdate.announcementText = input.announcementText;
+
     const { count } = await this.prisma.storeSettings.updateMany({
       where: { id: 1, version: expectedVersion },
-      data: { ...input, version: { increment: 1 }, updatedAt: new Date() },
+      data: dataToUpdate,
     });
     this.invalidate(count > 0 ? expectedVersion + 1 : undefined);
     if (count === 0) {
