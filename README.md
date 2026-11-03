@@ -1,4 +1,4 @@
-# 24: 무중단 배포
+# 26: PostgreSQL pg_trgm 상품 검색과 인기 검색어
 
 ![Language](https://img.shields.io/badge/language-TypeScript-blue?logo=typescript&logoColor=white)
 ![Stack](https://img.shields.io/badge/stack-NestJS%20%7C%20Next.js%20%7C%20Prisma%20%7C%20Caddy%20%7C%20k6%20%7C%20Playwright-lightgrey)
