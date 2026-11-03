@@ -5,12 +5,12 @@
 ![Stack](https://img.shields.io/badge/stack-NestJS%20%7C%20Next.js%20%7C%20Prisma%20%7C%20PostgreSQL%20%7C%20Redis-lightgrey)
 
 > [!IMPORTANT]
-> **현재 위치한 `main` 브랜치는 01번부터 32번까지의 점진적 학습 및 아키텍처 구축 과정을 보존하는 인덱스형 브랜치입니다.**  
+> **현재 위치한 `main` 브랜치는 01번부터 36번까지의 점진적 학습 및 아키텍처 구축 과정을 보존하는 인덱스형 브랜치입니다.**  
 > - **01~24번**: 단일 메모리 API부터 시작한 단계별 풀스택 백엔드/인프라 직접 구축
-> - **25~32번**: AI 에이전트 하네스(`AGENTS.md`, 린트/위험 명령 차단 훅, 통합 검증) 도입 및 AI 협업 개발
+> - **25~36번**: AI 에이전트 하네스(`AGENTS.md`, 린트/위험 명령 차단 훅, 통합 검증) 도입 및 AI 협업 개발
 > 
-> **최신 브랜치의 전체 소스코드와 리드미**는 아래의 **`32-production-prep`** 브랜치에서 확인하실 수 있습니다.
-> #### 👉 [32-production-prep 최종 완성 브랜치 바로가기 (포트폴리오 README 및 전체 코드)](https://github.com/seungwoo7050/node-order/tree/32-production-prep) 👈
+> **최신 브랜치의 전체 소스코드와 리드미**는 아래의 **`36-storefront-designs`** 브랜치에서 확인하실 수 있습니다.
+> #### 👉 [36-storefront-designs 최종 완성 브랜치 바로가기 (포트폴리오 README 및 전체 코드)](https://github.com/seungwoo7050/node-order/tree/36-storefront-designs) 👈
 
 ---
 
@@ -24,7 +24,8 @@
 
 ## 데모 둘러보기
 
-- 로그인 화면에서 "일반 사용자로"나 "관리자로"를 누르면 비밀번호 없이 임시 계정이 만들어집니다. 이 계정은 24시간 뒤 지워집니다.
+- 상점 화면은 각기 다른 테마의 3가지 디자인으로 볼 수 있습니다: [Editorial Atelier](https://shop.43-202-205-93.sslip.io/shop?design=editorial-atelier) · [MUJI Hara](https://shop.43-202-205-93.sslip.io/shop?design=muji-hara) · [Zavanas Archive](https://shop.43-202-205-93.sslip.io/shop?design=zavanas-archive)
+- 로그인 화면에서 "일반 사용자로"나 "관리자로"를 누르면 비밀번호 없이 임시 계정이 만들어집니다(24시간 뒤 삭제). 전체 관리자 기능은 `kim / 1234`로 로그인해 실행해 볼 수 있습니다.
 - 공개 데모라서 매일 새벽 4시(KST)에 상품과 데모 주문을 처음 상태로 되돌립니다. 새벽 3시 30분의 DB 백업이 그날 성공했을 때만 되돌립니다. GitHub로 가입한 계정과 그 주문은 남습니다.
 - 결제는 토스페이먼츠 및 Stripe 테스트 모드로 연동되어 있어 실제로 돈이 청구되지 않습니다.
 
@@ -76,6 +77,10 @@ GitHub Actions 배포 파이프라인:
 | 주문 결제 후 배송·반품·재고 복구의 다단계 상태 꼬임 | 순수 함수 상태 기계와 조건부 UPDATE, 멱등 환불 연동 (28) | 상태 전이 147쌍 전수 검증, 중복 환불·재고 누락 원천 차단 |
 | 1인 운영자의 반복적인 주문 조회 및 재고/반품 처리 부담 | Model Context Protocol(MCP) 서버 구축 (30) | Claude Code 등 AI 에이전트가 11개 도구로 상점 자동 관리 (감사 로그 완비) |
 | 운영 중 장애 발생 시 원인 규명 지연 및 개인정보 유출 위험 | Sentry 에러 마스킹, Prometheus 비즈니스 지표, 14개 경보 규칙 및 런북 (31, 32) | 주소·전화번호 철저 마스킹, 장애 발생 시 런북 링크로 즉각 대응 체계 완비 |
+| 가입 강제로 인한 이탈 및 외부 주소 API 미설정 시 주소 입력 불가 | 비회원 주문(주문번호 + 비밀번호 해시) 및 행안부 도로명주소 API + 내장 주소 폴백 (33) | 로그인 없이 결제·조회 가능, 외부 API 키 없이도 주소 검색 동작 |
+| 옵션별 재고 품절 관리 및 API 키 교체 시 재배포 부담 | `ProductVariant` 비관적 잠금, 어드민 워크스페이스 분리, AES-256-GCM API 금고 (34) | 옵션·상위 재고 동기화, 웹 콘솔에서 API 키 교체 및 점검 모드 제어 |
+| 할인 쿠폰 적용 주문의 취소 복구 및 PG 대사 금액 차이 | 쿠폰 사용 이력(`CouponRedemption`) 트랜잭션 통합 및 구매확정 전용 리뷰 (35) | 취소 시 쿠폰 자동 복구, 할인 차감 실결제액 기준 PG 대사 일치 |
+| 단일 커머스 로직에서 서로 다른 스토어 디자인 제공 | 공통 ViewModel과 3종 디자인 렌더러 분리, 디자인 가드 스크립트 (36) | 재배포 없이 스토어 디자인 전환 및 인라인 스타일·슬롭 규칙 자동 검사 |
 
 ---
 
@@ -117,6 +122,10 @@ GitHub Actions 배포 파이프라인:
 | [30-ai-mcp](https://github.com/seungwoo7050/node-order/tree/30-ai-mcp) | 판매자용 MCP & AI | 29의 소스 | Model Context Protocol(MCP) 서버(11개 도구), LLM 기반 상품 설명 초안 실시간 스트리밍 |
 | [31-observability](https://github.com/seungwoo7050/node-order/tree/31-observability) | 관측성 | 30의 소스 | Sentry 에러 추적(개인정보 마스킹), Prometheus 업무 지표 수집, Alertmanager 경보 및 런북 |
 | [32-production-prep](https://github.com/seungwoo7050/node-order/tree/32-production-prep) | 운영 배포 전 실험 | 31의 소스 | 비용 0원 운영 구성, 토스 개발자 테스트 키 연동, 모니터링 런북 결함 해결 및 포트폴리오 종합 아키텍처 수록 |
+| [33-member-guest](https://github.com/seungwoo7050/node-order/tree/33-member-guest) | 회원·비회원 주문 & 주소 검색 | 32의 소스 | 회원가입·기본 배송지 연동, 도로명 주소 검색 모달(내장 폴백), 비회원 주문·조회, SMTP 메일러 |
+| [34-catalog-admin](https://github.com/seungwoo7050/node-order/tree/34-catalog-admin) | 어드민 분리 & 옵션·API 금고 | 33의 소스 | 상품 옵션(`ProductVariant`) 재고 잠금, 어드민 백오피스 분리 및 CRUD, AES-256-GCM API 키 금고 |
+| [35-coupons-reviews](https://github.com/seungwoo7050/node-order/tree/35-coupons-reviews) | 쿠폰 & 구매확정 리뷰 | 34의 소스 | 정액·정률 쿠폰 발행·적용·취소 복구 및 PG 대사 반영, 구매확정 주문 전용 리뷰·별점 |
+| [36-storefront-designs](https://github.com/seungwoo7050/node-order/tree/36-storefront-designs) | 다중 스토어 디자인 & 디자인 가드 | 35의 소스 | 공통 커머스 ViewModel + 3종 스토어 디자인(`editorial-atelier`·`muji-hara`·`zavanas-archive`), 상점 브랜딩 설정, 디자인 가드 |
 
 ---
 
@@ -126,7 +135,7 @@ GitHub Actions 배포 파이프라인:
 # 저장소를 둘 위치에서
 git clone https://github.com/seungwoo7050/node-order.git
 cd node-order
-git switch 32-production-prep # 최신 브랜치로 전환
+git switch 36-storefront-designs # 최신 브랜치로 전환
 ```
 
 1. **설치 및 인프라 실행**: 루트에서 `npm ci` 후 `docker compose up -d`로 로컬 인프라(Postgres, Redis, Storage)를 실행합니다.
