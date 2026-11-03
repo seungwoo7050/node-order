@@ -15,7 +15,7 @@
   "current": {
     "branch": "36-storefront-designs",
     "stage": "done",
-    "note": "25~36 전 구간 구현·검증(verify)·독립 평가·가이드/devlog 완료 (36-storefront-designs @ 144bb8c)"
+    "note": "25~36 전 구간 구현·검증(verify)·독립 평가·가이드/devlog 완료 및 36 레퍼런스 브랜드 실측 기반 리파인먼트 완료 (36-storefront-designs @ 2410fae)"
   },
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
@@ -29,7 +29,7 @@
     "33-member-guest": "implemented @ 69f3b22 (verify 통과: unit 174/174, harness 70/70, api e2e 247/247, web e2e 57/57, rules 통과, 평가 8/8 통과, 가이드·devlog 완료)",
     "34-catalog-admin": "implemented @ b5563ab (verify 통과: unit 174/174, harness 70/70, api e2e 252/252, web e2e 62/62, rules 통과, 평가 7/7 통과, 가이드·devlog 완료)",
     "35-coupons-reviews": "implemented @ ec1d520 (verify 통과: unit 174/174, harness 70/70, api e2e 256/256, web e2e 65/65, rules 통과, 평가 5/5 통과, devlog 완료)",
-    "36-storefront-designs": "implemented @ 144bb8c (verify 통과: unit 174/174, harness 86/86, api e2e 261/261, web e2e 69/69, rules 통과, 평가 5/5 통과, 가이드·devlog 완료)"
+    "36-storefront-designs": "implemented @ 2410fae (verify 통과: unit 174/174, harness 108/108, api e2e 261/261, web e2e 70/70, rules 통과, R8 시각·구조 QA 0건 통과, 평가 5/5 통과, 가이드·devlog 완료)"
   },
   "blocked": [
     {
