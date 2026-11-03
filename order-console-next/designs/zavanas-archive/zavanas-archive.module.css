@@ -64,8 +64,16 @@
 .wrap {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 20px;
-  box-sizing: content-box;
+  padding-left: 24px;
+  padding-right: 24px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .wrap {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -1063,16 +1071,28 @@
   }
 
   .banner {
-    aspect-ratio: 4 / 3;
+    aspect-ratio: auto;
+    min-height: 260px;
+    padding: 24px 20px;
   }
 
   .bannerImg {
-    object-position: 70% 50%;
+    position: absolute;
+    inset: 0;
+    object-position: 80% 50%;
+    opacity: 0.22;
   }
 
   .bannerCopy {
-    left: 20px;
-    max-width: 70%;
+    position: relative;
+    left: auto;
+    top: auto;
+    transform: none;
+    max-width: 100%;
+  }
+
+  .bannerTitle {
+    font-size: 24px;
   }
 
   .headRow {

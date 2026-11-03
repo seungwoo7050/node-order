@@ -72,7 +72,7 @@ function InnerCatalog() {
 
   const effectiveDesign = isStoreDesignId(designParam)
     ? designParam
-    : overrideDesign ?? activeDesign;
+    : overrideDesign;
 
   const linkFor = (href: string) => withDesign(href, effectiveDesign);
 
@@ -128,7 +128,7 @@ function InnerDetail({
 
   const effectiveDesign = isStoreDesignId(designParam)
     ? designParam
-    : overrideDesign ?? activeDesign;
+    : overrideDesign;
 
   const linkFor = (href: string) => withDesign(href, effectiveDesign);
 
