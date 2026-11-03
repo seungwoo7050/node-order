@@ -64,6 +64,10 @@ up() {
   RELEASE_TAG=$NEW "${DC[@]}" run --rm -T migrate 2>&1 | { grep -E "^Applying|^No pending|rror|P3[0-9]{3}" || true; }
   APP_PW=$(env_of DATABASE_URL | sed -n 's|^postgresql://order_app:\([^@]*\)@.*|\1|p')
   printf "ALTER ROLE order_app PASSWORD '%s';\n" "$APP_PW" | RELEASE_TAG=$NEW "${DC[@]}" run --rm -T migrate npx prisma db execute --stdin 2>&1 | { grep -E "rror|P[0-9]{4}" || true; }
+  if [ "$(env_of DEMO_LOGIN)" = "1" ]; then
+    say "데모 시드 동기화"
+    RELEASE_TAG=$NEW "${DC[@]}" run --rm -T migrate npx prisma db seed 2>&1 | tail -1
+  fi
 
   env_of "$(upper "$IDLE")_TAG" > live/prev-idle-tag # abort가 되돌릴 값
   set_env "$(upper "$IDLE")_TAG" "$NEW"
