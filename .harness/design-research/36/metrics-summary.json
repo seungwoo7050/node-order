@@ -1,0 +1,79 @@
+{
+  "capturedAt": "2026-11-03",
+  "viewport": {
+    "desktop": { "width": 1440, "height": 900 },
+    "mobile": { "width": 390, "height": 844 }
+  },
+  "referenceBrands": {
+    "coor": {
+      "url": "https://coor.kr",
+      "bodyBg": "rgb(255, 255, 255)",
+      "textColor": "rgb(0, 0, 0)",
+      "plateBg": "rgb(239, 239, 239)",
+      "wordmarkFont": "Instrument Serif, 28px, lowercase",
+      "bodyFont": "Helvetica Neue, Apple SD Gothic Neo, 12px-13px",
+      "headerHeightPx": 60,
+      "catalogColumns": 4,
+      "cardAspectRatio": 0.67
+    },
+    "firstfloor": {
+      "url": "https://firstfloor.co.kr",
+      "bodyBg": "rgb(255, 255, 255)",
+      "textColor": "rgb(27, 27, 27)",
+      "plateBg": "rgb(245, 245, 245)",
+      "bodyFont": "Pretendard, Inter, 13px",
+      "headerHeightPx": 54,
+      "catalogColumns": 4,
+      "cardAspectRatio": 0.72
+    },
+    "theknitcompany": {
+      "url": "https://theknitcompany.com",
+      "bodyBg": "rgb(255, 255, 255)",
+      "textColor": "rgb(17, 17, 17)",
+      "mutedColor": "rgb(118, 118, 118)",
+      "plateBg": "rgb(244, 244, 244)",
+      "bodyFont": "Pretendard, 13px-14px",
+      "headerHeightPx": 56,
+      "catalogColumns": 4,
+      "cardAspectRatio": 0.75,
+      "pdpBuyboxWidthPx": 400,
+      "pdpPrimaryCtaBg": "rgb(51, 51, 51)",
+      "pdpPrimaryCtaHeightPx": 48
+    },
+    "mujikorea": {
+      "url": "https://www.mujikorea.co.kr",
+      "bodyBg": "rgb(255, 255, 255)",
+      "textColor": "rgb(0, 0, 0)",
+      "mutedColor": "rgb(102, 102, 102)",
+      "accentColor": "rgb(127, 0, 25)",
+      "plateBg": "rgb(245, 245, 245)",
+      "bodyFont": "Pretendard, Noto Sans KR, 14px-16px",
+      "announcementHeightPx": 44,
+      "headerHeightPx": 64,
+      "categoryTabHeightPx": 64,
+      "catalogColumns": 4,
+      "cardAspectRatio": 1.0
+    },
+    "zavanas": {
+      "url": "https://zavanas.com",
+      "bodyBg": "rgb(255, 255, 255)",
+      "textColor": "rgb(28, 28, 28)",
+      "mutedColor": "rgb(136, 136, 136)",
+      "soldOutAccent": "rgb(176, 58, 46)",
+      "plateBg": "rgb(243, 243, 243)",
+      "wordmarkFont": "Raleway, 25px, uppercase, letter-spacing 8px",
+      "bodyFont": "Nanum Gothic, 12px-14px",
+      "containerMaxWidthPx": 1200,
+      "catalogColumns": 4,
+      "cardAspectRatio": 1.0,
+      "pdpSpecThWidthPx": 136,
+      "pdpPrimaryCtaHeightPx": 52
+    }
+  },
+  "beforeDiagnosis": {
+    "cssModulesCompiled": false,
+    "rootCause": "order-console-next/next.config.ts turbopack.rules['*.css'] forced as: '*.css' on *.module.css files",
+    "computedCatalogDisplayBeforeFix": "block (unstyled <ul> with 40px padding-inline-start)",
+    "computedCatalogDisplayAfterFix": "grid"
+  }
+}
