@@ -13,9 +13,9 @@
     "note": "Next 16.4.0 빌드가 보안 업그레이드 안내로 불규칙하게 실패한다(재시도하면 통과). 25 첫 커밋에서 16.4.3으로 올린다"
   },
   "current": {
-    "branch": "34-catalog-admin",
+    "branch": "35-coupons-reviews",
     "stage": "ready",
-    "note": "33-member-guest(@ 69f3b22) 구현·검증(verify)·독립 평가(8/8)·DocsArchive(devlog/guide) 완료. 다음 세션에서 34-catalog-admin 구현 시작"
+    "note": "34-catalog-admin(@ b5563ab) 구현·검증(verify)·독립 평가(7/7)·가이드/devlog 완료. 다음 세션에서 35-coupons-reviews 구현 시작"
   },
   "branches": {
     "25-harness": "implemented @ dbb96db (verify 통과, 가이드 완료, devlog 완료)",
@@ -27,7 +27,7 @@
     "31-observability": "implemented @ f6b2a2f (verify 통과, devlog 완료)",
     "32-production-prep": "implemented @ a64d564 (런북·0원 운영 환경변수·지표 semver 라벨 보강, README 개편)",
     "33-member-guest": "implemented @ 69f3b22 (verify 통과: unit 174/174, harness 70/70, api e2e 247/247, web e2e 57/57, rules 통과, 평가 8/8 통과, 가이드·devlog 완료)",
-    "34-catalog-admin": "planned (브리프 확정)",
+    "34-catalog-admin": "implemented @ b5563ab (verify 통과: unit 174/174, harness 70/70, api e2e 252/252, web e2e 62/62, rules 통과, 평가 7/7 통과, 가이드·devlog 완료)",
     "35-coupons-reviews": "planned (브리프 확정)",
     "36-storefront-designs": "planned (브리프 확정)"
   },
@@ -99,7 +99,7 @@
     "31-observability": "skip (설정 파일 위주)",
     "32-production-prep": "done (32-production-prep.md)",
     "33-member-guest": "done (33-member-guest.md)",
-    "34-catalog-admin": "pending (옵션 Variant 단위 비관적 잠금 및 AES-256-GCM 런타임 비밀 금고)",
+    "34-catalog-admin": "done (34-catalog-admin.md)",
     "35-coupons-reviews": "skip (쿠폰 차감·대사 정합성과 구매확정 리뷰는 devlog로)",
     "36-storefront-designs": "pending (공통 커머스 ViewModel + 3대 독립 디자인 렌더러 레지스트리 및 바이링구얼 폰트 아키텍처)"
   },
