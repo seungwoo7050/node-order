@@ -218,9 +218,9 @@ export function AddressSearchModal({ onSelect, buttonLabel = "우편번호 찾�
                 ))
               ) : searched ? (
                 <div className="p-6 text-center text-muted text-sm space-y-3">
-                  <p>일치하는 내장 도로명 주소가 없습니다.</p>
+                  <p>검색어와 일치하는 도로명 주소를 찾지 못했습니다.</p>
                   <p className="text-xs leading-relaxed">
-                    현재 외부 행안부 도로명주소 API 키(<code>JUSO_API_KEY</code>)가 설정되지 않아 내장된 주요 도로명 데이터셋(테헤란로, 성수이로, 판교역로 등 60여 건)으로 동작 중입니다.
+                    도로명과 건물번호(예: 테헤란로 123, 성수이로 51, 판교역로 235)를 다시 확인하시거나 아래 버튼으로 입력하신 주소를 바로 적용할 수 있습니다.
                   </p>
                   {query.trim() && (
                     <div className="pt-1 flex justify-center gap-2">

@@ -40,6 +40,10 @@ x-api: &api
     TOSS_CLIENT_KEY: ${TOSS_CLIENT_KEY:-}
     TOSS_SECRET_KEY: ${TOSS_SECRET_KEY:-}
     LLM_API_KEY: ${LLM_API_KEY:-}
+    OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    JUSO_API_KEY: ${JUSO_API_KEY:-}
+    SMTP_URL: ${SMTP_URL:-}
+    SMTP_HOST: ${SMTP_HOST:-}
     # 오류 추적(31): DSN이 있을 때만 켜진다. release는 서비스마다 그 슬롯의 이미지 태그(api-blue·api-green)
     SENTRY_DSN: ${SENTRY_DSN:-}
     SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}

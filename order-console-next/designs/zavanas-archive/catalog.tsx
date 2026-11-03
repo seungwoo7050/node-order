@@ -63,7 +63,7 @@ export function ZavanasArchiveCatalog({
             loading="eager"
           />
           <div className={styles.bannerCopy}>
-            <p className={styles.eyebrow}>MAIN VISUAL</p>
+            <p className={styles.eyebrow}>컬렉션 아카이브</p>
             <span className={styles.rule} aria-hidden="true" />
             <p className={styles.kicker}>{storeName}</p>
             <h2 className={styles.bannerTitle}>{heroTitle}</h2>
