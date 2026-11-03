@@ -10,7 +10,7 @@ import { ORDER_STATUS_CODES, ORDER_STATUS_LABEL, won, type OrderStatusCode } fro
 import { LoadMore } from "../../load-more";
 import { AdminOnly } from "../products/admin-only";
 
-type Row = { id: number; userId: string; status: OrderStatusCode; price: number; recipientName: string | null; createdAt: string; isGuest?: boolean };
+type Row = { id: number; userId: string; status: OrderStatusCode; price: number; recipientName: string | null; createdAt: string; isGuest?: boolean; isSeed?: boolean };
 type Page = { items: Row[]; nextCursor: string | null };
 
 const READ_ONLY = "데모 관리자는 볼 수만 있습니다. 배송 준비·송장 입력·취소·반품 처리는 진짜 관리자만 할 수 있어 버튼을 꺼 두었습니다.";
@@ -21,19 +21,23 @@ const isStatus = (v: string | null): v is OrderStatusCode => !!v && (ORDER_STATU
 function OrderTable() {
   const search = useSearchParams();
   const initialStatus = search.get("status");
-  const [status, setStatus] = useState<OrderStatusCode | "">(isStatus(initialStatus) ? initialStatus : search.get("returns") ? "" : "paid");
+  const [status, setStatus] = useState<OrderStatusCode | "">(
+    initialStatus !== null ? (isStatus(initialStatus) ? initialStatus : "") : search.get("returns") ? "" : "paid",
+  );
   const [returnsOnly, setReturnsOnly] = useState(search.get("returns") === "requested");
   const [guestFilter, setGuestFilter] = useState<string>(search.get("guest") ?? "");
+  const [originFilter, setOriginFilter] = useState<string>(search.get("origin") ?? "all");
   const [q, setQ] = useState("");
   const [exporting, setExporting] = useState(false);
 
   const query = useInfiniteQuery({
-    queryKey: ["admin-orders", status, returnsOnly, guestFilter, q],
+    queryKey: ["admin-orders", status, returnsOnly, guestFilter, originFilter, q],
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({ limit: "20" });
       if (status) params.set("status", status);
       if (returnsOnly) params.set("returns", "requested");
       if (guestFilter) params.set("guest", guestFilter);
+      if (originFilter && originFilter !== "all") params.set("origin", originFilter);
       if (q.trim()) params.set("q", q.trim());
       if (pageParam) params.set("cursor", pageParam);
       return authFetch<Page>(`/admin/orders?${params}`);
@@ -84,6 +88,14 @@ function OrderTable() {
               <option value="">전체</option>
               <option value="false">회원만</option>
               <option value="true">비회원만</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2">
+            <span className="label">출처</span>
+            <select className="border border-line px-2 py-1" value={originFilter} onChange={(e) => setOriginFilter(e.target.value)} data-testid="origin-filter">
+              <option value="all">전체(시드+실유입)</option>
+              <option value="post_seed">시드 이후 실유입만</option>
+              <option value="seed_only">시드·데모 샘플만</option>
             </select>
           </label>
           <label className="flex items-center gap-2">
@@ -138,6 +150,15 @@ function OrderTable() {
                   {o.isGuest && (
                     <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-neutral-200 rounded font-normal" data-testid="guest-badge">
                       비회원
+                    </span>
+                  )}
+                  {o.isSeed ? (
+                    <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-normal" data-testid="seed-order-badge">
+                      시드·데모
+                    </span>
+                  ) : (
+                    <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-normal" data-testid="post-seed-order-badge">
+                      시드 이후
                     </span>
                   )}
                 </td>

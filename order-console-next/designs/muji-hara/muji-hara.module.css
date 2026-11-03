@@ -22,23 +22,26 @@
   --t-base: 200ms;
   --t-slow: 600ms;
 
-  --ink: #1d1d1f;
-  --body: #1d1d1f;
-  --mute: #6e6e73;
-  --inactive: #767676;
-  --line: #e5e5e5;
-  --line-2: #d2d2d7;
-  --plate: #efefef;
-  --tab: #f5f5f5;
-  --crimson: #7f0019;
-  --surface: #f5f5f7;
+  --paper: #f3eee4;
+  --cell: #f7f3eb;
+  --ink: #26231f;
+  --body: #2e2a25;
+  --mute: #655c50;
+  --inactive: #6b6256;
+  --line: #d4cab7;
+  --line-2: #bfb39c;
+  --plate: #ebe4d6;
+  --tab: #ede6d8;
+  --crimson: #7f1d1d;
+  --surface: #e8e0d1;
 
   --max: 1360px;
   --pad: 32px;
+  --serif: var(--font-cormorant), var(--font-display), "Noto Serif KR", serif;
   --sans: var(--font-inter), var(--font-body), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 
   width: 100%;
-  background: #ffffff;
+  background: var(--paper);
   color: var(--ink);
   font-family: var(--sans);
   font-size: 14px;
@@ -111,11 +114,12 @@
    Header Component Styles
    ========================================================================== */
 .announce {
-  height: 44px;
-  background: #222222;
-  color: #ffffff;
-  font-size: 14px;
-  font-weight: 600;
+  height: 40px;
+  background: var(--crimson);
+  color: var(--cell);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -127,7 +131,8 @@
   position: sticky;
   top: 0;
   z-index: 40;
-  background: #ffffff;
+  background: var(--paper);
+  border-top: 3px solid var(--crimson);
   border-bottom: 1px solid var(--line);
 }
 
@@ -144,11 +149,12 @@
 }
 
 .brand {
+  font-family: var(--serif);
   font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   margin-right: 32px;
-  color: var(--ink);
+  color: var(--crimson);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -301,9 +307,10 @@
 }
 
 .pageTitle {
+  font-family: var(--serif);
   font-size: 32px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 
@@ -351,7 +358,7 @@
 }
 
 .tab:hover {
-  background: #ebebeb;
+  background: var(--surface);
 }
 
 .tab:focus-visible {
@@ -360,13 +367,13 @@
 }
 
 .tabOn {
-  background: #000000;
-  color: #ffffff;
+  background: var(--crimson);
+  color: var(--cell);
   font-weight: 600;
 }
 
 .tabOn:hover {
-  background: #222222;
+  background: #631515;
 }
 
 @media (max-width: 768px) {
@@ -455,8 +462,9 @@
 .grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  column-gap: 20px;
-  row-gap: 56px;
+  gap: 0;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
 }
 
 @media (max-width: 1024px) {
@@ -468,14 +476,22 @@
 @media (max-width: 768px) {
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 12px;
-    row-gap: 40px;
   }
 }
 
 .card {
   display: flex;
   flex-direction: column;
+  padding: 20px;
+  background: var(--cell);
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+@media (max-width: 768px) {
+  .card {
+    padding: 12px;
+  }
 }
 
 .plate {
@@ -517,8 +533,9 @@
   top: 0;
   width: 40px;
   height: 40px;
-  background: #000000;
-  color: #ffffff;
+  background: var(--crimson);
+  color: var(--cell);
+  font-family: var(--serif);
   font-size: 16px;
   font-weight: 600;
   display: flex;
@@ -599,7 +616,7 @@
 }
 
 .addBtn:hover {
-  border-color: #000000;
+  border-color: var(--crimson);
   background: var(--surface);
 }
 
@@ -633,7 +650,7 @@
   grid-template-columns: 40px 1fr 40px;
   width: 100%;
   height: 40px;
-  border: 1px solid #000000;
+  border: 1px solid var(--ink);
   align-items: center;
   box-sizing: border-box;
 }
@@ -679,19 +696,19 @@
   left: 50%;
   bottom: 32px;
   transform: translateX(-50%);
-  background: #1d1d1f;
-  color: #ffffff;
+  background: var(--ink);
+  color: var(--cell);
   padding: 16px 20px;
   display: flex;
   gap: 16px;
   align-items: center;
   font-size: 14px;
   z-index: 50;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 4px 12px rgba(38, 35, 31, 0.18);
 }
 
 .toastLink {
-  color: #ffffff;
+  color: var(--cell);
   text-decoration: underline;
   text-underline-offset: 4px;
   margin-left: 8px;
@@ -701,8 +718,8 @@
 .toastClose {
   background: transparent;
   border: 0;
-  color: #ffffff;
-  opacity: 0.8;
+  color: var(--cell);
+  opacity: 0.85;
   font-size: 14px;
   cursor: pointer;
   padding: 4px 8px;
@@ -791,7 +808,7 @@
 .emptyAction {
   height: 40px;
   padding: 0 24px;
-  border: 1px solid #000000;
+  border: 1px solid var(--ink);
   background: transparent;
   font-size: 14px;
   font-weight: 500;
@@ -801,8 +818,9 @@
 }
 
 .emptyAction:hover {
-  background: #000000;
-  color: #ffffff;
+  background: var(--crimson);
+  border-color: var(--crimson);
+  color: var(--cell);
 }
 
 .emptyAction:focus-visible {
@@ -813,7 +831,7 @@
 .alert {
   padding: 16px 20px;
   margin: 40px 0;
-  background: #fff5f5;
+  background: var(--cell);
   border: 1px solid var(--crimson);
   color: var(--crimson);
   font-size: 14px;
@@ -884,7 +902,7 @@
 }
 
 .thumbBtnActive {
-  border-color: #000000;
+  border-color: var(--crimson);
 }
 
 .thumbImg {
@@ -913,10 +931,11 @@
 
 .title {
   margin-top: 8px;
-  font-size: 24px;
+  font-family: var(--serif);
+  font-size: 26px;
   font-weight: 600;
   line-height: 1.35;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
   color: var(--ink);
 }
 
@@ -966,7 +985,7 @@
   border: 1px solid var(--line-2);
   padding: 0 16px;
   font-size: 14px;
-  background: #ffffff;
+  background: var(--cell);
   color: var(--ink);
   cursor: pointer;
 }
@@ -1001,8 +1020,8 @@
 
 .btnLine {
   height: 56px;
-  border: 1px solid #000000;
-  background: transparent;
+  border: 1px solid var(--ink);
+  background: var(--cell);
   font-size: 16px;
   font-weight: 600;
   color: var(--ink);
@@ -1025,9 +1044,9 @@
 
 .btnSolid {
   height: 56px;
-  background: #000000;
-  border: 1px solid #000000;
-  color: #ffffff;
+  background: var(--crimson);
+  border: 1px solid var(--crimson);
+  color: var(--cell);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
@@ -1035,8 +1054,8 @@
 }
 
 .btnSolid:hover {
-  background: #333333;
-  border-color: #333333;
+  background: #631515;
+  border-color: #631515;
 }
 
 .btnSolid:active {
@@ -1149,7 +1168,7 @@
 }
 
 .revRating {
-  color: #000000;
+  color: var(--crimson);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1191,7 +1210,7 @@
 }
 
 .revStars {
-  color: #000000;
+  color: var(--crimson);
   font-weight: 600;
 }
 

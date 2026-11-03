@@ -79,6 +79,9 @@ test("회원가입 → 도로명 주소 검색 모달 → 회원 주문 및 기�
   await page.route("https://checkout.stripe.com/**", (route) =>
     route.fulfill({ status: 200, contentType: "text/html", body: "stripe" }),
   );
+  await page.route("**/c/pay/**", (route) =>
+    route.fulfill({ status: 200, contentType: "text/html", body: "stripe" }),
+  );
   const memberCheckoutPromise = page.waitForResponse(
     (res) => res.url().includes("/orders/checkout") && res.status() === 201,
   );
@@ -125,11 +128,12 @@ test("회원가입 → 도로명 주소 검색 모달 → 회원 주문 및 기�
   await page.route("**/orders/guest-checkout", async (route) => {
     const res = await route.fetch();
     const data = (await res.json()) as { id: number };
-    guestOrderId = data.id;
     await route.fulfill({ response: res });
+    guestOrderId = data.id;
   });
   await page.getByRole("button", { name: "결제하기" }).click();
   await expect.poll(() => guestOrderId).toBeGreaterThan(0);
+  await page.waitForURL(/checkout\.stripe\.com|\/c\/pay\//);
 
   // 비회원 주문 조회 (/guest/orders)
   await page.goto("/guest/orders");

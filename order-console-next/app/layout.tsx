@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import {
+  Cormorant_Garamond,
   Gothic_A1,
   Instrument_Serif,
   Inter,
@@ -29,6 +30,13 @@ const body = Noto_Sans_KR({
 const display = Noto_Serif_KR({
   variable: "--font-display",
   weight: ["400", "600"],
+  preload: false,
+  display: "swap",
+});
+const cormorantGaramond = Cormorant_Garamond({
+  variable: "--font-cormorant",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
   preload: false,
   display: "swap",
 });
@@ -84,6 +92,7 @@ export async function generateMetadata(): Promise<Metadata> {
 const fontVariables = [
   body.variable,
   display.variable,
+  cormorantGaramond.variable,
   instrumentSerif.variable,
   inter.variable,
   gothicA1.variable,

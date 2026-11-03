@@ -15,6 +15,7 @@ export class AdminFulfillmentQueryDto extends PageQueryDto {
   @Transform(({ value }) => (value === "true" || value === true ? true : value === "false" || value === false ? false : undefined))
   @IsBoolean()
   guest?: boolean;
+  @IsOptional() @IsIn(["all", "post_seed", "seed_only"]) origin?: "all" | "post_seed" | "seed_only";
   @IsOptional() @IsString() @MaxLength(100) q?: string;
 }
 
