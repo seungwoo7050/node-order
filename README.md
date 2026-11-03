@@ -1,4 +1,4 @@
-# 24: 무중단 배포
+# 25: AI 에이전트 하네스와 통합 검증 파이프라인
 
 ![Language](https://img.shields.io/badge/language-TypeScript-blue?logo=typescript&logoColor=white)
 ![Stack](https://img.shields.io/badge/stack-NestJS%20%7C%20Next.js%20%7C%20Prisma%20%7C%20Caddy%20%7C%20k6%20%7C%20Playwright-lightgrey)
@@ -131,6 +131,12 @@ node order-api-nest/scripts/downtime-report.mjs order-api-nest/loadtest/out/run.
 ```
 
 CI는 검사·테스트 작업이 `23`과 같고, 배포 작업이 위 "CI 배포 작업"대로 바뀌었습니다.
+
+## 하네스(25)
+
+- `AGENTS.md`와 `.claude/settings.json` 훅으로 에이전트 작업 규칙과 자동 검증을 고정한다.
+- 파일을 고칠 때마다 `scripts/harness/lint-file.sh`가 ESLint를 돌리고, 위험한 명령(`git push`, `.env` 쓰기, 기존 마이그레이션 수정 등)은 `scripts/harness/guard.sh`가 차단한다.
+- `npm run verify:fast`(Prisma 생성 + lint + typecheck + 단위 테스트 + 하네스 가드 테스트)와 `npm run verify`(전체 e2e 포함)로 회귀를 검증한다.
 
 ## 정리
 
