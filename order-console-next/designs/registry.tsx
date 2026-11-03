@@ -10,19 +10,12 @@ import { EditorialAtelierDetail } from "./editorial-atelier/detail";
 import { MujiHaraCatalog } from "./muji-hara/catalog";
 import { MujiHaraDetail } from "./muji-hara/detail";
 import { DesignSwitcher } from "./switcher";
-import type { DetailDesignProps, StoreDesignId } from "./types";
+import {
+  type DetailDesignProps,
+  resolveActiveDesign,
+} from "./types";
 import { ZavanasArchiveCatalog } from "./zavanas-archive/catalog";
 import { ZavanasArchiveDetail } from "./zavanas-archive/detail";
-
-function resolveActiveDesign(param: string | null, serverDesign?: string): StoreDesignId {
-  if (param === "muji-hara" || param === "editorial-atelier" || param === "zavanas-archive") {
-    return param;
-  }
-  if (serverDesign === "muji-hara" || serverDesign === "editorial-atelier" || serverDesign === "zavanas-archive") {
-    return serverDesign;
-  }
-  return "editorial-atelier";
-}
 
 function InnerCatalog() {
   const searchParams = useSearchParams();
@@ -39,17 +32,29 @@ function InnerCatalog() {
 
   return (
     <>
-      <DesignSwitcher activeDesign={activeDesign} />
+      <div className="storefront-container pt-3">
+        <DesignSwitcher activeDesign={activeDesign} />
+      </div>
       {activeDesign === "muji-hara" && <MujiHaraCatalog {...props} />}
-      {activeDesign === "editorial-atelier" && <EditorialAtelierCatalog {...props} />}
-      {activeDesign === "zavanas-archive" && <ZavanasArchiveCatalog {...props} />}
+      {activeDesign === "editorial-atelier" && (
+        <EditorialAtelierCatalog {...props} />
+      )}
+      {activeDesign === "zavanas-archive" && (
+        <ZavanasArchiveCatalog {...props} />
+      )}
     </>
   );
 }
 
 export function StorefrontCatalog() {
   return (
-    <Suspense fallback={<div className="py-8 text-sm text-muted">스토어 로딩 중...</div>}>
+    <Suspense
+      fallback={
+        <div className="storefront-container py-12 text-sm text-muted">
+          스토어 로딩 중...
+        </div>
+      }
+    >
       <InnerCatalog />
     </Suspense>
   );
@@ -67,15 +72,23 @@ function InnerDetail({ id, initialProduct }: DetailDesignProps) {
     <>
       <DesignSwitcher activeDesign={activeDesign} />
       {activeDesign === "muji-hara" && <MujiHaraDetail {...props} />}
-      {activeDesign === "editorial-atelier" && <EditorialAtelierDetail {...props} />}
-      {activeDesign === "zavanas-archive" && <ZavanasArchiveDetail {...props} />}
+      {activeDesign === "editorial-atelier" && (
+        <EditorialAtelierDetail {...props} />
+      )}
+      {activeDesign === "zavanas-archive" && (
+        <ZavanasArchiveDetail {...props} />
+      )}
     </>
   );
 }
 
 export function StorefrontDetail({ id, initialProduct }: DetailDesignProps) {
   return (
-    <Suspense fallback={<div className="py-8 text-sm text-muted">상품 로딩 중...</div>}>
+    <Suspense
+      fallback={
+        <div className="py-12 text-sm text-muted">상품 로딩 중...</div>
+      }
+    >
       <InnerDetail id={id} initialProduct={initialProduct} />
     </Suspense>
   );
