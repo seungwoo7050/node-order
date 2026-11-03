@@ -269,7 +269,7 @@ export default function AdminUsersPage() {
         {/* 상세 모달/패널 */}
         {selectedUserId && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-lg rounded border border-line-strong bg-bg p-6 shadow-xl max-h-[85vh] overflow-y-auto">
+            <div className="w-full max-w-lg rounded border border-line-strong bg-bg p-6 shadow-lg max-h-[85vh] overflow-y-auto">
               <div className="flex items-center justify-between border-b border-line pb-3 mb-4">
                 <h3 className="font-semibold text-lg">사용자 상세 정보</h3>
                 <button

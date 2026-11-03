@@ -81,7 +81,7 @@ export function AddressSearchModal({ onSelect, buttonLabel = "우편번호 찾�
           aria-labelledby="address-modal-title"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
         >
-          <div className="w-full max-w-lg rounded bg-bg p-6 shadow-xl border border-line">
+          <div className="w-full max-w-lg rounded bg-bg p-6 shadow-lg border border-line">
             <div className="flex items-center justify-between pb-3 border-b border-line mb-4">
               <h2 id="address-modal-title" className="text-base font-semibold">
                 우편번호 · 주소 검색
