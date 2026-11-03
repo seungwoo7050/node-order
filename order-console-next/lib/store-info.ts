@@ -15,6 +15,10 @@ export type StoreInfo = {
   shippingFee: number;
   freeShippingThreshold: number;
   returnShippingFee: number;
+  storeDesign?: string;
+  heroTitle?: string;
+  heroSubtitle?: string;
+  announcementText?: string;
 };
 
 // 관리자 화면이 읽는 설정(GET /admin/settings): 공개 정보 + 재고 부족 기준 + version

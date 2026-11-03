@@ -1,11 +1,12 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { logout } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/auth-store";
 import { useCartStore } from "@/lib/cart-store";
+import { storeInfoOptions } from "@/lib/store-info";
 import { useCanSeeAdmin } from "@/lib/use-profile";
 
 function NavLink({ href, children, testId, exact = false }: { href: string; children: React.ReactNode; testId?: string; exact?: boolean }) {
@@ -30,6 +31,10 @@ export function Nav() {
   const queryClient = useQueryClient();
   const loggedIn = useAuthStore((s) => s.accessToken !== null);
   const canSeeAdmin = useCanSeeAdmin();
+  const { data: storeInfo } = useQuery(storeInfoOptions);
+
+  const storeName = storeInfo?.storeName ?? "Store";
+  const announcementText = storeInfo?.announcementText;
 
   if (pathname.startsWith("/admin")) {
     return null;
@@ -37,8 +42,22 @@ export function Nav() {
 
   return (
     <>
+      {announcementText && (
+        <aside
+          data-testid="announcement-bar"
+          className="w-full bg-fg text-bg text-center py-2 px-4 text-xs tracking-wide"
+        >
+          {announcementText}
+        </aside>
+      )}
       <header className="page flex flex-wrap items-baseline gap-x-6 gap-y-2 py-4 sm:py-6">
-        <Link href="/shop" className="mr-auto font-serif text-base no-underline">Brown Store.</Link>
+        <Link
+          href="/shop"
+          data-testid="header-store-name"
+          className="mr-auto font-serif text-base no-underline"
+        >
+          {storeName}
+        </Link>
         <nav aria-label="주요 메뉴" className="flex items-baseline gap-5">
           <NavLink href="/shop">상품</NavLink>
           {loggedIn ? (

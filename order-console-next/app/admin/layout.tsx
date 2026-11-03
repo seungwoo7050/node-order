@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { logout } from "@/lib/api-client";
+import { storeInfoOptions } from "@/lib/store-info";
 import { useProfile } from "@/lib/use-profile";
 
 const NAV_ITEMS = [
@@ -27,6 +28,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: profile } = useProfile();
+  const { data: storeInfo } = useQuery(storeInfoOptions);
+  const storeName = storeInfo?.storeName ?? "Store";
   const [notification, setNotification] = useState<string | null>(null);
 
   // Real-time admin notification
@@ -86,9 +89,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <div className="flex items-center justify-between">
                 <Link
                   href="/shop"
+                  data-testid="admin-logo-store-name"
                   className="font-serif text-lg font-bold tracking-tight text-fg no-underline hover:opacity-80"
                 >
-                  Brown Store.
+                  {storeName}
                 </Link>
                 {/* FIRST link with name '상품' must navigate to /shop for admin-edit.spec.ts */}
                 <Link
