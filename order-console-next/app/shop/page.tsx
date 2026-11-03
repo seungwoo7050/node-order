@@ -6,6 +6,7 @@ import { Suspense } from "react";
 import { StorefrontCatalog } from "@/designs/registry";
 import { useCartStore } from "@/lib/cart-store";
 import { won } from "@/lib/storefront-view-model";
+import styles from "./shop-page.module.css";
 
 function CartDock() {
   const items = useCartStore((s) => s.items);
@@ -13,16 +14,16 @@ function CartDock() {
   const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const count = items.reduce((sum, i) => sum + i.quantity, 0);
   return (
-    <div className="sticky bottom-0 border-t border-line-strong bg-bg py-3 sm:hidden z-40">
-      <div className="storefront-container flex items-center justify-between gap-3">
-        <span className="text-sm">
-          <span className="label">
-            장바구니 <span className="num">{count}</span>
+    <div className={styles.cartDock}>
+      <div className={`storefront-container ${styles.cartDockInner}`}>
+        <span className={styles.cartDockSummary}>
+          <span className={styles.cartDockLabel}>
+            장바구니 <span className={styles.cartDockNum}>{count}</span>
           </span>
           <br />
-          <span className="num">{won(total)}</span>
+          <span className={styles.cartDockNum}>{won(total)}</span>
         </span>
-        <Link href="/cart" className="btn no-underline">
+        <Link href="/cart" className={styles.cartDockBtn}>
           장바구니 보기
         </Link>
       </div>
@@ -35,8 +36,8 @@ function CheckoutNotice() {
   if (params.get("checkout") !== "canceled") return null;
   const order = params.get("order");
   return (
-    <div className="storefront-container pt-6">
-      <p role="status" className="note">
+    <div className={`storefront-container ${styles.checkoutNotice}`}>
+      <p role="status" className={styles.noticeNote}>
         결제를 취소했습니다.{" "}
         {order ? (
           <>
@@ -55,11 +56,11 @@ function CheckoutNotice() {
 export default function ShopPage() {
   return (
     <>
-      <main className="w-full flex-1">
+      <main className={styles.main}>
         <Suspense fallback={null}>
           <CheckoutNotice />
         </Suspense>
-        <section aria-label="상품 목록" className="w-full">
+        <section aria-label="상품 목록" className={styles.catalogSection}>
           <StorefrontCatalog />
         </section>
       </main>

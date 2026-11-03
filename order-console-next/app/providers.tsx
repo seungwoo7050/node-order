@@ -2,9 +2,16 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
+import type { StoreDesignId } from "@/designs/types";
 import { ApiError } from "@/lib/api-client";
 import { makeTrpcClient, TRPCProvider } from "@/lib/trpc";
+
+const DefaultDesignContext = createContext<StoreDesignId>("editorial-atelier");
+
+export function useDefaultDesign(): StoreDesignId {
+  return useContext(DefaultDesignContext);
+}
 
 function isUnauthorized(error: unknown) {
   if (error instanceof ApiError) return error.status === 401;
@@ -31,15 +38,22 @@ function getQueryClient() {
   return browserQueryClient;
 }
 
-export function Providers({ children }: { children: ReactNode }) {
+export function Providers({
+  children,
+  defaultDesign = "editorial-atelier",
+}: {
+  children: ReactNode;
+  defaultDesign?: StoreDesignId;
+}) {
   const queryClient = getQueryClient();
   const [trpcClient] = useState(makeTrpcClient);
   return (
-    <QueryClientProvider client={queryClient}>
-      <TRPCProvider trpcClient={trpcClient} queryClient={queryClient}>
-        {children}
-      </TRPCProvider>
-    </QueryClientProvider>
+    <DefaultDesignContext.Provider value={defaultDesign}>
+      <QueryClientProvider client={queryClient}>
+        <TRPCProvider trpcClient={trpcClient} queryClient={queryClient}>
+          {children}
+        </TRPCProvider>
+      </QueryClientProvider>
+    </DefaultDesignContext.Provider>
   );
 }
-
