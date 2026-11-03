@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 source "$(dirname "$0")/lib.sh"
 LOCAL="$(dirname "$0")/.local"
+MAIN_LOCAL="$(cd "$(dirname "$0")" && git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/../deploy/aws/.local"
+[ ! -d "$LOCAL" ] && [ -d "$MAIN_LOCAL" ] && LOCAL="$MAIN_LOCAL"
 ENV_FILE="$LOCAL/server.env"
 umask 077
 
@@ -38,7 +40,7 @@ has_kv DEMO_PASSWORD || set_kv DEMO_PASSWORD "$(rand hex 8)"
 step "외부 서비스 값(환경 변수로 준 것만 바꾼다)"
 set_kv MONITORING_DIR ./monitoring # CI가 저장소의 monitoring/을 /opt/node-order/monitoring에 올린다(31)
 # 관측(31)의 DSN·웹훅·dead man's switch 주소는 모두 선택이다(비면 꺼지거나 null 수신자)
-for k in GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET TOSS_CLIENT_KEY TOSS_SECRET_KEY LLM_API_KEY SENTRY_DSN SENTRY_WEB_DSN ALERT_WEBHOOK_URL DEADMAN_URL; do
+for k in GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET TOSS_CLIENT_KEY TOSS_SECRET_KEY LLM_API_KEY OPENAI_API_KEY JUSO_API_KEY SMTP_URL SMTP_HOST SENTRY_DSN SENTRY_WEB_DSN ALERT_WEBHOOK_URL DEADMAN_URL; do
   if [ -n "${!k:-}" ]; then set_kv "$k" "$(unquote "${!k}")"; echo "바꿈  $k"
   elif ! grep -q "^$k=" "$ENV_FILE"; then set_kv "$k" ""; fi
 done

@@ -178,23 +178,32 @@ export class SystemController {
     const runbook = {
       commands: [
         {
-          command: "bash deploy/90-destroy.sh",
-          title: "클라우드 인프라 전체 철거 (비용 완전 제거)",
-          description: "Terraform/CloudFormation 리소스를 모두 삭제하여 유휴 비용을 0원으로 만듭니다.",
+          command: "cd /opt/node-order && ./rollback.sh",
+          title: "무중단 이전 배포 슬롯 즉시 롤백 (AWS EC2 SSH)",
+          description:
+            "배포 직후 헬스체크 실패나 결제 이상 징후 발견 시 Caddy 업스트림을 직전 검증된 슬롯(Blue/Green)으로 즉시 전환합니다.",
         },
         {
-          command: "docker compose stop",
-          title: "로컬 컨테이너 절전 일시정지",
-          description: "데이터 볼륨을 보존한 채로 CPU/메모리 점유를 정지합니다.",
+          command: "cd /opt/node-order && ./ops/backup.sh && ./ops/restore-check.sh",
+          title: "운영 데이터베이스 수동 백업 및 복원 대조 (AWS EC2 SSH)",
+          description:
+            "정기 백업(매일 03:30 KST) 외에 수동 pg_dump 스냅샷을 S3 버킷(backups/)에 업로드하고 임시 DB에 복원하여 행 수 무결성을 대조합니다.",
         },
         {
-          command: "docker compose down -v",
-          title: "로컬 컨테이너 및 볼륨 완전 초기화",
-          description: "로컬 DB와 Redis, MinIO 볼륨을 완전히 삭제합니다.",
+          command: "cd /opt/node-order && ./ops/reset-demo.sh",
+          title: "데모 카탈로그·주문 기준 데이터 재적용 (AWS EC2 SSH)",
+          description:
+            "정기 초기화(매일 04:00 KST, 당일 백업 성공 확인 후 실행) 외에 시연 데이터를 초기 기준 상태로 즉시 복원합니다.",
+        },
+        {
+          command: "bash deploy/aws/90-destroy.sh",
+          title: "클라우드 인프라 전체 반납 (관리자 로컬 PC — AWS CLI)",
+          description:
+            "서비스 영구 종료 시 관리자 로컬 PC에서 EC2·RDS·S3·탄력적 IP·보안그룹을 일괄 회수하여 클라우드 유휴 비용을 완전히 제거합니다.",
         },
       ],
       strategy:
-        "유료 API 일괄 차단(pause_paid_apis)을 켜면 외부 종량제 API 호출이 즉시 중단되어 과금을 방지하며, 상점 점검 모드(maintenance_mode)로 신규 주문 유입을 503으로 안전하게 차단할 수 있습니다.",
+        "1차 비상 대응은 상단 웹 콘솔 스위치(유료 외부 API 일시정지·상점 점검 503 모드)로 재배포 없이 즉시 제어하며, 배포 롤백·데이터 백업 등 인프라 조치가 필요한 경우 아래 표준 운영 스크립트를 실행합니다.",
     };
 
     return {

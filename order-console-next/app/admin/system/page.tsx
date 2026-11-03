@@ -36,6 +36,41 @@ type SystemOverview = {
   };
 };
 
+const DB_ENTITY_LABELS: Record<string, string> = {
+  users: "회원 계정",
+  products: "카탈로그 상품",
+  productVariants: "품목 옵션(SKU)",
+  categories: "카테고리",
+  orders: "주문 건수",
+  payments: "결제 승인",
+  refunds: "환불 내역",
+  returns: "반품 요청",
+  shipments: "출고·송장",
+  outboxEvents: "아웃박스 이벤트",
+  integrationSecrets: "암호화 금고 키",
+};
+
+const BILLING_TYPE_LABELS: Record<string, string> = {
+  free_self_hosted: "자체 호스팅 · 무료",
+  pay_per_use: "종량제 · 호출 과금",
+  optional_paid: "선택형 연동",
+};
+
+const INFRA_STATUS_BADGE: Record<string, { label: string; className: string }> = {
+  connected: {
+    label: "연동됨",
+    className: "rounded bg-green-50 text-green-700 px-1.5 py-0.5 text-xs border border-green-200",
+  },
+  paused: {
+    label: "일시차단",
+    className: "rounded bg-red-50 text-red-700 px-1.5 py-0.5 text-xs border border-red-200",
+  },
+  standby: {
+    label: "내장 폴백 대기",
+    className: "rounded bg-neutral-100 text-muted px-1.5 py-0.5 text-xs",
+  },
+};
+
 export default function AdminSystemPage() {
   const queryClient = useQueryClient();
   const readOnly = useReadOnly();
@@ -300,12 +335,12 @@ export default function AdminSystemPage() {
 
           {/* 3. 데이터베이스 정본 행 수 현황 */}
           <section className="space-y-3">
-            <h2 className="label">데이터베이스 엔티티 현황 (정본 Row Counts)</h2>
+            <h2 className="label">데이터베이스 정본 현황</h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs">
               {Object.entries(dbCounts).map(([entity, count]) => (
                 <div key={entity} className="rounded border border-line bg-surface p-3">
-                  <span className="text-muted block mb-1">{entity}</span>
-                  <span className="num font-semibold text-lg">{count}</span>
+                  <span className="text-muted block mb-1">{DB_ENTITY_LABELS[entity] ?? entity}</span>
+                  <span className="num font-semibold text-lg">{count.toLocaleString("ko-KR")}</span>
                 </div>
               ))}
             </div>
@@ -313,25 +348,34 @@ export default function AdminSystemPage() {
 
           {/* 4. 인프라 서비스 현황 */}
           <section className="space-y-3">
-            <h2 className="label">인프라 및 연결 서비스</h2>
+            <h2 className="label">인프라 및 외부 연동 상태</h2>
             <div className="grid gap-3 sm:grid-cols-2">
-              {infrastructure.map((inf) => (
-                <div key={inf.id} className="rounded border border-line p-3 text-xs space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-sm text-fg">{inf.name}</span>
-                    <span className="rounded bg-neutral-100 text-neutral-700 px-1.5 py-0.5 text-xs">
-                      {inf.billingType}
-                    </span>
+              {infrastructure.map((inf) => {
+                const statusBadge = INFRA_STATUS_BADGE[inf.status] ?? {
+                  label: inf.status,
+                  className: "rounded bg-neutral-100 text-neutral-700 px-1.5 py-0.5 text-xs",
+                };
+                return (
+                  <div key={inf.id} className="rounded border border-line p-3 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-sm text-fg">{inf.name}</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="rounded bg-neutral-100 text-neutral-700 px-1.5 py-0.5 text-xs">
+                          {BILLING_TYPE_LABELS[inf.billingType] ?? inf.billingType}
+                        </span>
+                        <span className={statusBadge.className}>{statusBadge.label}</span>
+                      </div>
+                    </div>
+                    <p className="text-muted">{inf.description}</p>
                   </div>
-                  <p className="text-muted">{inf.description}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
 
           {/* 5. 런북 및 비상 명령어 */}
           <section className="space-y-3 rounded border border-line p-4 bg-neutral-50 text-xs">
-            <h2 className="label">운영 런북 (비상 절차 및 방침)</h2>
+            <h2 className="label">운영 런북 (비상 대응 및 서버 운영 절차)</h2>
             <p className="text-muted leading-relaxed">{runbook.strategy}</p>
             <div className="space-y-2 mt-3">
               {(runbook?.commands ?? []).map((cmd) => (

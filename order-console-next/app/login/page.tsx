@@ -55,7 +55,7 @@ export default function LoginPage() {
 
             <div className="mt-1 border border-line bg-neutral-50/80 p-3 text-xs leading-relaxed" data-testid="real-admin-guide">
               <div className="flex items-center justify-between gap-2 mb-1.5">
-                <span className="font-semibold text-fg">실제 관리자 계정 (Full CRUD 권한)</span>
+                <span className="font-semibold text-fg">실제 관리자 계정 (전체 관리·수정 권한)</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -72,7 +72,7 @@ export default function LoginPage() {
                 <span className="ml-2 text-muted">(일반 회원: lee, park, choi / 1234)</span>
               </p>
               <p className="mt-1 text-[11px] text-muted">
-                상품·카테고리·쿠폰·상점 설정 등 실제 DB 추가·수정·삭제가 모두 가능하며, 매일 새벽 04:05(KST) 백업 후 초기 시드 상태로 자동 리셋됩니다.
+                상품·카테고리·쿠폰·상점 설정 등 모든 관리 기능의 등록·수정·삭제가 가능하며, 매일 새벽 04:00(KST) 정기 백업 확인 후 초기 기준 상태로 자동 복원됩니다.
               </p>
             </div>
 

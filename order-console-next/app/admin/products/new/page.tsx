@@ -223,9 +223,9 @@ export default function NewProductPage() {
             <span>쇼핑몰에 상품 즉시 노출</span>
           </label>
 
-          {/* 옵션(Variants) 등록 섹션 */}
+          {/* 상품 옵션 등록 섹션 */}
           <section className="border-t border-line pt-4 space-y-3">
-            <h2 className="label">옵션(Variant) 설정</h2>
+            <h2 className="label">상품 옵션 설정</h2>
             <p className="text-xs text-muted">
               색상, 사이즈 등 옵션을 추가하면 주문 시 개별 옵션별 재고가 관리됩니다.
             </p>
