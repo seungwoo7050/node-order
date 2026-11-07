@@ -1,8 +1,26 @@
-# pgrelay
+<p align="center">
+  <h1 align="center">pgrelay</h1>
+  <p align="center"><b>PostgreSQL 기반 트랜잭셔널 아웃박스 및 웹훅 전달 엔진</b></p>
+  <p align="center">
+    Go 1.24 | PostgreSQL | SKIP LOCKED | HMAC-SHA256 | Full Jitter | Prometheus
+  </p>
+</p>
+
+---
 
 PostgreSQL 기반의 트랜잭션 아웃박스(Transactional Outbox) 및 웹훅 전달 엔진입니다. 비즈니스 쿼리와 웹훅 발송 이벤트를 단일 데이터베이스 트랜잭션에 원자적으로 기록하고, 백그라운드 워커가 대상 엔드포인트로 안전하게 전달합니다.
 
 외부 메시지 큐(Kafka, RabbitMQ) 클러스터를 별도로 운영하기 부담스러운 단일 데이터베이스 환경에서, Go 라이브러리(`pkg/relay`)로 애플리케이션에 직접 임베딩하거나 독립 사이드카 데몬(`cmd/pgrelay`)으로 띄워 쓸 수 있습니다.
+
+## 아키텍처 흐름도
+
+```mermaid
+flowchart LR
+    Tx["App Business Tx\n(EnqueueTx)"] --> DB[("PostgreSQL\noutbox_events")]
+    DB -->|"SKIP LOCKED"| Workers["Worker Pool &\nStale Lock Reaper"]
+    Workers --> Signer["HMAC-SHA256 &\nFull Jitter Backoff"]
+    Signer --> Dest["Partner Webhook\nor Dead Letter"]
+```
 
 ## 왜 만들었나
 
@@ -11,11 +29,11 @@ PostgreSQL 기반의 트랜잭션 아웃박스(Transactional Outbox) 및 웹훅 
 1. DB 트랜잭션은 커밋되었으나 네트워크 순단이나 프로세스 비정상 종료로 웹훅 호출이 유실되는 경우.
 2. 반대로 웹훅 호출은 성공했으나 애플리케이션의 DB 커밋 직전 롤백되어 결제나 상태 변경 없는 유령 웹훅이 발송되는 경우.
 
-이 문제를 막기 위해 Kafka나 Debezium(CDC)을 도입하는 것은 소규모~중규모 서비스에 과도한 인프라 관리 비용(Zookeeper/KRaft, 커넥터 모니터링, 스키마 레지스트리)을 유발합니다. PostgreSQL은 이미 ACID 트랜잭션과 고성능 행 잠금(`FOR UPDATE SKIP LOCKED`), 그리고 비동기 알림(`LISTEN/NOTIFY`) 기능을 내장하고 있습니다. `pgrelay`는 데이터베이스 본래의 기능을 살려 추가 인프라 없이 비동기 전달 정합성을 지키기 위해 만들었습니다.
+이 문제를 막기 위해 Kafka나 Debezium(CDC)을 도입하는 것은 소규모 및 중규모 서비스에 과도한 인프라 관리 비용(Zookeeper/KRaft, 커넥터 모니터링, 스키마 레지스트리)을 유발합니다. PostgreSQL은 이미 ACID 트랜잭션과 고성능 행 잠금(`FOR UPDATE SKIP LOCKED`), 그리고 비동기 알림(`LISTEN/NOTIFY`) 기능을 내장하고 있습니다. `pgrelay`는 데이터베이스 본래의 기능을 살려 추가 인프라 없이 비동기 전달 정합성을 지키기 위해 만들었습니다.
 
 ## 구조와 설계 판단
 
-```
+```text
 cmd/pgrelay/          독립 실행 바이너리 (REST API, /metrics, /healthz, graceful shutdown)
 migrations/           outbox_events 테이블 DDL 및 부분 인덱스(Partial Index)
 pkg/relay/
@@ -98,72 +116,57 @@ func main() {
 	}
 
 	ctx := context.Background()
-	_ = engine.Start(ctx)
-	defer engine.Stop()
 
-	// 비즈니스 트랜잭션 안에서 원자적 기록
+	// 비즈니스 트랜잭션 안에서 원자적 이벤트 Enqueue
 	tx, _ := db.BeginTx(ctx, nil)
-	_, _ = tx.ExecContext(ctx, "INSERT INTO orders (id, amount) VALUES ($1, $2)", "ord_1", 35000)
+	_, _ = tx.ExecContext(ctx, "UPDATE orders SET status = 'paid' WHERE id = $1", "ord_123")
 
-	_ = engine.EnqueueTx(ctx, tx, &relay.Event{
-		ID:       "evt_ord_1",
-		Topic:    "order.created",
-		Endpoint: "https://api.partner.com/webhooks",
-		Payload:  json.RawMessage(`{"order_id":"ord_1","amount":35000}`),
+	payload, _ := json.Marshal(map[string]any{"order_id": "ord_123", "amount": 50000})
+	_ = relay.EnqueueTx(ctx, tx, relay.Event{
+		Topic:    "order.paid",
+		Endpoint: "https://api.partner.com/webhook",
+		Payload:  payload,
 	})
+	_ = tx.Commit() // 주문 상태와 아웃박스 이벤트가 원자적으로 커밋됨
 
-	_ = tx.Commit() // 트랜잭션 커밋 성공 시 웹훅이 비동기 발송 대상이 됨
+	// 백그라운드 발송 루프 시작
+	go engine.Start(ctx)
+	defer engine.Stop()
 }
 ```
 
-### 단독 데몬 실행 (`cmd/pgrelay`)
+### 독립 데몬 실행 (`cmd/pgrelay`)
 
-```bash
-# PostgreSQL 연결 없이 인메모리 데모 모드로 바로 실행
-go run ./cmd/pgrelay -demo -listen :8080 -workers 4
-
-# PostgreSQL 연결 모드
-go run ./cmd/pgrelay \
-  -postgres-dsn "postgres://user:pass@localhost:5432/mydb?sslmode=disable" \
-  -listen :8080 \
-  -workers 8 \
-  -signing-secret "prod-secret-key"
-```
-
-### 이벤트 발행 및 상태 조회
-
-```bash
-# 웹훅 이벤트 등록
-curl -X POST http://localhost:8080/v1/events \
-  -H "Content-Type: application/json" \
-  -d '{
-    "topic": "payment.success",
-    "endpoint": "http://localhost:9090/webhook",
-    "payload": {"payment_id": "pay_99", "status": "paid"}
-  }'
-
-# 큐 상태 요약 확인 (pending, processing, delivered, dead)
-curl http://localhost:8080/v1/events
-
-# 프로메테우스 메트릭 수집
-curl http://localhost:8080/metrics
-```
-
-### 테스트 실행
-
-```bash
-# 동시성 경합 및 데이터 레이스 감지 (-race)
-go test -v -race ./...
-
-# 코드 정적 분석
-go vet ./...
-
-# 전체 빌드
+```sh
+# 빌드
 make build
+
+# 실행
+./bin/pgrelay -dsn "postgres://user:pass@localhost:5432/mydb?sslmode=disable" \
+  -listen :8080 \
+  -signing-secret "my-secret-key" \
+  -workers 8 \
+  -batch 32
 ```
 
-## 범위와 한계
+- 메트릭: `GET http://localhost:8080/metrics`
+  - `pgrelay_events_enqueued_total`: 인큐된 이벤트 수
+  - `pgrelay_events_delivered_total`: 발송 성공 이벤트 수
+  - `pgrelay_events_failed_total`: 재시도 실패 이벤트 수
+  - `pgrelay_events_dead_total`: 최대 재시도 초과(DLQ) 이벤트 수
+  - `pgrelay_reaper_recovered_total`: 고아 락 회수 건수
 
-- **최소 1회 전달(At-Least-Once Delivery)**: 네트워크 단절이나 웹훅 수신 측의 응답 타임아웃, 워커의 강제 종료 후 재처리 과정에서 동일 웹훅이 중복 발송될 가능성이 열려 있습니다. 웹훅을 받는 수신 서버는 반드시 `X-PGRelay-Event-ID`를 기반으로 멱등(Idempotent) 처리를 구현해야 합니다.
-- **엄격한 글로벌 순서 보장의 트레이드오프**: `SKIP LOCKED`를 이용한 병렬 워커 구조 특성상, 동일 토픽이라도 선행 이벤트가 재시도 백오프에 걸리면 후속 이벤트가 먼저 배달될 수 있습니다. 순서가 중요한 도메인에서는 페이로드 내부의 버전 번호나 타임스탬프를 대조하는 방식으로 처리해야 합니다.
-- **PostgreSQL 단일 노드 I/O 한계**: 초당 수만 건 이상의 극단적인 쓰기/지우기 부하가 가해질 경우, WAL(Write-Ahead Log) 증가와 PostgreSQL 진공(VACUUM) 작업에 부담이 갈 수 있습니다. 이 단계를 넘어서는 초대규모 분산 환경에서는 Kafka CDC(Debezium) 파이프라인으로 전환하는 것이 적합합니다.
+## 테스트
+
+외부 PostgreSQL 없이 인메모리 스토어(`memstore.go`)를 사용해 모든 동시성 및 복구 테스트를 결정론적으로 검증할 수 있습니다.
+
+```sh
+make vet
+make race
+```
+
+- `TestEngine_ConcurrentWorkersClaimExclusively`: 8개 워커가 수백 개 이벤트를 경합할 때 중복 실행 없는지 검증
+- `TestEngine_ReaperRecoversStaleLock`: 처리 중 강제 중단된 이벤트를 Reaper가 정상 회수하는지 검증
+- `TestEngine_ExponentialBackoffWithJitter`: 연속 실패 시 Full Jitter 수식에 따른 지수 대기 시간 검증
+- `TestEngine_DeadLetterQueueOnMaxAttempts`: 최대 재시도 횟수 초과 시 dead 상태 격리 검증
+- `TestSigner_TamperedPayloadRejected`: 페이로드나 타임스탬프 변조 시 HMAC 서명 검증 실패 검증

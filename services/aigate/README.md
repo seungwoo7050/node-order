@@ -1,6 +1,24 @@
-# aigate
+<p align="center">
+  <h1 align="center">aigate</h1>
+  <p align="center"><b>외부 LLM 및 서드파티 HTTP API 호출 회복탄력성 게이트웨이</b></p>
+  <p align="center">
+    Go 1.24 | net/http | Single-Flight | Circuit Breaker | Token Bucket | SSE Stream Proxy
+  </p>
+</p>
+
+---
 
 외부 LLM 및 서드파티 HTTP API 호출에 필요한 회복탄력성 기능을 묶은 Go 게이트웨이입니다. Go 표준 `net/http` 클라이언트의 `http.RoundTripper` 미들웨어로 코드에 직접 주입하거나, 독립 리버스 프록시 데몬(`cmd/aigate`)으로 띄워 사용할 수 있습니다.
+
+## 아키텍처 흐름도
+
+```mermaid
+flowchart LR
+    Req["HTTP Request"] --> RL["Token Bucket\nRate Limiter"]
+    RL --> SF{"Single-Flight\nor SSE Bypass"}
+    SF --> CB["Circuit Breaker\n3-State / Single-Probe"]
+    CB --> Upstream["Upstream\nPrimary / Fallback"]
+```
 
 ## 왜 만들었나
 
@@ -14,7 +32,7 @@ OpenAI나 Anthropic 같은 LLM API를 서비스에 연동하면 세 가지 문�
 
 ## 구조와 주요 설계 판단
 
-```
+```text
 pkg/gate/
 ├── config.go         설정 모델과 에러 정의 (ProviderConfig, RateLimitConfig, BreakerConfig)
 ├── ratelimit.go      테넌트별 Token Bucket 레이트 리미터와 유휴 버킷 정리

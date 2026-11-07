@@ -1,6 +1,23 @@
-# ingestguard
+<p align="center">
+  <h1 align="center">ingestguard</h1>
+  <p align="center"><b>대용량 CSV 및 JSONL 스트리밍 검증, 멱등 Upsert, 불량 행 격리 보정 엔진</b></p>
+  <p align="center">
+    Python 3.12 | FastAPI | Pydantic v2 | SQLAlchemy 2.0 | SQLite & PostgreSQL | Prometheus
+  </p>
+</p>
+
+---
 
 커머스 상품 카탈로그, 정산 내역, B2B 데이터 이관처럼 대용량 CSV나 JSONL 데이터를 적재할 때, 일부 행의 스키마 오류 때문에 전체 배치가 실패하거나 재업로드 시 정상 데이터가 중복 적재되는 문제를 해결하는 스트리밍 청크 검증, `record_key` 멱등 Upsert, 불량 행 격리(Quarantine) 및 보정 재반영(Replay) 패키지 겸 독립 FastAPI 서버입니다.
+
+## 아키텍처 흐름도
+
+```mermaid
+flowchart LR
+    Stream["CSV / JSONL\nStream Source"] --> Chunk["64KB Chunk Generator &\nPydantic v2 Validator"]
+    Chunk -->|"유효한 행"| Upsert["SHA-256 Hash Diff Upsert\n(Skip / Update / Insert)"]
+    Chunk -->|"오류 행"| Quarantine["Quarantine Table\n(PENDING -> REPLAYED)"]
+```
 
 ## 왜 만들었나
 
@@ -10,10 +27,10 @@
 
 ## 구조와 설계 판단
 
-```
+```text
 ingestguard/
 ├── models.py      SQLAlchemy 2.0 ORM 모델 및 Pydantic v2 스키마 정의
-├── parser.py      CSV·JSONL 청크 스트리밍 제너레이터 및 동적 모델 검증기
+├── parser.py      CSV 및 JSONL 청크 스트리밍 제너레이터 및 동적 모델 검증기
 ├── store.py       SQLite/PostgreSQL 동기 엔진 기반 Unit-of-Work 저장소
 ├── replayer.py    배치 적재 오케스트레이션, 격리 행 재반영 및 Prometheus 메트릭
 ├── app.py         FastAPI Lifespan HTTP 서버 (/v1/jobs, /quarantine, /metrics)

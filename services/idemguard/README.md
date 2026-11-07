@@ -1,6 +1,24 @@
-# idemguard
+<p align="center">
+  <h1 align="center">idemguard</h1>
+  <p align="center"><b>IETF Idempotency-Key 규격 기반 L7 멱등성 프록시 및 미들웨어</b></p>
+  <p align="center">
+    Go 1.24 | net/http | Canonical JSON | In-Flight Broadcast | PostgreSQL | Prometheus
+  </p>
+</p>
+
+---
 
 결제, 주문, 포인트 차감 등 상태 변경 HTTP API에서 중복 실행을 차단하는 Go 미들웨어 라이브러리(`pkg/idem`) 겸 L7 리버스 프록시 데몬(`cmd/idemguard`)입니다. IETF `Idempotency-Key` 규격을 기반으로 동일 키의 동시 요청을 1회만 실행하고 후속 요청에 캐시된 응답을 안전하게 반환합니다.
+
+## 아키텍처 흐름도
+
+```mermaid
+flowchart LR
+    Client["Client Request\n(Idempotency-Key)"] --> FP["Canonical JSON\nSHA-256 Fingerprint"]
+    FP --> Acquire["Atomic TryAcquire\n(Memory / PGStore)"]
+    Acquire --> Control["IN_FLIGHT Broadcast\n422 Mismatch / 5xx Unlock"]
+    Control --> Upstream["Upstream Handler"]
+```
 
 ## 왜 만들었나
 
@@ -10,7 +28,7 @@
 
 ## 구조와 설계 판단
 
-```
+```text
 cmd/idemguard/          L7 리버스 프록시 데몬 main.go
 pkg/idem/
 ├── record.go           Record 상태(IN_FLIGHT, COMPLETED), WaitPolicy 정의

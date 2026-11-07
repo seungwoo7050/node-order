@@ -1,8 +1,25 @@
-# pulsebox
+<p align="center">
+  <h1 align="center">pulsebox</h1>
+  <p align="center"><b>에러 스택트레이스 정규화 지문 그룹핑 및 크론 데드맨 스위치 모니터링 서버</b></p>
+  <p align="center">
+    Python 3.11+ | FastAPI | Pydantic v2 | SQLAlchemy 2.0 | SQLite | Prometheus
+  </p>
+</p>
+
+---
 
 단일 서버나 소규모 팀 환경에서 대규모 모니터링 인프라 없이 독립 프로세스로 띄워 쓰는 경량 에러 지문(Fingerprint) 수집기 겸 크론 데드맨 스위치(Dead Man's Switch) 모니터링 서버입니다.
 
 런타임 예외 스택트레이스의 동적 주소나 줄 번호를 정규화해 고유 지문으로 묶고, 정기 배치 작업의 체크인 신호 지연을 감지해 웹훅으로 경보를 발송합니다.
+
+## 아키텍처 흐름도
+
+```mermaid
+flowchart LR
+    Input["Runtime Exception\nor Cron Ping"] --> Norm["Stacktrace Normalizer &\nWatchdog Scanner"]
+    Norm --> Lifecycle["Issue Lifecycle (OPEN/REGRESSED)\n& Monitor State (OK/ALERTED)"]
+    Lifecycle --> Store["SQLite Unit-of-Work &\nWebhook Alert"]
+```
 
 ## 핵심 구조
 
