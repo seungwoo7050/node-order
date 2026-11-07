@@ -17,7 +17,7 @@ services:
     command: ["--storage.path=/alertmanager", "--cluster.listen-address="]
     environment:
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-http://host.docker.internal:5001/slack}
-      DEADMAN_URL: ${DEADMAN_URL:-}
+      DEADMAN_URL: ${DEADMAN_URL:-http://pulsebox:8000/v1/monitors/order-api-watchdog/ping}
       ALERT_ENV: dev
     ports:
       - "9093:9093"
@@ -114,6 +114,11 @@ services:
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      PGRELAY_URL: ${PGRELAY_URL:-}
+      PGRELAY_WEBHOOK_SECRET: ${PGRELAY_WEBHOOK_SECRET:-pgrelay-default-secret}
+      INGESTGUARD_URL: ${INGESTGUARD_URL:-}
+      PULSEBOX_URL: ${PULSEBOX_URL:-}
       LOG_LEVEL: ${LOG_LEVEL-info}
     depends_on:
       migrate: { condition: service_completed_successfully }
@@ -142,6 +147,66 @@ services:
       AUTH_GITHUB_SECRET: ${GITHUB_CLIENT_SECRET:-}
     depends_on:
       api: { condition: service_healthy }
+
+  aigate:
+    image: golang:1.24-alpine
+    profiles: ["polyglot"]
+    working_dir: /src
+    volumes:
+      - ./services/aigate:/src:ro
+    command: ["go", "run", "./cmd/aigate", "-listen", ":8081", "-primary", "https://api.anthropic.com", "-fallback", "https://api.openai.com"]
+    ports:
+      - "8081:8081"
+
+  pgrelay:
+    image: golang:1.24-alpine
+    profiles: ["polyglot"]
+    working_dir: /src
+    volumes:
+      - ./services/pgrelay:/src:ro
+    command: ["go", "run", "./cmd/pgrelay", "-listen", ":8080", "-signing-secret", "${PGRELAY_WEBHOOK_SECRET:-pgrelay-default-secret}"]
+    ports:
+      - "8080:8080"
+
+  idemguard:
+    image: golang:1.24-alpine
+    profiles: ["polyglot"]
+    working_dir: /src
+    volumes:
+      - ./services/idemguard:/src:ro
+    command: ["go", "run", "./cmd/idemguard", "-listen", ":8082", "-upstream", "http://api:4000", "-wait-policy", "wait"]
+    ports:
+      - "8082:8082"
+
+  ingestguard:
+    image: python:3.12-slim
+    profiles: ["polyglot"]
+    working_dir: /src
+    volumes:
+      - ./services/ingestguard:/src
+    command: ["sh", "-c", "pip install --no-cache-dir -e . && ingestguard serve --host 0.0.0.0 --port 8001"]
+    ports:
+      - "8001:8001"
+
+  driftwatch:
+    image: python:3.12-slim
+    profiles: ["polyglot", "monitoring"]
+    working_dir: /src
+    volumes:
+      - ./services/driftwatch:/src
+    command: ["sh", "-c", "pip install --no-cache-dir -e . && driftwatch serve --host 0.0.0.0 --port 8002"]
+    ports:
+      - "8002:8002"
+
+  pulsebox:
+    image: python:3.12-slim
+    profiles: ["polyglot", "monitoring"]
+    working_dir: /src
+    volumes:
+      - ./services/pulsebox:/src
+    command: ["sh", "-c", "pip install --no-cache-dir -e . && pulsebox server --host 0.0.0.0 --port 8000"]
+    ports:
+      - "8000:8000"
   
 volumes:
   pgdata:
