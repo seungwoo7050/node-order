@@ -88,6 +88,7 @@ test("회원가입 → 도로명 주소 검색 모달 → 회원 주문 및 기�
   await page.getByTestId("privacy-consent").getByRole("checkbox").check();
   await page.getByRole("button", { name: "결제하기" }).click();
   await memberCheckoutPromise;
+  await page.waitForURL(/checkout\.stripe\.com|\/c\/pay\//);
 
   // 4. 로그아웃 후 비회원 주문 및 /guest/orders 조회
   await page.goto("/me/orders");

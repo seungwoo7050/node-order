@@ -3,7 +3,7 @@ name: ci
 on:
   push:
     branches: ["**"]
-    paths-ignore: ["**/*.md"]
+    # paths-ignore를 두지 않음: README 커밋이 HEAD일 때 배포가 생략되는 문제 방지
   workflow_dispatch:
 
 permissions:
