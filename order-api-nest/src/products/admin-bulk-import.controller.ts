@@ -10,7 +10,7 @@ import {
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { IsIn, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsIn, IsInt, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, Max, Min } from "class-validator";
 import { AdminGuard } from "../auth/admin.guard.js";
 import { AdminViewGuard } from "../auth/admin-view.guard.js";
 
@@ -136,5 +136,116 @@ export class AdminBulkImportController {
       throw new BadGatewayException(`ingestguard 격리 행 재반영 실패: ${res.status}`);
     }
     return (await res.json()) as Record<string, unknown>;
+  }
+}
+
+export class SyncStorePolicyDto {
+  @IsString()
+  @IsNotEmpty()
+  sourceKey!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  title!: string;
+
+  @IsOptional()
+  @IsString()
+  sourceUri?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  rawText!: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(64)
+  @Max(2000)
+  chunkSize?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(500)
+  chunkOverlap?: number;
+}
+
+export class AskStorePolicyDto {
+  @IsString()
+  @IsNotEmpty()
+  question!: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  topK?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  minFaithfulness?: number;
+}
+
+// services/citeguard (Qdrant + Ollama Hybrid RRF RAG & Faithfulness Gate) 연동 약관·규정 근거 질의 컨트롤러
+@ApiTags("admin")
+@ApiBearerAuth()
+@Controller("admin/policies/rag")
+export class AdminPolicyRagController {
+  private get baseUrl(): string {
+    return process.env.CITEGUARD_URL || "http://localhost:8003";
+  }
+
+  @Post("sync")
+  @UseGuards(AuthGuard("jwt"), AdminGuard)
+  @HttpCode(200)
+  async syncPolicy(@Body() dto: SyncStorePolicyDto): Promise<Record<string, unknown>> {
+    try {
+      const res = await fetch(`${this.baseUrl}/v1/documents/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source_key: dto.sourceKey,
+          title: dto.title,
+          source_uri: dto.sourceUri ?? `node-order://policies/${dto.sourceKey}`,
+          raw_text: dto.rawText,
+          chunk_size: dto.chunkSize ?? 320,
+          chunk_overlap: dto.chunkOverlap ?? 48,
+        }),
+      });
+      if (!res.ok) {
+        throw new BadGatewayException(`citeguard 약관 색인 동기화 실패: ${res.status}`);
+      }
+      return (await res.json()) as Record<string, unknown>;
+    } catch (err) {
+      if (err instanceof BadGatewayException) throw err;
+      await reportToPulsebox(err as Error);
+      throw new BadGatewayException(`citeguard 연결 실패: ${(err as Error).message}`);
+    }
+  }
+
+  @Post("ask")
+  @UseGuards(AuthGuard("jwt"), AdminViewGuard)
+  @HttpCode(200)
+  async askPolicy(@Body() dto: AskStorePolicyDto): Promise<Record<string, unknown>> {
+    try {
+      const res = await fetch(`${this.baseUrl}/v1/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: dto.question,
+          top_k: dto.topK ?? 3,
+          min_faithfulness: dto.minFaithfulness ?? 0.5,
+        }),
+      });
+      if (!res.ok) {
+        throw new BadGatewayException(`citeguard 약관 근거 질의 실패: ${res.status}`);
+      }
+      return (await res.json()) as Record<string, unknown>;
+    } catch (err) {
+      if (err instanceof BadGatewayException) throw err;
+      await reportToPulsebox(err as Error);
+      throw new BadGatewayException(`citeguard 연결 실패: ${(err as Error).message}`);
+    }
   }
 }

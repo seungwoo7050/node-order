@@ -18,7 +18,7 @@
 - **국내외 PG 결제, 쿠폰 할인 및 일일 대사**: 토스페이먼츠 결제위젯과 Stripe를 연동하고, 쿠폰 할인을 반영한 실결제액 기준으로 웹훅 역조회 검증과 매일 새벽 전수 대사(Reconciliation) 배치를 실행합니다.
 - **외부 의존성을 줄인 검색과 AI 운영 도구**: 별도 검색 클러스터 없이 PostgreSQL `pg_trgm` 2-gram 색인으로 한글 부분 일치와 오타 보정 검색을 구현했고, Model Context Protocol(MCP) 서버를 두어 Claude Code 같은 AI 에이전트가 미처리 주문 조회, 송장 등록, 반품 승인을 대신 처리할 수 있게 했습니다.
 - **무배포 API 금고와 고정비 0원 폴백 기동**: 상점주가 외부 API 비밀키를 백오피스에 입력하면 AES-256-GCM으로 암호화해 저장하고, 유료 API 키(`LLM_API_KEY`, `STRIPE_SECRET_KEY`, `SENTRY_DSN`, `JUSO_API_KEY`)가 비어 있어도 내장 폴백으로 상점이 멈추지 않고 동작합니다.
-- **폴리글랏 인프라 사이드카 (`services/*`)**: 코어 비즈니스 로직에 부담을 주지 않도록 외부 AI 호출 제어, 아웃박스 웹훅 발송, 중복 요청 방지, 대량 상품 CSV 업로드 검증, 외부 주소 API와 모니터링 상태 확인은 Go와 Python으로 작성된 독립 데몬에 위임했습니다.
+- **폴리글랏 인프라 사이드카 (`services/*`)**: 코어 비즈니스 로직에 부담을 주지 않도록 외부 AI 호출 제어, 아웃박스 웹훅 발송, 중복 요청 방지, 약관·규정 RAG 근거 질의 검증, 대량 상품 CSV 업로드 검증, 외부 주소 API와 모니터링 상태 확인은 Go와 Python으로 작성된 독립 데몬에 위임했습니다.
 
 ---
 
@@ -61,7 +61,7 @@ flowchart TD
 
     subgraph Sidecar["인프라 사이드카 (Go & Python)"]
         GoSidecars["Go 사이드카 (aigate, pgrelay, idemguard)\nAI 게이트웨이 / 아웃박스 / 멱등성"]
-        PySidecars["Python 사이드카 (ingestguard, driftwatch, pulsebox)\nCSV 스트리밍 / 스키마 감시 / 워치독"]
+        PySidecars["Python 사이드카 (citeguard, ingestguard, driftwatch, pulsebox)\n약관 RAG / CSV 스트리밍 / 스키마 감시 / 워치독"]
     end
 
     subgraph Data["데이터 및 캐시 계층"]
@@ -187,6 +187,7 @@ Node.js 코어 애플리케이션의 이벤트 루프가 외부 API 대기나 �
 - **외부 AI 호출 제어 (`services/aigate`, Go)**: 코어 API와 외부 LLM 서비스 사이에서 동작하며, 서비스 장애 시 보조 모델로 넘어가거나 불필요한 중복 호출을 막습니다.
 - **아웃박스 웹훅 발송 (`services/pgrelay`, Go)**: 데이터베이스에 쌓인 이벤트를 안전하게 읽어 HMAC 서명을 생성하고 코어 API에 전달합니다.
 - **중복 요청 방지 (`services/idemguard`, Go)**: 짧은 시간 동안 같은 결제나 주문 요청이 동시에 들어왔을 때 한 건만 처리하고 나머지는 대기 후 결과를 공유합니다.
+- **약관 및 운영 규정 RAG 근거 질의 (`services/citeguard`, Python)**: 상점의 교환·반품 정책과 전자상거래법 안내문을 청크 해시 단위로 Qdrant 벡터 DB에 증분 색인하고, Hybrid RRF 검색과 문장별 근거 점수(Faithfulness Gate) 검증을 통과한 답변만 관리자에게 반환합니다.
 - **대량 상품 CSV 업로드 검증 (`services/ingestguard`, Python)**: 수천 건의 상품 카탈로그 CSV 파일을 한 줄씩 스트리밍으로 검증하여, 규격에 맞지 않는 불량 행만 따로 보관하고 정상 상품은 즉시 등록합니다.
 - **외부 주소 API 스키마 감시 (`services/driftwatch`, Python)**: 행정안전부 도로명주소 API의 응답 형식이 바뀌었는지 주기적으로 확인해 결제 장애를 사전에 대비합니다.
 - **모니터링 상태 감시 및 에러 그룹핑 (`services/pulsebox`, Python)**: 프로메테우스 모니터링 시스템의 동작을 데드맨 스위치로 확인하고, 서버 에러 로그를 유형별로 묶어 중복 알림을 방지합니다.
@@ -203,7 +204,7 @@ npm ci
 # PostgreSQL(5433), Redis(6380), Storage(9000) 실행
 docker compose up -d
 
-# 선택 사항: Go와 Python 6종 사이드카 데몬까지 함께 실행할 경우
+# 선택 사항: Go와 Python 7종 사이드카 데몬(Qdrant + Ollama 포함)까지 함께 실행할 경우
 docker compose --profile polyglot up -d
 ```
 
