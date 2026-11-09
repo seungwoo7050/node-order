@@ -249,3 +249,110 @@ export class AdminPolicyRagController {
     }
   }
 }
+
+export class VerifyMigrationSqlDto {
+  @IsString()
+  @IsNotEmpty()
+  sqlText!: string;
+
+  @IsOptional()
+  allowContract?: boolean;
+}
+
+export class EvaluateCanaryRolloutDto {
+  @IsString()
+  @IsNotEmpty()
+  service!: string;
+
+  @IsOptional()
+  @IsString()
+  traceparent?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  totalRequests?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  errorRequests?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  p99LatencyMs?: number;
+}
+
+// services/rolltrace (OTel Tail-Sampling & Canary SLO Auto-Rollback) 및 services/opsguard (Terraform/K8s/Expand-Contract DDL Guard) 연동 컨트롤러
+@ApiTags("admin")
+@ApiBearerAuth()
+@Controller("admin/devops")
+export class AdminDevopsController {
+  private get rolltraceUrl(): string {
+    return process.env.ROLLTRACE_URL || "http://localhost:8083";
+  }
+
+  private get opsguardUrl(): string {
+    return process.env.OPSGUARD_URL || "http://localhost:8004";
+  }
+
+  @Post("migration/verify")
+  @UseGuards(AuthGuard("jwt"), AdminGuard)
+  @HttpCode(200)
+  async verifyMigration(@Body() dto: VerifyMigrationSqlDto): Promise<Record<string, unknown>> {
+    try {
+      const res = await fetch(`${this.opsguardUrl}/v1/verify/migration`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sql_text: dto.sqlText,
+          allow_contract: dto.allowContract ?? false,
+        }),
+      });
+      if (!res.ok) {
+        throw new BadGatewayException(`opsguard 마이그레이션 검증 실패: ${res.status}`);
+      }
+      return (await res.json()) as Record<string, unknown>;
+    } catch (err) {
+      if (err instanceof BadGatewayException) throw err;
+      await reportToPulsebox(err as Error);
+      throw new BadGatewayException(`opsguard 연결 실패: ${(err as Error).message}`);
+    }
+  }
+
+  @Post("rollout/evaluate")
+  @UseGuards(AuthGuard("jwt"), AdminGuard)
+  @HttpCode(200)
+  async evaluateRollout(@Body() dto: EvaluateCanaryRolloutDto): Promise<Record<string, unknown>> {
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (dto.traceparent) {
+        headers.traceparent = dto.traceparent;
+      }
+      const res = await fetch(`${this.rolltraceUrl}/v1/rollouts/evaluate`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          service: dto.service,
+          metrics:
+            dto.totalRequests !== undefined
+              ? {
+                  total_requests: dto.totalRequests,
+                  error_requests: dto.errorRequests ?? 0,
+                  p99_latency_ms: dto.p99LatencyMs ?? 0,
+                }
+              : undefined,
+        }),
+      });
+      if (!res.ok) {
+        throw new BadGatewayException(`rolltrace 카나리 SLO 평가 실패: ${res.status}`);
+      }
+      return (await res.json()) as Record<string, unknown>;
+    } catch (err) {
+      if (err instanceof BadGatewayException) throw err;
+      await reportToPulsebox(err as Error);
+      throw new BadGatewayException(`rolltrace 연결 실패: ${(err as Error).message}`);
+    }
+  }
+}

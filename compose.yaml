@@ -120,6 +120,8 @@ services:
       INGESTGUARD_URL: ${INGESTGUARD_URL:-}
       CITEGUARD_URL: ${CITEGUARD_URL:-}
       PULSEBOX_URL: ${PULSEBOX_URL:-}
+      ROLLTRACE_URL: ${ROLLTRACE_URL:-}
+      OPSGUARD_URL: ${OPSGUARD_URL:-}
       LOG_LEVEL: ${LOG_LEVEL-info}
     depends_on:
       migrate: { condition: service_completed_successfully }
@@ -238,7 +240,27 @@ services:
     depends_on:
       - qdrant
       - ollama
-  
+
+  rolltrace:
+    image: golang:1.24-alpine
+    profiles: ["polyglot", "monitoring"]
+    working_dir: /src
+    volumes:
+      - ./services/rolltrace:/src:ro
+    command: ["go", "run", "./cmd/rolltrace", "-listen", ":8083", "-service", "order-api"]
+    ports:
+      - "8083:8083"
+
+  opsguard:
+    image: python:3.12-slim
+    profiles: ["polyglot", "monitoring"]
+    working_dir: /src
+    volumes:
+      - ./services/opsguard:/src
+    command: ["sh", "-c", "pip install --no-cache-dir -e . && opsguard serve --host 0.0.0.0 --port 8004"]
+    ports:
+      - "8004:8004"
+
 volumes:
   pgdata:
   storagedata:

@@ -1,0 +1,61 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.9.0",
+  "resource_changes": [
+    {
+      "address": "aws_db_instance.postgres",
+      "type": "aws_db_instance",
+      "name": "postgres",
+      "change": {
+        "actions": ["create"],
+        "after": {
+          "instance_class": "db.t4g.micro",
+          "storage_encrypted": true,
+          "backup_retention_period": 7,
+          "deletion_protection": true,
+          "publicly_accessible": false
+        }
+      }
+    },
+    {
+      "address": "aws_s3_bucket.backups",
+      "type": "aws_s3_bucket",
+      "name": "backups",
+      "change": {
+        "actions": ["create"],
+        "after": {
+          "bucket": "node-order-db-backups-apne2"
+        }
+      }
+    },
+    {
+      "address": "aws_security_group.rds_postgres",
+      "type": "aws_security_group",
+      "name": "rds_postgres",
+      "change": {
+        "actions": ["create"],
+        "after": {
+          "ingress": [
+            {
+              "from_port": 5432,
+              "to_port": 5432,
+              "protocol": "tcp",
+              "cidr_blocks": ["10.20.1.0/24"]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "address": "aws_instance.app",
+      "type": "aws_instance",
+      "name": "app",
+      "change": {
+        "actions": ["create"],
+        "after": {
+          "instance_type": "t3.micro"
+        }
+      }
+    }
+  ]
+}

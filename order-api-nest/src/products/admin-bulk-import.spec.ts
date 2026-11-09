@@ -1,5 +1,8 @@
 import { BadGatewayException } from "@nestjs/common";
-import { AdminPolicyRagController } from "./admin-bulk-import.controller.js";
+import {
+  AdminDevopsController,
+  AdminPolicyRagController,
+} from "./admin-bulk-import.controller.js";
 
 describe("AdminPolicyRagController (citeguard Qdrant Hybrid RAG 연동)", () => {
   const originalFetch = global.fetch;
@@ -93,5 +96,79 @@ describe("AdminPolicyRagController (citeguard Qdrant Hybrid RAG 연동)", () => 
 
     await expect(ctrl.askPolicy({ question: "환불 규정" })).rejects.toBeInstanceOf(BadGatewayException);
     expect(pulseboxCalls).toEqual(["http://pulsebox.internal:8000/v1/events"]);
+  });
+});
+
+describe("AdminDevopsController (rolltrace 카나리 SLO & opsguard Expand-Contract 연동)", () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    delete process.env.ROLLTRACE_URL;
+    delete process.env.OPSGUARD_URL;
+  });
+
+  it("verifyMigration은 opsguard /v1/verify/migration으로 위험 DDL 검사를 위임한다", async () => {
+    process.env.OPSGUARD_URL = "http://opsguard.internal:8004";
+    const calls: { url: string; body: Record<string, unknown> }[] = [];
+    global.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        url: String(input),
+        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+      });
+      return new Response(
+        JSON.stringify({
+          target_type: "sql_migration",
+          passed: false,
+          error_count: 1,
+          violations: [{ rule_id: "MIG001", message: "DROP COLUMN detected" }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    const ctrl = new AdminDevopsController();
+    const res = await ctrl.verifyMigration({
+      sqlText: "ALTER TABLE orders DROP COLUMN legacy_memo;",
+      allowContract: false,
+    });
+
+    expect(calls[0].url).toBe("http://opsguard.internal:8004/v1/verify/migration");
+    expect(calls[0].body).toEqual({
+      sql_text: "ALTER TABLE orders DROP COLUMN legacy_memo;",
+      allow_contract: false,
+    });
+    expect(res.passed).toBe(false);
+  });
+
+  it("evaluateRollout은 W3C traceparent 헤더와 슬롯 지표를 rolltrace /v1/rollouts/evaluate로 전달한다", async () => {
+    process.env.ROLLTRACE_URL = "http://rolltrace.internal:8083";
+    let capturedHeaders: Record<string, string> = {};
+    global.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedHeaders = (init?.headers ?? {}) as Record<string, string>;
+      return new Response(
+        JSON.stringify({
+          action: "ROLLBACK",
+          weight: 0,
+          state: "ROLLED_BACK",
+          culprit_trace_ids: ["4bf92f3577b34da6a3ce929d0e0e4736"],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    const ctrl = new AdminDevopsController();
+    const traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+    const res = await ctrl.evaluateRollout({
+      service: "order-api",
+      traceparent,
+      totalRequests: 50,
+      errorRequests: 5,
+      p99LatencyMs: 920,
+    });
+
+    expect(capturedHeaders.traceparent).toBe(traceparent);
+    expect(res.action).toBe("ROLLBACK");
+    expect(res.weight).toBe(0);
   });
 });

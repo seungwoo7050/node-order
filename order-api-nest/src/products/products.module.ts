@@ -1,7 +1,11 @@
 import { Module } from "@nestjs/common";
 import { SearchController } from "../search/search.controller.js";
 import { SearchModule } from "../search/search.module.js";
-import { AdminBulkImportController, AdminPolicyRagController } from "./admin-bulk-import.controller.js";
+import {
+  AdminBulkImportController,
+  AdminDevopsController,
+  AdminPolicyRagController,
+} from "./admin-bulk-import.controller.js";
 import { AdminProductsController } from "./admin-products.controller.js";
 import { ProductsController } from "./products.controller.js";
 import { ProductImagesController } from "./product-images.controller.js";
@@ -14,6 +18,7 @@ import { ProductStockController } from "./product-stock.controller.js";
     SearchController,
     AdminBulkImportController,
     AdminPolicyRagController,
+    AdminDevopsController,
     AdminProductsController,
     ProductsController,
     ProductImagesController,

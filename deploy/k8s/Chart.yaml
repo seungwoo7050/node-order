@@ -1,0 +1,6 @@
+apiVersion: v2
+name: node-order
+description: Helm chart for node-order polyglot commerce platform with Argo Rollouts canary and rolltrace OTel tail-sampling
+type: application
+version: 0.1.0
+appVersion: "1.2.0"

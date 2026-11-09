@@ -1,0 +1,158 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: order-api
+  namespace: node-order
+spec:
+  replicas: 4
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: order-api
+  template:
+    metadata:
+      labels:
+        app: order-api
+    spec:
+      containers:
+        - name: order-api
+          image: ghcr.io/seungwoo7050/node-order/order-api:v1.2.0
+          ports:
+            - containerPort: 4000
+          env:
+            - name: PORT
+              value: "4000"
+            - name: ROLLTRACE_URL
+              value: "http://rolltrace:8083"
+            - name: OPSGUARD_URL
+              value: "http://opsguard:8004"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 4000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+  strategy:
+    canary:
+      steps:
+        - setWeight: 10
+        - pause: { duration: 30s }
+        - analysis:
+            templates:
+              - templateName: rolltrace-slo-burnrate
+        - setWeight: 50
+        - pause: { duration: 60s }
+        - analysis:
+            templates:
+              - templateName: rolltrace-slo-burnrate
+        - setWeight: 100
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: rolltrace-slo-burnrate
+  namespace: node-order
+spec:
+  metrics:
+    - name: canary-slo-gate
+      interval: 15s
+      count: 2
+      successCondition: result.action != "ROLLBACK"
+      failureLimit: 1
+      provider:
+        web:
+          url: "http://rolltrace.node-order.svc.cluster.local:8083/v1/argo/analysis?service=order-api"
+          jsonPath: "{$.data}"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rolltrace
+  namespace: node-order
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rolltrace
+  template:
+    metadata:
+      labels:
+        app: rolltrace
+    spec:
+      containers:
+        - name: rolltrace
+          image: ghcr.io/seungwoo7050/node-order/rolltrace:v1.0.0
+          ports:
+            - containerPort: 8083
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8083
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8083
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opsguard
+  namespace: node-order
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opsguard
+  template:
+    metadata:
+      labels:
+        app: opsguard
+    spec:
+      containers:
+        - name: opsguard
+          image: ghcr.io/seungwoo7050/node-order/opsguard:v1.0.0
+          ports:
+            - containerPort: 8004
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8004
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8004
+            initialDelaySeconds: 5
+            periodSeconds: 10

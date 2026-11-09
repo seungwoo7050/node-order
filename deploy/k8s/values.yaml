@@ -1,0 +1,43 @@
+namespace: node-order
+
+api:
+  image: ghcr.io/seungwoo7050/node-order/order-api:v1.2.0
+  replicas: 2
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+web:
+  image: ghcr.io/seungwoo7050/node-order/order-web:v1.2.0
+  replicas: 2
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "192Mi"
+    limits:
+      cpu: "400m"
+      memory: "384Mi"
+
+rolltrace:
+  image: ghcr.io/seungwoo7050/node-order/rolltrace:v1.0.0
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+
+opsguard:
+  image: ghcr.io/seungwoo7050/node-order/opsguard:v1.0.0
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
