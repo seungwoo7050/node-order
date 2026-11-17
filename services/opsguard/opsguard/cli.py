@@ -145,6 +145,19 @@ def check_restore(
     _render_report(report)
 
 
+@cli_app.command(name="serve")
+def serve_api(
+    host: str = typer.Option("0.0.0.0", "--host", help="Bind host address"),
+    port: int = typer.Option(8000, "--port", help="Bind port number"),
+) -> None:
+    """Start the OpsGuard FastAPI verification server."""
+    import uvicorn
+
+    from opsguard.api import app
+
+    uvicorn.run(app, host=host, port=port)
+
+
 def main() -> None:
     cli_app()
 

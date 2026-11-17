@@ -18,10 +18,11 @@ func main() {
 	cfg := rolltrace.DefaultConfig()
 
 	flag.StringVar(&cfg.HTTPAddr, "http-addr", cfg.HTTPAddr, "HTTP server listen address")
+	flag.StringVar(&cfg.HTTPAddr, "listen", cfg.HTTPAddr, "HTTP server listen address (alias for -http-addr)")
 	flag.StringVar(&cfg.Service, "service", cfg.Service, "Default service name")
 	flag.Int64Var(&cfg.TailSampler.LatencyThresholdMs, "latency-threshold", cfg.TailSampler.LatencyThresholdMs, "Anomaly latency threshold in ms")
 	flag.IntVar(&cfg.TailSampler.ErrorStatusThreshold, "error-threshold", cfg.TailSampler.ErrorStatusThreshold, "Error status code threshold (e.g. 500)")
-	flag.Float64Var(&cfg.TailSampler.BaseSampleRate, "base-sample-rate", cfg.TailSampler.BaseSampleRate, "Deterministic base sample rate (0.0 to 1.0)")
+	flag.Float64Var(&cfg.TailSampler.BaseSampleRate, "base-sample-rate", cfg.TailSampler.BaseSampleRate, "Hash-based base sample rate (0.0 to 1.0)")
 	flag.IntVar(&cfg.TailSampler.MaxBufferedTraces, "max-buffered-traces", cfg.TailSampler.MaxBufferedTraces, "Maximum traces kept in memory")
 	flag.IntVar(&cfg.Canary.MinSampleCount, "min-sample-count", cfg.Canary.MinSampleCount, "Minimum samples required before evaluating SLO")
 	flag.IntVar(&cfg.Canary.ConsecutiveBreaches, "consecutive-breaches", cfg.Canary.ConsecutiveBreaches, "Consecutive SLO breaches before automated rollback")
