@@ -1,4 +1,5 @@
 import { useCartStore } from "@/lib/cart-store";
+import { cn } from "@/lib/utils";
 
 export function Stepper({
   productId,
@@ -36,11 +37,10 @@ export function Stepper({
       <span className={valueClass}>{quantity}</span>
       <button
         type="button"
-        className={`${buttonClass}${
-          !classNames?.button
-            ? " disabled:cursor-not-allowed disabled:text-faint"
-            : ""
-        }`}
+        className={cn(
+          buttonClass,
+          !classNames?.button && "disabled:cursor-not-allowed disabled:text-faint",
+        )}
         aria-label={`${name} 수량 늘리기`}
         disabled={quantity >= max}
         onClick={() => setQuantity(productId, quantity + 1)}

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { authFetch } from "@/lib/api-client";
+import { cn } from "@/lib/utils";
 import { dateTime } from "@/lib/orders";
 import { AdminOnly, useReadOnly } from "../products/admin-only";
 
@@ -132,7 +133,7 @@ function Runs() {
               <td className="num py-2">{new Date(r.periodStart).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}</td>
               <td className="py-2">{PROVIDER_LABEL[r.provider] ?? r.provider}</td>
               <td className="num py-2 text-right">{r.pgCount} · {r.dbCount} · {r.issueCount}</td>
-              <td className={`py-2 pl-4 ${r.error ? "text-danger" : ""}`}>{r.error ? `실패: ${r.error}` : r.finishedAt ? "완료" : "진행 중"}</td>
+              <td className={cn("py-2 pl-4", r.error && "text-danger")}>{r.error ? `실패: ${r.error}` : r.finishedAt ? "완료" : "진행 중"}</td>
             </tr>
           ))}
         </tbody>

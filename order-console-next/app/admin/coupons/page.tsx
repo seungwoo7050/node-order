@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { authFetch } from "@/lib/api-client";
+import { cn } from "@/lib/utils";
 import { AdminOnly, useReadOnly } from "../products/admin-only";
 
 type Coupon = {
@@ -304,9 +305,10 @@ function CouponsContent() {
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                          coupon.active ? "bg-emerald-50 border border-emerald-200 text-emerald-800" : "bg-neutral-100 text-neutral-600"
-                        }`}
+                        className={cn(
+                          "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
+                          coupon.active ? "bg-emerald-50 border border-emerald-200 text-emerald-800" : "bg-neutral-100 text-neutral-600",
+                        )}
                       >
                         {coupon.active ? "활성" : "비활성"}
                       </span>

@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { authFetch, refreshAccessToken } from "@/lib/api-client";
+import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/auth-store";
 import { LEGAL_KINDS, LEGAL_LABEL, dateOnly, privacyOptions, type LegalDocument, type LegalKind } from "@/lib/store-info";
 import { AdminOnly, useReadOnly } from "../products/admin-only";
@@ -95,8 +96,17 @@ export default function AdminLegalPage() {
       <AdminOnly readOnlyNote={READ_ONLY} note={NOTE}>
         <div role="tablist" aria-label="문서 종류" className="mb-8 flex gap-4 border-b border-line text-sm">
           {LEGAL_KINDS.map((k) => (
-            <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)}
-              className={`-mb-px cursor-pointer border-b py-2 ${kind === k ? "border-fg text-fg" : "border-transparent text-muted"}`}>
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={kind === k}
+              onClick={() => setKind(k)}
+              className={cn(
+                "-mb-px cursor-pointer border-b py-2",
+                kind === k ? "border-fg text-fg" : "border-transparent text-muted",
+              )}
+            >
               {LEGAL_LABEL[k]}
             </button>
           ))}

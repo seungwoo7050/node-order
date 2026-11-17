@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { API_URL } from "@/lib/api-client";
+import { cn } from "@/lib/utils";
 
 export function CategoryFilterBar({
   selectedId,
@@ -26,11 +27,10 @@ export function CategoryFilterBar({
     >
       <button
         type="button"
-        className={`rounded px-3 py-1 font-medium transition-colors ${
-          selectedId === null
-            ? "bg-fg text-bg"
-            : "text-muted hover:text-fg hover:bg-neutral-100"
-        }`}
+        className={cn(
+          "rounded px-3 py-1 font-medium transition-colors",
+          selectedId === null ? "bg-fg text-bg" : "text-muted hover:text-fg hover:bg-neutral-100",
+        )}
         onClick={() => onSelect(null, null)}
       >
         전체
@@ -39,11 +39,10 @@ export function CategoryFilterBar({
         <button
           key={c.id}
           type="button"
-          className={`rounded px-3 py-1 font-medium transition-colors ${
-            selectedId === c.id
-              ? "bg-fg text-bg"
-              : "text-muted hover:text-fg hover:bg-neutral-100"
-          }`}
+          className={cn(
+            "rounded px-3 py-1 font-medium transition-colors",
+            selectedId === c.id ? "bg-fg text-bg" : "text-muted hover:text-fg hover:bg-neutral-100",
+          )}
           onClick={() => onSelect(c.id, c.name)}
         >
           {c.name}

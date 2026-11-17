@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { authFetch } from "@/lib/api-client";
+import { cn } from "@/lib/utils";
 import { AdminOnly, useReadOnly } from "../products/admin-only";
 
 type CategoryItem = {
@@ -132,9 +133,10 @@ export default function AdminCategoriesPage() {
     return (
       <li key={node.id} className="space-y-1">
         <div
-          className={`flex items-center justify-between rounded p-2.5 text-sm border border-line ${
-            depth === 0 ? "bg-surface font-medium" : "bg-bg text-fg ml-4"
-          }`}
+          className={cn(
+            "flex items-center justify-between rounded p-2.5 text-sm border border-line",
+            depth === 0 ? "bg-surface font-medium" : "bg-bg text-fg ml-4",
+          )}
         >
           <div className="flex items-center gap-2">
             <span className="text-muted text-xs">{"—".repeat(depth)}</span>

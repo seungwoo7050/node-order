@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { authFetch } from "@/lib/api-client";
+import { cn } from "@/lib/utils";
 import { won } from "@/lib/orders";
 import { AdminOnly, useReadOnly } from "../products/admin-only";
 
@@ -111,11 +112,12 @@ function AdminUsersContent() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            className={`rounded px-3 py-1 text-xs font-medium cursor-pointer ${
+            className={cn(
+              "rounded px-3 py-1 text-xs font-medium cursor-pointer",
               filterGuest === undefined && filterActive === undefined
                 ? "bg-fg text-bg"
-                : "text-muted hover:bg-neutral-100"
-            }`}
+                : "text-muted hover:bg-neutral-100",
+            )}
             onClick={() => {
               setFilterGuest(undefined);
               setFilterActive(undefined);
@@ -125,9 +127,10 @@ function AdminUsersContent() {
           </button>
           <button
             type="button"
-            className={`rounded px-3 py-1 text-xs font-medium cursor-pointer ${
-              filterGuest === false && filterActive === undefined ? "bg-fg text-bg" : "text-muted hover:bg-neutral-100"
-            }`}
+            className={cn(
+              "rounded px-3 py-1 text-xs font-medium cursor-pointer",
+              filterGuest === false && filterActive === undefined ? "bg-fg text-bg" : "text-muted hover:bg-neutral-100",
+            )}
             onClick={() => {
               setFilterGuest(false);
               setFilterActive(undefined);
@@ -137,9 +140,10 @@ function AdminUsersContent() {
           </button>
           <button
             type="button"
-            className={`rounded px-3 py-1 text-xs font-medium cursor-pointer ${
-              filterGuest === true ? "bg-fg text-bg" : "text-muted hover:bg-neutral-100"
-            }`}
+            className={cn(
+              "rounded px-3 py-1 text-xs font-medium cursor-pointer",
+              filterGuest === true ? "bg-fg text-bg" : "text-muted hover:bg-neutral-100",
+            )}
             onClick={() => {
               setFilterGuest(true);
               setFilterActive(undefined);
@@ -149,9 +153,10 @@ function AdminUsersContent() {
           </button>
           <button
             type="button"
-            className={`rounded px-3 py-1 text-xs font-medium cursor-pointer ${
-              filterActive === false ? "bg-fg text-bg" : "text-muted hover:bg-neutral-100"
-            }`}
+            className={cn(
+              "rounded px-3 py-1 text-xs font-medium cursor-pointer",
+              filterActive === false ? "bg-fg text-bg" : "text-muted hover:bg-neutral-100",
+            )}
             onClick={() => {
               setFilterActive(false);
               setFilterGuest(false);
@@ -163,11 +168,12 @@ function AdminUsersContent() {
           <button
             type="button"
             data-testid="user-origin-post-seed"
-            className={`rounded px-3 py-1 text-xs font-medium cursor-pointer ${
+            className={cn(
+              "rounded px-3 py-1 text-xs font-medium cursor-pointer",
               filterOrigin === "post_seed"
                 ? "bg-fg text-bg"
-                : "border border-line bg-bg text-fg hover:bg-neutral-100"
-            }`}
+                : "border border-line bg-bg text-fg hover:bg-neutral-100",
+            )}
             onClick={() => setFilterOrigin(filterOrigin === "post_seed" ? "all" : "post_seed")}
           >
             시드 이후 유입만
@@ -175,11 +181,12 @@ function AdminUsersContent() {
           <button
             type="button"
             data-testid="user-origin-seed-only"
-            className={`rounded px-3 py-1 text-xs font-medium cursor-pointer ${
+            className={cn(
+              "rounded px-3 py-1 text-xs font-medium cursor-pointer",
               filterOrigin === "seed_only"
                 ? "bg-fg text-bg"
-                : "border border-line bg-bg text-fg hover:bg-neutral-100"
-            }`}
+                : "border border-line bg-bg text-fg hover:bg-neutral-100",
+            )}
             onClick={() => setFilterOrigin(filterOrigin === "seed_only" ? "all" : "seed_only")}
           >
             시드·데모 계정만

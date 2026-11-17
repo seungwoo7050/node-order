@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useTransition } from "react";
 import { authFetch, refreshAccessToken } from "@/lib/api-client";
+import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/auth-store";
 import { featuresOptions } from "@/lib/features";
 import { storeInfoOptions, type StoreSettings } from "@/lib/store-info";
@@ -150,7 +151,7 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
                   </select>
                 ) : (
                   <input
-                    name={f.name} aria-label={f.label} className={`border bg-bg px-3 py-2 ${f.type === "number" ? "num" : ""} ${err ? "border-danger" : "border-line-strong"}`}
+                    name={f.name} aria-label={f.label} className={cn("border bg-bg px-3 py-2", f.type === "number" && "num", err ? "border-danger" : "border-line-strong")}
                     type={f.type === "number" ? "text" : (f.type ?? "text")} inputMode={f.type === "number" ? "numeric" : undefined}
                     value={form[f.name]} onChange={(e) => setForm((s) => ({ ...s, [f.name]: e.target.value }))}
                     disabled={readOnly} aria-invalid={err ? true : undefined} aria-describedby={describedBy}

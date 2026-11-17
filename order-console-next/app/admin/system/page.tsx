@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { authFetch } from "@/lib/api-client";
+import { cn } from "@/lib/utils";
 import { AdminOnly, useReadOnly } from "../products/admin-only";
 
 type SecretItem = {
@@ -182,11 +183,10 @@ export default function AdminSystemPage() {
                   data-testid="control-pause-paid-apis"
                   disabled={readOnly || toggleControlMutation.isPending}
                   onClick={() => toggleControlMutation.mutate({ pausePaidApis: !controls.pausePaidApis })}
-                  className={`shrink-0 ml-4 rounded px-3 py-1.5 text-xs font-semibold cursor-pointer transition-colors ${
-                    controls.pausePaidApis
-                      ? "bg-red-600 text-white"
-                      : "bg-neutral-200 text-neutral-800"
-                  }`}
+                  className={cn(
+                    "shrink-0 ml-4 rounded px-3 py-1.5 text-xs font-semibold cursor-pointer transition-colors",
+                    controls.pausePaidApis ? "bg-red-600 text-white" : "bg-neutral-200 text-neutral-800",
+                  )}
                 >
                   {controls.pausePaidApis ? "차단 중 (켜짐)" : "정상 허용 (꺼짐)"}
                 </button>
@@ -204,11 +204,10 @@ export default function AdminSystemPage() {
                   data-testid="control-maintenance-mode"
                   disabled={readOnly || toggleControlMutation.isPending}
                   onClick={() => toggleControlMutation.mutate({ maintenanceMode: !controls.maintenanceMode })}
-                  className={`shrink-0 ml-4 rounded px-3 py-1.5 text-xs font-semibold cursor-pointer transition-colors ${
-                    controls.maintenanceMode
-                      ? "bg-amber-600 text-white"
-                      : "bg-neutral-200 text-neutral-800"
-                  }`}
+                  className={cn(
+                    "shrink-0 ml-4 rounded px-3 py-1.5 text-xs font-semibold cursor-pointer transition-colors",
+                    controls.maintenanceMode ? "bg-amber-600 text-white" : "bg-neutral-200 text-neutral-800",
+                  )}
                 >
                   {controls.maintenanceMode ? "점검 중 (503 차단)" : "정상 운영 (꺼짐)"}
                 </button>
