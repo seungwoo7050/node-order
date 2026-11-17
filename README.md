@@ -1,9 +1,13 @@
 <p align="center">
   <h1 align="center">node-order</h1>
-  <p align="center"><b>1인 판매자와 소규모 브랜드를 위한 납품형 웹 쇼핑몰 및 백오피스 솔루션</b></p>
+  <p align="center"><b>소규모 판매자를 위한 온라인 쇼핑몰 및 백오피스 웹 서비스</b></p>
   <p align="center">
-    NestJS | Next.js 16 (App Router) | Prisma 7 | PostgreSQL 17 | Redis 7 | Go & Python 사이드카 | Toss Payments | Stripe | MCP | Prometheus | AWS<br>
-    단위, 통합, E2E 테스트 및 하네스 자동화 | Blue/Green 무중단 배포
+    <a href="https://shop.43-202-205-93.sslip.io/shop"><b>라이브 데모</b></a> |
+    <a href="https://shop.43-202-205-93.sslip.io/admin"><b>관리자 콘솔 데모 (kim / 1234)</b></a>
+  </p>
+  <p align="center">
+    NestJS | Next.js 16 (App Router) | Prisma 7 | PostgreSQL 17 | Redis 7 | Toss Payments | Stripe | MCP | Caddy | AWS<br>
+    단위, 통합, E2E 테스트 | Caddy Blue/Green 무중단 배포
   </p>
 </p>
 
@@ -13,12 +17,11 @@
 
 외주 개발이나 무거운 유료 SaaS 없이 **웹 쇼핑몰이 필요한 고객(1인 판매자와 소규모 브랜드)에게 바로 제공해 상점을 열 수 있도록 만든 독립형 커머스 솔루션**입니다. 상품과 다차원 옵션(색상, 사이즈) 등록부터 오타 보정 검색, 회원 및 비회원 주문, 쿠폰과 리뷰, 결제, 배송과 반품 처리, PG 일일 대사, 그리고 AI 비서(MCP) 연동까지 상점 운영의 전 주기를 한 시스템에 담았습니다.
 
-- **고객 브랜드에 맞춘 3종 스토어프론트 테마**: 하나의 커머스 ViewModel 위에서 3가지 스토어프론트 렌더러(`editorial-atelier`, `muji-hara`, `zavanas-archive`)를 분리해, 코드 수정이나 재배포 없이 관리자 화면(`/admin/settings`)에서 상점 디자인과 브랜딩 문구를 즉시 바꿀 수 있습니다.
-- **동시 결제와 다차원 옵션 재고 정합성**: 인기 상품이나 옵션(`ProductVariant`)에 결제가 동시에 몰릴 때 초과 판매와 데드락이 생기지 않도록 상품 및 옵션 ID 오름차순 비관적 잠금(`SELECT ... FOR UPDATE`)과 트랜잭셔널 아웃박스를 적용했습니다.
-- **국내외 PG 결제, 쿠폰 할인 및 일일 대사**: 토스페이먼츠 결제위젯과 Stripe를 연동하고, 쿠폰 할인을 반영한 실결제액 기준으로 웹훅 역조회 검증과 매일 새벽 전수 대사(Reconciliation) 배치를 실행합니다.
-- **외부 의존성을 줄인 검색과 AI 운영 도구**: 별도 검색 클러스터 없이 PostgreSQL `pg_trgm` 2-gram 색인으로 한글 부분 일치와 오타 보정 검색을 구현했고, Model Context Protocol(MCP) 서버를 두어 Claude Code 같은 AI 에이전트가 미처리 주문 조회, 송장 등록, 반품 승인을 대신 처리할 수 있게 했습니다.
-- **무배포 API 금고와 고정비 0원 폴백 기동**: 상점주가 외부 API 비밀키를 백오피스에 입력하면 AES-256-GCM으로 암호화해 저장하고, 유료 API 키(`LLM_API_KEY`, `STRIPE_SECRET_KEY`, `SENTRY_DSN`, `JUSO_API_KEY`)가 비어 있어도 내장 폴백으로 상점이 멈추지 않고 동작합니다.
-- **폴리글랏 인프라 사이드카 (`services/*`)**: 코어 비즈니스 로직에 부담을 주지 않도록 외부 AI 호출 제어, 아웃박스 웹훅 발송, 중복 요청 방지, 약관·규정 RAG 근거 질의 검증, 대량 상품 CSV 업로드 검증, 외부 주소 API와 모니터링 상태 확인은 Go와 Python으로 작성된 독립 데몬에 위임했습니다.
+- 하나의 커머스 ViewModel 위에서 3가지 스토어프론트 렌더러(`editorial-atelier`, `muji-hara`, `zavanas-archive`)를 분리해, 코드 수정이나 재배포 없이 관리자 화면(`/admin/settings`)에서 상점 디자인과 브랜딩 문구를 바로 바꿀 수 있습니다.
+- 인기 상품이나 옵션(`ProductVariant`)에 결제가 동시에 몰릴 때 초과 판매와 데드락이 생기지 않도록 상품 및 옵션 ID 오름차순 비관적 잠금(`SELECT ... FOR UPDATE`)과 주문-PG 트랜잭션 분리, 트랜잭셔널 아웃박스를 적용했습니다.
+- 토스페이먼츠 결제위젯과 Stripe를 연동하고, 쿠폰 할인을 반영한 실결제액 기준으로 웹훅 역조회 검증과 매일 새벽 전수 대사(Reconciliation) 배치를 실행합니다.
+- 별도 검색 클러스터 없이 PostgreSQL `pg_trgm` 2-gram 색인으로 한글 부분 일치와 오타 보정 검색을 구현했고, Model Context Protocol(MCP) 서버를 두어 Claude Code 같은 AI 에이전트가 미처리 주문 조회, 송장 등록, 반품 승인을 대신 처리할 수 있게 했습니다.
+- 상점주가 외부 API 비밀키를 백오피스에 입력하면 AES-256-GCM으로 암호화해 저장하고, 유료 API 키(`LLM_API_KEY`, `STRIPE_SECRET_KEY`, `SENTRY_DSN`, `JUSO_API_KEY`)가 비어 있어도 내장 폴백으로 상점이 멈추지 않고 동작합니다.
 
 ---
 
@@ -59,19 +62,10 @@ flowchart TD
         ApiSlot["NestJS Core API (Blue / Green)\n주문 / 결제 / 검색 / MCP 서버"]
     end
 
-    subgraph Sidecar["인프라 사이드카 (Go & Python)"]
-        GoSidecars["Go 사이드카 (aigate, pgrelay, idemguard)\nAI 게이트웨이 / 아웃박스 / 멱등성"]
-        PySidecars["Python 사이드카 (citeguard, ingestguard, driftwatch, pulsebox)\n약관 RAG / CSV 스트리밍 / 스키마 감시 / 워치독"]
-    end
-
     subgraph Data["데이터 및 캐시 계층"]
         PG[("PostgreSQL 17\n주문 / 재고 잠금 / Outbox")]
         Redis[("Redis 7\n캐시 / 검색어 / Rate Limit")]
         Storage[("S3 / RustFS\n상품 이미지 / DB 백업")]
-    end
-
-    subgraph Ops["모니터링 및 관측성"]
-        Prom["Prometheus & Alertmanager\n업무 지표 수집 / 14개 경보"]
     end
 
     User -->|HTTPS| Caddy
@@ -84,11 +78,6 @@ flowchart TD
     ApiSlot --> PG
     ApiSlot --> Redis
     ApiSlot --> Storage
-
-    ApiSlot <--> GoSidecars
-    ApiSlot <--> PySidecars
-
-    Prom -->|Scrape| ApiSlot
 ```
 
 ---
@@ -126,6 +115,7 @@ flowchart TD
 
 - **비관적 잠금과 상위 재고 동기화**: 가격 확인과 쿠폰 적용까지 한 트랜잭션에서 판단해야 하므로 `SELECT ... FOR UPDATE`로 읽는 순간 행을 잠급니다. 옵션 재고를 차감하거나 복구할 때는 상위 상품(`Product.stock`) 합산 재고도 같은 트랜잭션에서 함께 갱신합니다.
 - **다중 품목 데드락 방지**: 장바구니에 담긴 여러 품목을 서로 반대 순서로 잠그다 교착 상태에 빠지지 않도록, 모든 트랜잭션에서 **상품 ID 및 옵션 ID 오름차순으로 정렬해 잠금을 획득**합니다.
+- **주문 생성 트랜잭션과 외부 PG 호출 분리**: DB 트랜잭션 안에서 외부 결제사(PG) 승인 응답을 기다리면 PG 지연이 곧바로 DB 커넥션 풀 고갈로 이어집니다. DB에서는 주문 생성과 재고와 쿠폰 예약만 마치고 즉시 커밋한 뒤, 트랜잭션 밖에서 PG 승인이 실패하거나 타임아웃이 나면 예약된 재고와 쿠폰(`CouponRedemption`)을 보상 트랜잭션으로 되돌립니다.
 - **결제 멱등키**: 결제 버튼 중복 클릭이나 네트워크 재시도로 돈이 두 번 나가지 않게 `Idempotency-Key`와 요청 본문 해시를 주문 트랜잭션 안에 함께 저장합니다.
 
 ### 2. 주문 저장과 외부 발송을 묶는 트랜잭셔널 아웃박스 (Transactional Outbox)
@@ -168,11 +158,13 @@ sequenceDiagram
 
 - **할인 차감 실결제액 고정 및 쿠폰 복구**: 상품 합계에서 쿠폰 할인액을 뺀 실결제 금액을 주문 스냅샷으로 저장하며, 주문 취소 시 사용된 쿠폰(`CouponRedemption`)을 원자적으로 되돌립니다.
 - **웹훅 역조회 재검증 및 04:00 KST 대사 배치**: 웹훅이 도착하면 토스/Stripe API를 다시 조회해 원본 금액과 대조하고, 매일 새벽 전수 대사 배치가 실결제액과 PG 내역을 비교해 불일치 건수를 지표로 남깁니다.
+- **p-limit과 p-retry 기반 PG 대사 동시성 제어**: 거래 전수 조회 시 PG 요청 한도를 넘지 않게 `p-limit`으로 동시 조회를 묶고, 429와 5xx 일시 오류는 `p-retry`와 `Retry-After` 헤더 기반 지수 백오프로 안전하게 다시 시도합니다.
 
-### 5. 공통 커머스 ViewModel과 3종 스토어프론트 렌더러 분리
+### 5. 공통 커머스 ViewModel과 3종 스토어프론트 분리 및 RTR 토큰 갱신 병합
 
 - 카테고리 필터, 정렬, 옵션 선택, 장바구니 담기, 리뷰 작성 등 비즈니스 상태를 `storefront-view-model.ts`의 공통 인터페이스로 모았습니다.
 - 각 디자인 폴더(`designs/editorial-atelier`, `designs/muji-hara`, `designs/zavanas-archive`)는 마크업과 전용 CSS Modules만 가지며, `design-guard.sh`가 인라인 스타일(`style={{}}`)과 렌더러 간 교차 참조를 CI에서 차단합니다.
+- **RTR 토큰 갱신 중복 병합과 API 클라이언트**: 새로고침 시 여러 API 요청이 동시에 `401`을 받으면 Refresh Token Rotation(RTR)이 중복 호출되어 이전 토큰이 폐기되면서 로그아웃되는 문제가 있었습니다. `ky` 기반 클라이언트(`order-console-next/lib/api-client.ts`)에서 진행 중인 `/auth/refresh` Promise(`refreshing`)를 단일 참조로 공유해 동시 갱신 요청을 1회로 병합하고, `clsx`와 `tailwind-merge` 기반 `cn` 유틸로 조건부 클래스 충돌을 정리합니다.
 
 ### 6. AES-256-GCM 암호화 금고, MCP 서버, 관측성
 
@@ -180,17 +172,15 @@ sequenceDiagram
 - **판매자용 MCP 서버**: `POST /mcp` 엔드포인트에서 Bearer 토큰 권한 검증, `<untrusted>` 이스케이프, `mcp_audit_log` 감사 기록을 강제합니다.
 - **관측성 및 일일 시드 복원**: Sentry `scrubEvent`로 개인정보를 가리고, 매일 03:30 KST S3 DB 백업이 성공한 날에만 04:00 KST 데모 데이터를 초기 상태로 되돌립니다.
 
-### 7. 폴리글랏 인프라 사이드카 (`services/*`)
+### 7. AI 코딩 에이전트 작업 하네스
 
-Node.js 코어 애플리케이션의 이벤트 루프가 외부 API 대기나 대용량 파일 파싱으로 지연되지 않도록, 인프라 보조 작업을 Go와 Python 독립 데몬으로 분리해 `services/` 아래에 배치했습니다.
+이 프로젝트는 특정 시점부터 AI 코딩 에이전트를 도입하여 함께 개발했습니다. `AGENTS.md` 같은 자연어 지침은 대화가 길어지면 지켜지지 않을 수 있어서, 지켜야 할 규칙은 셸 훅의 종료 코드(`scripts/harness/`)로 강제했습니다.
 
-- **외부 AI 호출 제어 (`services/aigate`, Go)**: 코어 API와 외부 LLM 서비스 사이에서 동작하며, 서비스 장애 시 보조 모델로 넘어가거나 불필요한 중복 호출을 막습니다.
-- **아웃박스 웹훅 발송 (`services/pgrelay`, Go)**: 데이터베이스에 쌓인 이벤트를 안전하게 읽어 HMAC 서명을 생성하고 코어 API에 전달합니다.
-- **중복 요청 방지 (`services/idemguard`, Go)**: 짧은 시간 동안 같은 결제나 주문 요청이 동시에 들어왔을 때 한 건만 처리하고 나머지는 대기 후 결과를 공유합니다.
-- **약관 및 운영 규정 RAG 근거 질의 (`services/citeguard`, Python)**: 상점의 교환·반품 정책과 전자상거래법 안내문을 청크 해시 단위로 Qdrant 벡터 DB에 증분 색인하고, Hybrid RRF 검색과 문장별 근거 점수(Faithfulness Gate) 검증을 통과한 답변만 관리자에게 반환합니다.
-- **대량 상품 CSV 업로드 검증 (`services/ingestguard`, Python)**: 수천 건의 상품 카탈로그 CSV 파일을 한 줄씩 스트리밍으로 검증하여, 규격에 맞지 않는 불량 행만 따로 보관하고 정상 상품은 즉시 등록합니다.
-- **외부 주소 API 스키마 감시 (`services/driftwatch`, Python)**: 행정안전부 도로명주소 API의 응답 형식이 바뀌었는지 주기적으로 확인해 결제 장애를 사전에 대비합니다.
-- **모니터링 상태 감시 및 에러 그룹핑 (`services/pulsebox`, Python)**: 프로메테우스 모니터링 시스템의 동작을 데드맨 스위치로 확인하고, 서버 에러 로그를 유형별로 묶어 중복 알림을 방지합니다.
+- **먼저 합격 기준을 고정**: 재고는 음수가 되지 않고, 같은 `Idempotency-Key`는 한 번만 결제되며, RLS로 타인 주문은 보이지 않는다는 도메인 불변식을 정하고, 구현 전에 실패하는 통합 테스트(재고 10개에 동시 주문 50건 등)를 먼저 둡니다.
+- **`PreToolUse` (`guard.sh`)**: `.env` 수정, 이미 적용된 `prisma/migrations/*` 변경, `git push`를 실행 전에 `exit 2`로 막고 대안(`.env.example`에 이름만 추가, 새 마이그레이션 생성)을 에이전트에게 돌려줍니다.
+- **`PostToolUse` (`lint-file.sh`)**: 방금 편집한 파일만 바로 린트해 자체 교정이 빠르게 돌게 합니다.
+- **`Stop` (`stop-verify.sh`)**: 변경이 있으면 `verify:fast`가 통과해야 작업을 끝낼 수 있고, 같은 세션에서 연속 3회 막히면 더 막지 않고 사람에게 넘깁니다.
+- **방어선을 일부러 제거해 보는 역검증**: `SELECT ... FOR UPDATE`나 RLS의 `set_config` 한 줄을 지웠을 때 동시성 테스트와 격리 테스트가 실제로 실패하는지 확인해, 어떤 입력에도 통과하는 테스트를 걸러냅니다.
 
 ---
 
@@ -203,9 +193,6 @@ npm ci
 
 # PostgreSQL(5433), Redis(6380), Storage(9000) 실행
 docker compose up -d
-
-# 선택 사항: Go와 Python 7종 사이드카 데몬(Qdrant + Ollama 포함)까지 함께 실행할 경우
-docker compose --profile polyglot up -d
 ```
 
 ### 2. 환경변수 준비
@@ -237,12 +224,12 @@ npm run dev:web
 
 ---
 
-## 테스트 및 하네스 검증
+## 테스트 및 정적 규칙 검증
 
 3단계 검증 스크립트로 코드 품질과 비즈니스 규칙을 검사합니다.
 
 ```sh
-# 1. 빠른 검사 (Prisma + Lint + Typecheck + 단위 테스트 + 하네스 및 디자인 가드 검사)
+# 1. 빠른 검사 (Prisma + Lint + Typecheck + 단위 테스트 + 정적 규칙 및 디자인 가드 검사)
 npm run verify:fast
 
 # 2. 프로덕션 모니터링 규칙 검사 (Prometheus 경보 규칙 + Alertmanager 템플릿 + 메모리 상한선 검사)
@@ -254,7 +241,7 @@ npm run verify
 
 ---
 
-## 무중단 배포 (AWS Blue/Green)
+## 무중단 배포 (AWS EC2 Caddy Blue/Green)
 
 단일 EC2 인스턴스 안에서 Caddy 리버스 프록시와 두 벌의 컨테이너 슬롯(Blue/Green)으로 배포 중 요청 실패를 막습니다.
 
@@ -265,3 +252,12 @@ npm run verify
   # 토스 테스트 키, 도로명주소 API 키 등을 서버 .env에 전달 (배포 전 선반영)
   TOSS_CLIENT_KEY=test_ck_... TOSS_SECRET_KEY=test_sk_... JUSO_API_KEY=... bash deploy/aws/60-server-env.sh
   ```
+
+---
+
+## 범위와 한계
+
+- `SELECT ... FOR UPDATE` 비관적 잠금은 같은 상품이나 옵션에 결제가 동시에 몰릴 때 요청을 한 줄로 세우므로 대기 시간이 늘어납니다. 초과 판매 0건과 가격, 쿠폰 복합 검증 정합성을 처리량보다 우선한 선택입니다.
+- 트랜잭셔널 아웃박스는 워커 재시작이나 타임아웃 시 같은 이벤트를 두 번 보낼 수 있으므로(At-least-once), 이벤트를 받는 하위 핸들러와 웹훅 수신 측에서 중복 처리를 걸러내야 합니다.
+- 단일 EC2 인스턴스 안에서 두 슬롯을 교대로 띄우는 블루/그린 구조라 전환 시점에 메모리를 두 배로 쓰며, EC2 호스트 자체가 재부팅될 때는 서비스가 멈춥니다.
+- 동시 결제 부하 테스트(k6)와 장애 주입 시나리오는 로컬 및 리허설 환경과 테스트 결제 키 기준으로 검증한 결과이며, 실제 상용 결제 대금이 오간 운영 트래픽은 아닙니다.
