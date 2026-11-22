@@ -40,13 +40,13 @@ pkg/relay/
 ├── event.go          Event 모델 및 유효성 검증
 ├── store.go          Store 인터페이스 및 DBTx 추상화
 ├── pgstore.go        PostgreSQL SKIP LOCKED 쿼리 및 상태 전이
-├── memstore.go       결정론적 단위 및 동시성 검증용 인메모리 스토어 (Tx 롤백 시뮬레이션)
+├── memstore.go       재현 가능한 단위 및 동시성 검증용 인메모리 스토어 (Tx 롤백 시뮬레이션)
 ├── notifier.go       LISTEN/NOTIFY 신호 전파 및 폴백 폴링 티커
 ├── signer.go         HMAC-SHA256 서명 생성 및 리플레이 방어 검증기
 ├── backoff.go        AWS Full Jitter 기반 지수 백오프 계산기
 ├── dispatcher.go     HTTP POST 발송기 (응답 크기 제한, 재시도/영구실패 분류)
 ├── engine.go         워커 풀 조율, 고아 락 회수(Reaper), 프로메테우스 메트릭 수집기
-└── engine_test.go    불변조건 I1~I5 동시성 및 레이스 검증 테스트
+└── engine_test.go    핵심 조건 I1~I5 동시성 및 레이스 검증 테스트
 ```
 
 ### 1. 패키지와 데몬 분리 (`pkg/relay` vs `cmd/pgrelay`)
@@ -158,7 +158,7 @@ make build
 
 ## 테스트
 
-외부 PostgreSQL 없이 인메모리 스토어(`memstore.go`)를 사용해 모든 동시성 및 복구 테스트를 결정론적으로 검증할 수 있습니다.
+외부 PostgreSQL 없이 인메모리 스토어(`memstore.go`)를 사용해 모든 동시성 및 복구 테스트를 일관되게 검증할 수 있습니다.
 
 ```sh
 make vet

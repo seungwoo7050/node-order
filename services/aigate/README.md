@@ -1,6 +1,6 @@
 <p align="center">
   <h1 align="center">aigate</h1>
-  <p align="center"><b>외부 LLM 및 서드파티 HTTP API 호출 회복탄력성 게이트웨이</b></p>
+  <p align="center"><b>외부 LLM 및 서드파티 HTTP API 호출 장애 격리 게이트웨이</b></p>
   <p align="center">
     Go 1.24 | net/http | Single-Flight | Circuit Breaker | Token Bucket | SSE Stream Proxy
   </p>
@@ -8,7 +8,7 @@
 
 ---
 
-외부 LLM 및 서드파티 HTTP API 호출에 필요한 회복탄력성 기능을 묶은 Go 게이트웨이입니다. Go 표준 `net/http` 클라이언트의 `http.RoundTripper` 미들웨어로 코드에 직접 주입하거나, 독립 리버스 프록시 데몬(`cmd/aigate`)으로 띄워 사용할 수 있습니다.
+외부 LLM 및 서드파티 HTTP API 호출에 필요한 장애 격리 기능을 묶은 Go 게이트웨이입니다. Go 표준 `net/http` 클라이언트의 `http.RoundTripper` 미들웨어로 코드에 직접 주입하거나, 독립 리버스 프록시 데몬(`cmd/aigate`)으로 띄워 사용할 수 있습니다.
 
 ## 아키텍처 흐름도
 
@@ -41,13 +41,13 @@ pkg/gate/
 ├── failover.go       다중 업스트림 프로바이더 라우터 (Primary -> Fallback 자동 우회)
 ├── sse.go            text/event-stream 무버퍼 청크 즉시 Flush 프록시
 ├── transport.go      http.RoundTripper 및 http.Handler 결합체, Prometheus 메트릭
-└── transport_test.go 동시성 및 회복탄력성 불변조건 검증 (go test -race)
+└── transport_test.go 동시성 및 장애 격리 검증 (go test -race)
 cmd/aigate/
 └── main.go           독립 실행 리버스 프록시 서버 데몬 (/healthz, /metrics)
 ```
 
 - **`context.WithoutCancel` 기반 참조 카운팅 Single-Flight**: `singleflight.Group` 내부에서 실행 컨텍스트를 생성할 때 `context.WithoutCancel`을 적용하고 대기 중인 호출자 수를 참조 카운팅합니다. 첫 번째 호출자가 컨텍스트를 취소하더라도 대기자가 1명 이상 남아 있으면 업스트림 호출을 중단하지 않고 유지합니다. 모든 대기자가 취소된 시점에만 업스트림 컨텍스트를 취소합니다.
-- **Half-Open 단일 프로브(Single-Probe) 가드**: 서킷 브레이커가 `Open` 상태에서 `Cooldown` 시간이 지나 `Half-Open`으로 전이할 때, 동시 요청이 몰려도 오직 `MaxHalfOpenProbes`(기본 1개)의 요청만 업스트림으로 보내고 나머지 동시 요청은 즉시 Fallback으로 넘기거나 거절합니다. 프로브 요청이 성공해야만 `Closed`로 복구하며, 실패하면 즉시 다시 `Open`으로 되돌립니다.
+- **Half-Open 단일 프로브(Single-Probe) 가드**: 서킷 브레이커가 `Open` 상태에서 `Cooldown` 시간이 지나 `Half-Open`으로 전이할 때, 동시 요청이 몰려도 오직 `MaxHalfOpenProbes`(기본 1개)의 요청만 업스트림으로 보내고 나머지 동시 요청은 즉시 Fallback으로 넘기거나 거절합니다. 프로브 요청이 성공해야만 `Closed`로 복구하며, 실패하면 즉시 다시 `Open` 상태로 전환합니다.
 - **스트리밍 분기와 무버퍼 즉시 Flush**: 요청 헤더(`Accept: text/event-stream`)나 본문(`"stream": true`), 또는 업스트림 응답 헤더의 `Content-Type`을 검사해 SSE 요청은 Single-Flight 병합 대상에서 제외합니다. `http.Flusher`를 사용해 업스트림에서 청크가 도착하는 즉시 클라이언트로 밀어내어 TTFT 지연을 없앱니다.
 - **재시도 가능한 요청 본문 복제**: Failover 라우터는 프라이머리 프로바이더 실패(5xx, 429, 네트워크 오류) 시 Fallback 프로바이더로 재시도할 수 있도록 진입 시점의 본문을 최대 바이트(`MaxBodyBytes`, 기본 10MB)까지 메모리에 보관하고 `req.GetBody`로 복원합니다.
 

@@ -38,7 +38,7 @@ pkg/idem/
 ├── pgstore.go          PostgreSQL ON CONFLICT DO NOTHING 분산 Store
 ├── recorder.go         상태 코드, 헤더, 바디 캡처용 ResponseWriter 래퍼
 ├── middleware.go       net/http 미들웨어 Guard 및 Prometheus 메트릭
-└── middleware_test.go  고경합 동시성 및 복구 불변조건 검증 테스트
+└── middleware_test.go  고경합 동시성 및 복구 핵심 조건 검증 테스트
 ```
 
 - **원자적 선점과 `close(done)` 브로드캐스트**: `TryAcquire` 호출 시 키가 없으면 상태를 즉시 `IN_FLIGHT`로 등록하고 완료 통지용 채널을 할당합니다. 동일 키로 뒤이어 진입한 고루틴들은 `PolicyWaitAndReplay` 설정 시 리더의 `done` 채널 닫힘을 대기하다가 캡처된 응답(`X-Idempotent-Replayed: true`)을 공유받습니다. 즉시 거절이 필요한 환경은 `PolicyReject409`로 설정해 `409 Conflict`와 `Retry-After: 1` 헤더를 즉시 반환합니다.

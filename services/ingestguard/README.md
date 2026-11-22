@@ -71,7 +71,7 @@ python3 -m ingestguard.cli serve --db-url "sqlite:///ingest.db" --port 8000
 | `GET` | `/healthz` | 서비스 헬스체크 |
 | `GET` | `/metrics` | Prometheus 텍스트 형식 메트릭 노출 |
 
-### 4. CLI를 통한 직접 적재 및 재반영
+### 4. CLI 직접 적재 및 재반영
 
 ```bash
 # 배치 적재 실행

@@ -28,7 +28,7 @@ flowchart LR
 1. **Terraform Plan의 상태 저장소 삭제와 수동 콘솔 변경(Drift)**: 인프라 변경 중 실수로 운영 RDS나 S3 버킷 교체(`delete`)가 Plan에 포함되거나, 보안 그룹에서 DB(`5432`)·Redis(`6379`)·SSH(`22`) 포트가 `0.0.0.0/0`으로 열리는 사고가 생깁니다. 또한 장애 대응 중 클라우드 콘솔에서 수동으로 바꾼 설정이 코드와 어긋난 채 방치됩니다.
 2. **Kubernetes 및 Argo Rollouts 매니페스트 누락**: `:latest` 이미지 태그, 컨테이너 메모리 `requests`/`limits`, `readinessProbe`/`livenessProbe`가 빠진 채 배포되거나, Argo Rollouts 카나리 단계에서 `analysis` 검증 없이 가중치만 올라가는 설정 오류가 발생합니다.
 3. **무중단 배포 중 구버전 서버를 멈추게 하는 DB 마이그레이션 DDL**: 블루/그린이나 카나리 전환 중에 `DROP COLUMN`, `RENAME COLUMN`, `ALTER COLUMN TYPE`, 기본값 없는 `ADD COLUMN ... NOT NULL`, `CONCURRENTLY`가 빠진 `CREATE INDEX`를 실행하면 구버전 컨테이너 쿼리가 즉시 깨지거나 테이블 전체에 배타적 잠금이 걸려 결제가 멈춥니다.
-4. **검증되지 않은 백업 덤프 파일**: 매일 새벽 DB 백업 파일이 만들어져도 실제로 복원이 되는지, 필수 테이블 행 수나 결제 금액 불변식이 깨지지 않았는지 확인하지 않으면 장애 시점에 백업을 쓸 수 없습니다.
+4. **검증되지 않은 백업 덤프 파일**: 매일 새벽 DB 백업 파일이 만들어져도 실제로 복원이 되는지, 필수 테이블 행 수나 결제 금액 검증 규칙이 깨지지 않았는지 확인하지 않으면 장애 시점에 백업을 쓸 수 없습니다.
 
 `opsguard`는 이 네 가지 배포 전 검증을 하나의 규칙 엔진과 감사 로그(`audit_records`)로 묶어 배포 파이프라인 초입에서 실행합니다.
 
@@ -47,7 +47,7 @@ tests/
 ```
 
 - **Terraform Plan JSON과 실제 런타임 스냅샷을 함께 대조합니다.** `resource_changes`에서 상태 저장 리소스(`aws_db_instance`, `aws_s3_bucket`, `aws_ebs_volume`)의 삭제·교체(`TF001`), 민감 포트(`22`, `5432`, `6379`) 전체 개방(`TF002`), 스토리지 미암호화 및 백업 보존 누락(`TF003`), 허용 목록 밖의 고비용 인스턴스(`TF004`)를 차단하고, 선언한 상태와 런타임 스냅샷을 비교해 속성 변경·누락·미관리 리소스(`TF005`)를 찾아냅니다.
-- **Kubernetes 워크로드와 Argo Rollouts 카나리 불변조건을 YAML 파싱 단계에서 검사합니다.** 컨테이너 이미지 태그 누락이나 `:latest` 사용(`K8S001`), 메모리 `requests`/`limits` 누락(`K8S002`), `readinessProbe`/`livenessProbe` 누락(`K8S003`)을 잡으며, Argo Rollouts 리소스는 카나리 가중치(`setWeight`)가 단조 증가하는지와 승격 사이에 `analysis` 단계가 들어 있는지(`ARGO001`) 확인합니다.
+- **Kubernetes 워크로드와 Argo Rollouts 카나리 배포 규칙을 YAML 파싱 단계에서 검사합니다.** 컨테이너 이미지 태그 누락이나 `:latest` 사용(`K8S001`), 메모리 `requests`/`limits` 누락(`K8S002`), `readinessProbe`/`livenessProbe` 누락(`K8S003`)을 잡으며, Argo Rollouts 리소스는 카나리 가중치(`setWeight`)가 단조 증가하는지와 승격 사이에 `analysis` 단계가 들어 있는지(`ARGO001`) 확인합니다.
 - **무중단 배포를 깨뜨리는 DDL을 Expand 단계와 Contract 단계로 나누어 검사합니다.** 주석을 제거한 SQL 문장을 분석해 구버전 컨테이너가 함께 떠 있는 Expand 단계(`allow_contract=False`)에서는 `DROP COLUMN`/`DROP TABLE`(`MIG001`)을 차단하고, 모든 구버전 컨테이너가 내려간 Contract 단계(`--allow-contract`)에서만 허용합니다. 즉시 테이블을 잠그거나 호환성을 깨는 `RENAME`(`MIG002`), `ALTER COLUMN TYPE`(`MIG003`), `DEFAULT` 없는 `ADD COLUMN ... NOT NULL`(`MIG004`), `CONCURRENTLY` 없는 인덱스 생성·삭제(`MIG005`)는 항상 차단하고 우회 절차를 안내합니다.
 - **백업 덤프는 SHA-256 해시 대조 뒤 인메모리 SQLite에 실제로 적재해 복원 드릴을 수행합니다.** 파일 체크섬 일치(`BAK001`)만 보는 데 그치지 않고, 격리된 인메모리 DB에 덤프 SQL을 직접 실행해 필수 테이블 존재 여부와 행 수(`>= 1`, `BAK002`), 주문·결제 금액 컬럼(`amount`, `total`, `price`, `payment_amount`)의 음수 데이터 유입 여부(`BAK003`)까지 확인합니다.
 - **모든 API 검증 결과는 `aiosqlite`를 거쳐 `audit_records` 테이블에 남기고**, 검사 횟수(`opsguard_checks_total`)와 규칙별 위반 건수(`opsguard_violations_total`)를 Prometheus `/metrics`로 노출합니다.

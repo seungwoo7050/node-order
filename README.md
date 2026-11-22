@@ -36,7 +36,7 @@
 | [카탈로그](https://shop.43-202-205-93.sslip.io/shop?design=editorial-atelier) / [상품 상세](https://shop.43-202-205-93.sslip.io/shop/6?design=editorial-atelier) | [카탈로그](https://shop.43-202-205-93.sslip.io/shop?design=muji-hara) / [상품 상세](https://shop.43-202-205-93.sslip.io/shop/6?design=muji-hara) | [카탈로그](https://shop.43-202-205-93.sslip.io/shop?design=zavanas-archive) / [상품 상세](https://shop.43-202-205-93.sslip.io/shop/6?design=zavanas-archive) |
 
 - **관리자 콘솔 (`kim` / `1234`)**: [로그인](https://shop.43-202-205-93.sslip.io/login) | [대시보드](https://shop.43-202-205-93.sslip.io/admin) | [상점 설정](https://shop.43-202-205-93.sslip.io/admin/settings)
-- **데모 안내**: 로그인 화면에서 임시 계정으로 바로 둘러볼 수 있으며, 매일 03:30 KST 데이터베이스 백업이 성공하면 04:00 KST에 상품과 데모 주문을 초기 상태로 되돌립니다. 결제는 테스트 모드로 동작합니다.
+- **데모 안내**: 로그인 화면에서 임시 계정으로 바로 둘러볼 수 있으며, 매일 03:30 KST 데이터베이스 백업이 성공하면 04:00 KST에 상품과 데모 주문을 초기 상태로 복원합니다. 결제는 테스트 모드로 동작합니다.
 
 ---
 
@@ -115,7 +115,7 @@ flowchart TD
 
 - **비관적 잠금과 상위 재고 동기화**: 가격 확인과 쿠폰 적용까지 한 트랜잭션에서 판단해야 하므로 `SELECT ... FOR UPDATE`로 읽는 순간 행을 잠급니다. 옵션 재고를 차감하거나 복구할 때는 상위 상품(`Product.stock`) 합산 재고도 같은 트랜잭션에서 함께 갱신합니다.
 - **다중 품목 데드락 방지**: 장바구니에 담긴 여러 품목을 서로 반대 순서로 잠그다 교착 상태에 빠지지 않도록, 모든 트랜잭션에서 **상품 ID 및 옵션 ID 오름차순으로 정렬해 잠금을 획득**합니다.
-- **주문 생성 트랜잭션과 외부 PG 호출 분리**: DB 트랜잭션 안에서 외부 결제사(PG) 승인 응답을 기다리면 PG 지연이 곧바로 DB 커넥션 풀 고갈로 이어집니다. DB에서는 주문 생성과 재고와 쿠폰 예약만 마치고 즉시 커밋한 뒤, 트랜잭션 밖에서 PG 승인이 실패하거나 타임아웃이 나면 예약된 재고와 쿠폰(`CouponRedemption`)을 보상 트랜잭션으로 되돌립니다.
+- **주문 생성 트랜잭션과 외부 PG 호출 분리**: DB 트랜잭션 안에서 외부 결제사(PG) 승인 응답을 기다리면 PG 지연이 곧바로 DB 커넥션 풀 고갈로 이어집니다. DB에서는 주문 생성과 재고와 쿠폰 예약만 마치고 즉시 커밋한 뒤, 트랜잭션 밖에서 PG 승인이 실패하거나 타임아웃이 나면 예약된 재고와 쿠폰(`CouponRedemption`)을 보상 트랜잭션으로 원복합니다.
 - **결제 멱등키**: 결제 버튼 중복 클릭이나 네트워크 재시도로 돈이 두 번 나가지 않게 `Idempotency-Key`와 요청 본문 해시를 주문 트랜잭션 안에 함께 저장합니다.
 
 ### 2. 주문 저장과 외부 발송을 묶는 트랜잭셔널 아웃박스 (Transactional Outbox)
@@ -156,7 +156,7 @@ sequenceDiagram
 
 ### 4. 쿠폰 할인 반영 PG 결제 검증 및 일일 대사 (Reconciliation)
 
-- **할인 차감 실결제액 고정 및 쿠폰 복구**: 상품 합계에서 쿠폰 할인액을 뺀 실결제 금액을 주문 스냅샷으로 저장하며, 주문 취소 시 사용된 쿠폰(`CouponRedemption`)을 원자적으로 되돌립니다.
+- **할인 차감 실결제액 고정 및 쿠폰 복구**: 상품 합계에서 쿠폰 할인액을 뺀 실결제 금액을 주문 스냅샷으로 저장하며, 주문 취소 시 사용된 쿠폰(`CouponRedemption`)을 원자적으로 원복합니다.
 - **웹훅 역조회 재검증 및 04:00 KST 대사 배치**: 웹훅이 도착하면 토스/Stripe API를 다시 조회해 원본 금액과 대조하고, 매일 새벽 전수 대사 배치가 실결제액과 PG 내역을 비교해 불일치 건수를 지표로 남깁니다.
 - **p-limit과 p-retry 기반 PG 대사 동시성 제어**: 거래 전수 조회 시 PG 요청 한도를 넘지 않게 `p-limit`으로 동시 조회를 묶고, 429와 5xx 일시 오류는 `p-retry`와 `Retry-After` 헤더 기반 지수 백오프로 안전하게 다시 시도합니다.
 
@@ -170,13 +170,13 @@ sequenceDiagram
 
 - **AES-256-GCM API 금고**: 외부 API 비밀키를 DB에 암호화해 보관(조회 응답 시 마스킹)하므로 재배포 없이 키를 교체하거나 긴급 차단할 수 있습니다.
 - **판매자용 MCP 서버**: `POST /mcp` 엔드포인트에서 Bearer 토큰 권한 검증, `<untrusted>` 이스케이프, `mcp_audit_log` 감사 기록을 강제합니다.
-- **관측성 및 일일 시드 복원**: Sentry `scrubEvent`로 개인정보를 가리고, 매일 03:30 KST S3 DB 백업이 성공한 날에만 04:00 KST 데모 데이터를 초기 상태로 되돌립니다.
+- **관측성 및 일일 시드 복원**: Sentry `scrubEvent`로 개인정보를 가리고, 매일 03:30 KST S3 DB 백업이 성공한 날에만 04:00 KST 데모 데이터를 초기 상태로 복원합니다.
 
 ### 7. AI 코딩 에이전트 작업 하네스
 
 이 프로젝트는 특정 시점부터 AI 코딩 에이전트를 도입하여 함께 개발했습니다. `AGENTS.md` 같은 자연어 지침은 대화가 길어지면 지켜지지 않을 수 있어서, 지켜야 할 규칙은 셸 훅의 종료 코드(`scripts/harness/`)로 강제했습니다.
 
-- **먼저 합격 기준을 고정**: 재고는 음수가 되지 않고, 같은 `Idempotency-Key`는 한 번만 결제되며, RLS로 타인 주문은 보이지 않는다는 도메인 불변식을 정하고, 구현 전에 실패하는 통합 테스트(재고 10개에 동시 주문 50건 등)를 먼저 둡니다.
+- **먼저 합격 기준을 고정**: 재고는 음수가 되지 않고, 같은 `Idempotency-Key`는 한 번만 결제되며, RLS로 타인 주문은 보이지 않는다는 핵심 도메인 규칙을 정하고, 구현 전에 실패하는 통합 테스트(재고 10개에 동시 주문 50건 등)를 먼저 둡니다.
 - **`PreToolUse` (`guard.sh`)**: `.env` 수정, 이미 적용된 `prisma/migrations/*` 변경, `git push`를 실행 전에 `exit 2`로 막고 대안(`.env.example`에 이름만 추가, 새 마이그레이션 생성)을 에이전트에게 돌려줍니다.
 - **`PostToolUse` (`lint-file.sh`)**: 방금 편집한 파일만 바로 린트해 자체 교정이 빠르게 돌게 합니다.
 - **`Stop` (`stop-verify.sh`)**: 변경이 있으면 `verify:fast`가 통과해야 작업을 끝낼 수 있고, 같은 세션에서 연속 3회 막히면 더 막지 않고 사람에게 넘깁니다.
@@ -245,13 +245,25 @@ npm run verify
 
 단일 EC2 인스턴스 안에서 Caddy 리버스 프록시와 두 벌의 컨테이너 슬롯(Blue/Green)으로 배포 중 요청 실패를 막습니다.
 
-- **릴리스 흐름**: `release.sh up <새_태그>` (대기 슬롯 기동, 마이그레이션 및 데모 시드 동기화) -> Playwright 스모크 테스트 -> `release.sh switch` (Caddy 리버스 프록시 트래픽 전환) -> 문제 발생 시 `rollback.sh`로 즉시 복귀
+- **릴리스 흐름**: `release.sh up <새_태그>` (대기 슬롯 기동, 마이그레이션 및 데모 시드 동기화), Playwright 스모크 테스트, `release.sh switch` (Caddy 리버스 프록시 트래픽 전환) 순서로 진행하며 문제 발생 시 `rollback.sh`로 즉시 복귀합니다.
 - **고정비 0원 폴백 기동**: 외부 유료 키(`LLM_API_KEY`, `STRIPE_SECRET_KEY`, `SENTRY_DSN`, `JUSO_API_KEY`)가 비어 있어도 폴백 모드로 기동되어 고정 SaaS 비용 없이 상점을 운영할 수 있습니다.
 - **서버 환경변수 동기화**:
   ```sh
   # 토스 테스트 키, 도로명주소 API 키 등을 서버 .env에 전달 (배포 전 선반영)
   TOSS_CLIENT_KEY=test_ck_... TOSS_SECRET_KEY=test_sk_... JUSO_API_KEY=... bash deploy/aws/60-server-env.sh
   ```
+
+---
+
+## 선택적 보조 서비스 및 인프라 확장 (`services/`, `deploy/`)
+
+쇼핑몰 본체(`order-api-nest`, `order-console-next`)와 실서버 데모는 추가 사이드카 없이 `--profile app`만으로 단독 기동됩니다. 저장소 내부의 `services/`와 `deploy/terraform`, `deploy/k8s`는 상점 운영 기능 중 재사용 가능한 영역을 별도 독립 저장소(Go, Python) 및 선언형 인프라로 분리해 개발하고, 로컬 통합 환경(`docker compose --profile polyglot up`)에서 환경변수가 주입된 경우에만 연동되도록 격리한 선택 확장 모듈입니다.
+
+| 구분 | 모듈 및 독립 저장소 | 선택 연동 역할 (미설정 시 본체 단독 동작) |
+| :--- | :--- | :--- |
+| **Go 미들웨어 및 관측** | [`pgrelay`](https://github.com/seungwoo7050/pgrelay), [`idemguard`](https://github.com/seungwoo7050/idemguard), [`aigate`](https://github.com/seungwoo7050/aigate), [`rolltrace`](https://github.com/seungwoo7050/rolltrace) | PostgreSQL 아웃박스 웹훅 중계(`PGRELAY_URL`), RFC 8785 HTTP 멱등 리버스 프록시, 외부 LLM 호출 서킷 브레이커 및 Single-Flight(`LLM_BASE_URL`), OTel RED 집계 및 카나리 SLO 평가(`ROLLTRACE_URL`) |
+| **Python 검증 및 감시** | [`citeguard`](https://github.com/seungwoo7050/citeguard), [`ingestguard`](https://github.com/seungwoo7050/ingestguard), [`pulsebox`](https://github.com/seungwoo7050/pulsebox), [`opsguard`](https://github.com/seungwoo7050/opsguard), [`driftwatch`](https://github.com/seungwoo7050/driftwatch) | 약관 및 환불 규정 Hybrid RRF 근거 질의(`CITEGUARD_URL`), 대량 상품 CSV 스트리밍 적재와 불량 행 격리(`INGESTGUARD_URL`), 스택트레이스 지문 병합과 배치 워치독(`PULSEBOX_URL`), 무중단 배포 위험 DDL 및 인프라 정책 검증(`OPSGUARD_URL`), 외부 응답 변동 감시 |
+| **선언형 인프라** | `deploy/terraform`, `deploy/k8s` | 단일 EC2 구성을 다중 노드로 확장할 때 대비한 AWS 네트워크 및 최소 권한 OIDC 모듈, Helm/Argo Rollouts 매니페스트 |
 
 ---
 
